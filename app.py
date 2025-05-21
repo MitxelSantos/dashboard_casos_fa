@@ -1,4 +1,13 @@
 import os
+import logging
+from datetime import datetime
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("FiebreAmarilla-Dashboard")
 
 # Deshabilitar detección automática de páginas de Streamlit
 os.environ["STREAMLIT_PAGES_ENABLED"] = "false"
@@ -7,6 +16,9 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from pathlib import Path
+
+# Importar utilidades de Google Drive
+from gdrive_utils import get_file_from_drive
 
 # Definir rutas
 ROOT_DIR = Path(__file__).resolve().parent
@@ -19,65 +31,89 @@ DATA_DIR.mkdir(exist_ok=True)
 ASSETS_DIR.mkdir(exist_ok=True)
 IMAGES_DIR.mkdir(exist_ok=True)
 
+# Configuración de IDs de archivos en Google Drive (se leerán de secrets en producción)
+DRIVE_FILE_IDS = {
+    "fiebre_amarilla": "YOUR_GOOGLE_DRIVE_FILE_ID",  # Esto será reemplazado por el ID real en secrets
+    "logo_gobernacion": "YOUR_LOGO_FILE_ID"
+}
+
 # Agregar rutas al path para importar módulos
 import sys
-
 sys.path.insert(0, str(ROOT_DIR))
 
 # Lista de vistas a importar
 vista_modules = ["overview", "geographic", "demographic", "insurance", "trends"]
-vistas = {}
-
-# Import para vistas con manejo de errores
 vistas_modules = {}
 
-try:
-    from vistas import overview
+# Función para importar módulos de vistas con manejo de errores
+def import_vista_module(module_name):
+    """
+    Importa un módulo de vista específico con manejo de errores.
+    
+    Args:
+        module_name (str): Nombre del módulo a importar.
+        
+    Returns:
+        module: El módulo importado o None en caso de error.
+    """
+    try:
+        module = __import__(f"vistas.{module_name}", fromlist=[module_name])
+        logger.info(f"Módulo {module_name} importado correctamente")
+        return module
+    except ImportError as e:
+        logger.error(f"No se pudo importar el módulo {module_name}: {str(e)}")
+        st.error(f"No se pudo importar el módulo {module_name}")
+        return None
 
-    vistas_modules["overview"] = overview
-except ImportError:
-    st.error("No se pudo importar el módulo overview")
-
-try:
-    from vistas import demographic
-
-    vistas_modules["geographic"] = demographic
-except ImportError:
-    st.error("No se pudo importar el módulo geographic")
-
-try:
-    from vistas import demographic
-
-    vistas_modules["demographic"] = demographic
-except ImportError:
-    st.error("No se pudo importar el módulo demographic")
-
-try:
-    from vistas import insurance
-
-    vistas_modules["insurance"] = insurance
-except ImportError:
-    st.error("No se pudo importar el módulo insurance")
-
-try:
-    from vistas import trends
-
-    vistas_modules["trends"] = trends
-except ImportError:
-    st.error("No se pudo importar el módulo trends")
+# Importar módulos de vistas
+for module_name in vista_modules:
+    vistas_modules[module_name] = import_vista_module(module_name)
 
 
 # Función para cargar datos
 def load_datasets():
     """
-    Carga los datasets necesarios para la aplicación.
+    Carga los datasets necesarios para la aplicación desde Google Drive.
+    Utiliza secretos de Streamlit para la autenticación.
+    
+    Returns:
+        dict: Diccionario con los dataframes cargados.
     """
     try:
-        # Cargar archivo de fiebre amarilla
-        fiebre_file = DATA_DIR / "FIBRE AMARILLA DEPURADA.xlsx"
+        # Inicializar contador de progreso
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        status_text.text("Conectando con Google Drive...")
         
-        if not fiebre_file.exists():
-            raise FileNotFoundError(f"Archivo no encontrado: {fiebre_file}")
+        # Cargar archivo de fiebre amarilla desde Google Drive
+        # En producción, obtendremos el ID del archivo desde los secretos de Streamlit
+        if hasattr(st.secrets, "drive_files") and "fiebre_amarilla" in st.secrets.drive_files:
+            file_id = st.secrets.drive_files["fiebre_amarilla"]
+        else:
+            # Si no hay secretos configurados, usar ID predeterminado (para desarrollo)
+            file_id = DRIVE_FILE_IDS["fiebre_amarilla"]
+            # Mostrar advertencia en modo desarrollo
+            if not file_id.startswith("YOUR_"):  # Solo si se ha configurado un ID real
+                st.warning("Usando ID de archivo predeterminado. En producción, configure los secretos.")
+        
+        status_text.text("Descargando datos desde Google Drive...")
+        progress_bar.progress(30)
+        
+        # Obtener archivo desde Google Drive
+        if file_id.startswith("YOUR_"):  # ID de placeholder, intentar carga local
+            logger.warning("Usando carga de datos local (modo desarrollo)")
+            fiebre_file = DATA_DIR / "FIBRE AMARILLA DEPURADA.xlsx"
+            if not fiebre_file.exists():
+                raise FileNotFoundError(f"Archivo no encontrado: {fiebre_file}")
+        else:
+            # Carga desde Google Drive
+            excel_path = get_file_from_drive(file_id, "fiebre_amarilla.xlsx")
+            if not excel_path:
+                raise FileNotFoundError("No se pudo descargar el archivo desde Google Drive")
+            fiebre_file = excel_path
+        
+        status_text.text("Procesando datos...")
+        progress_bar.progress(60)
         
         # Cargar Excel con optimizaciones para archivos grandes
         try:
@@ -88,9 +124,13 @@ def load_datasets():
                 na_values=['NA', 'N/A', ''],
                 keep_default_na=True
             )
+            logger.info(f"Archivo Excel cargado correctamente: {len(fiebre_df)} filas")
         except Exception as e:
+            logger.error(f"Error al cargar el archivo Excel: {str(e)}")
             st.error(f"Error al cargar el archivo Excel: {str(e)}")
             raise
+        
+        progress_bar.progress(80)
         
         # Normalizar nombres de columnas (quitar espacios)
         fiebre_df.columns = [col.strip() for col in fiebre_df.columns]
@@ -107,13 +147,29 @@ def load_datasets():
         # Calcular métricas generales
         metricas_df = calculate_metrics(fiebre_df)
         
+        progress_bar.progress(100)
+        status_text.text("Datos cargados correctamente!")
+        
+        # Limpiar elementos de UI temporales después de un breve retraso
+        import time
+        time.sleep(1)
+        status_text.empty()
+        progress_bar.empty()
+        
         return {
             "fiebre": fiebre_df,
             "departamentos": deptos_df,
             "metricas": metricas_df
         }
     except Exception as e:
+        logger.error(f"Error al cargar los datos: {str(e)}")
+        if progress_bar:
+            progress_bar.empty()
+        if status_text:
+            status_text.empty()
+        
         st.error(f"Error al cargar los datos: {str(e)}")
+        
         # Retornar diccionario con DataFrames vacíos para permitir carga de la aplicación
         return {
             "fiebre": pd.DataFrame(),
@@ -125,6 +181,12 @@ def load_datasets():
 def calculate_metrics(df):
     """
     Calcula métricas generales sobre los datos de fiebre amarilla.
+    
+    Args:
+        df (DataFrame): DataFrame con los datos de fiebre amarilla.
+        
+    Returns:
+        DataFrame: DataFrame con las métricas calculadas.
     """
     # Crear dataframe para métricas
     metrics = pd.DataFrame()
@@ -163,8 +225,15 @@ def calculate_metrics(df):
     # Crear diccionario con todas las métricas
     metricas_dict = {
         "total_casos": [total_casos],
-        "letalidad": [letalidad]
+        "letalidad": [letalidad],
+        "fecha_actualizacion": [datetime.now().strftime("%Y-%m-%d %H:%M")]
     }
+    
+    # Agregar métricas adicionales
+    if 'tip_cas_' in df.columns:
+        # Contar casos confirmados (tipos 3, 4 y 5)
+        confirmados = df[df['tip_cas_'].isin([3, 4, 5])].shape[0]
+        metricas_dict["confirmados"] = [confirmados]
     
     # Convertir diccionario a DataFrame
     metrics = pd.DataFrame(metricas_dict)
@@ -181,6 +250,7 @@ def configure_page():
         page_title="Dashboard Fiebre Amarilla - Tolima",
         page_icon="🦟",
         layout="wide",
+        initial_sidebar_state="expanded"
     )
     
     # Cargar CSS personalizado
@@ -205,6 +275,64 @@ def configure_page():
             h1 {font-size: 1.5rem !important;}
             h2 {font-size: 1.2rem !important;}
         }
+        
+        /* Mejoras estéticas generales */
+        .main-title {
+            color: #7D0F2B;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            text-align: center;
+            padding-bottom: 0.5rem;
+            border-bottom: 3px solid #F2A900;
+        }
+        
+        .subtitle {
+            color: #5A4214;
+            font-size: 1.2rem;
+            text-align: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        /* Mejoras para tarjetas de métricas */
+        .big-metric-container {
+            background-color: white;
+            border-radius: 10px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        
+        .big-metric-container:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .big-metric-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #5A4214;
+            margin-bottom: 0.7rem;
+        }
+        
+        .big-metric-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            margin-bottom: 0.3rem;
+        }
+        
+        .update-info {
+            font-size: 0.75rem;
+            color: #666;
+            font-style: italic;
+            text-align: right;
+            margin-top: 1rem;
+        }
         </style>
         """, unsafe_allow_html=True)
 
@@ -225,6 +353,13 @@ COLORS = {
 def apply_filters(data, filters):
     """
     Aplica los filtros seleccionados a los datos.
+    
+    Args:
+        data (dict): Diccionario con los dataframes originales.
+        filters (dict): Diccionario con los filtros a aplicar.
+        
+    Returns:
+        dict: Diccionario con los dataframes filtrados.
     """
     # Crear copias para no modificar los originales
     filtered_data = {
@@ -267,9 +402,17 @@ def apply_filters(data, filters):
     
     # Filtro por tipo de seguridad social
     if filters["tipo_ss"] != "Todos" and "tip_ss_" in filtered_data["fiebre"].columns:
-        filtered_data["fiebre"] = filtered_data["fiebre"][
-            filtered_data["fiebre"]["tip_ss_"] == filters["tipo_ss"]
-        ]
+        tipo_ss_filtro = filters["tipo_ss"]
+        # Verificar si el filtro es un código con descripción (ej: "C - Contributivo")
+        if " - " in tipo_ss_filtro:
+            codigo = tipo_ss_filtro.split(" - ")[0]
+            filtered_data["fiebre"] = filtered_data["fiebre"][
+                filtered_data["fiebre"]["tip_ss_"].astype(str) == codigo
+            ]
+        else:
+            filtered_data["fiebre"] = filtered_data["fiebre"][
+                filtered_data["fiebre"]["tip_ss_"] == tipo_ss_filtro
+            ]
     
     # Filtro por sexo
     if filters["sexo"] != "Todos" and "sexo_" in filtered_data["fiebre"].columns:
@@ -320,28 +463,47 @@ def main():
     st.session_state["_is_small_screen"] = screen_width < 1200
 
     # Cargar datos
+    data_load_state = st.empty()
+    
     try:
-        with st.spinner("Cargando datos..."):
+        with data_load_state:
             data = load_datasets()
     except Exception as e:
+        logger.error(f"Error al cargar datos: {str(e)}")
         st.error(f"Error al cargar datos: {str(e)}")
         st.info(
-            "Por favor, asegúrate de que el archivo 'FIBRE AMARILLA DEPURADA.xlsx' esté en la carpeta data/."
+            """
+            Por favor, asegúrate que el archivo de datos 'FIBRE AMARILLA DEPURADA.xlsx' esté disponible:
+            - Si estás en Streamlit Cloud, configura los secretos con el ID del archivo en Google Drive
+            - Si estás en desarrollo local, coloca el archivo en la carpeta data/
+            """
         )
         return
 
     # Barra lateral con logo y filtros
     with st.sidebar:
         # Logo de la Gobernación
-        logo_path = IMAGES_DIR / "logo_gobernacion.png"
-        if logo_path.exists():
-            st.image(
-                str(logo_path), width=150, caption="Secretaría de Salud del Tolima"
-            )
+        if hasattr(st.secrets, "drive_files") and "logo_gobernacion" in st.secrets.drive_files:
+            # Obtener logo desde Google Drive
+            logo_id = st.secrets.drive_files["logo_gobernacion"]
+            logo_path = get_file_from_drive(logo_id, "logo_gobernacion.png")
+            if logo_path and Path(logo_path).exists():
+                st.image(
+                    logo_path, width=150, caption="Secretaría de Salud del Tolima"
+                )
+            else:
+                st.warning("No se pudo cargar el logo desde Google Drive")
         else:
-            st.warning(
-                "Logo no encontrado. Coloca el logo en assets/images/logo_gobernacion.png"
-            )
+            # Buscar logo local
+            logo_path = IMAGES_DIR / "logo_gobernacion.png"
+            if logo_path.exists():
+                st.image(
+                    str(logo_path), width=150, caption="Secretaría de Salud del Tolima"
+                )
+            else:
+                st.warning(
+                    "Logo no encontrado. Coloca el logo en assets/images/logo_gobernacion.png"
+                )
 
         st.title("Dashboard Fiebre Amarilla")
         st.subheader("Vigilancia Epidemiológica")
@@ -361,7 +523,7 @@ def main():
 
         # Obtener años únicos
         años = ["Todos"]
-        if "año" in data["fiebre"].columns:
+        if "año" in data["fiebre"].columns and not data["fiebre"].empty:
             años_unicos = data["fiebre"]["año"].dropna().unique().tolist()
             años += sorted([str(int(año)) if isinstance(año, (int, float)) else str(año) for año in años_unicos if not pd.isna(año)])
         
@@ -374,7 +536,7 @@ def main():
 
         # Obtener tipos de caso
         tipos_caso = ["Todos"]
-        if "tip_cas_" in data["fiebre"].columns:
+        if "tip_cas_" in data["fiebre"].columns and not data["fiebre"].empty:
             # Mapeo de códigos a nombres
             tipo_mapping = {
                 1: "Sospechoso", 
@@ -403,7 +565,7 @@ def main():
 
         # Obtener departamentos
         departamentos = ["Todos"]
-        if "ndep_resi" in data["fiebre"].columns:
+        if "ndep_resi" in data["fiebre"].columns and not data["fiebre"].empty:
             deptos_unicos = data["fiebre"]["ndep_resi"].dropna().unique().tolist()
             departamentos += sorted([str(depto) for depto in deptos_unicos])
         
@@ -416,7 +578,7 @@ def main():
 
         # Obtener tipos de seguridad social
         tipos_ss = ["Todos"]
-        if "tip_ss_" in data["fiebre"].columns:
+        if "tip_ss_" in data["fiebre"].columns and not data["fiebre"].empty:
             # Mapeo de códigos a descripciones
             ss_mapping = {
                 "C": "Contributivo",
@@ -447,7 +609,7 @@ def main():
 
         # Obtener valores de sexo
         sexos = ["Todos"]
-        if "sexo_" in data["fiebre"].columns:
+        if "sexo_" in data["fiebre"].columns and not data["fiebre"].empty:
             sexos_unicos = data["fiebre"]["sexo_"].dropna().unique().tolist()
             sexos += sorted([str(sexo) for sexo in sexos_unicos])
         
@@ -481,7 +643,7 @@ def main():
         # Información del desarrollador
         st.sidebar.markdown("---")
         st.sidebar.caption("Desarrollado para la Secretaría de Salud del Tolima")
-        st.sidebar.caption("© 2025")
+        st.sidebar.caption(f"© {datetime.now().year}")
 
     # Inicializar filtros si no existen
     if "filters" not in st.session_state:
@@ -497,8 +659,8 @@ def main():
     col1, col2 = st.columns([3, 1])
 
     with col1:
-        st.title("Dashboard Fiebre Amarilla - Tolima")
-        st.write("Secretaría de Salud del Tolima - Vigilancia Epidemiológica")
+        st.markdown('<h1 class="main-title">Dashboard Fiebre Amarilla - Tolima</h1>', unsafe_allow_html=True)
+        st.markdown('<p class="subtitle">Secretaría de Salud del Tolima - Vigilancia Epidemiológica</p>', unsafe_allow_html=True)
 
     # Mostrar filtros activos en un banner con fondo vinotinto
     active_filters = [
@@ -532,7 +694,7 @@ def main():
 
     # Contenido de cada pestaña
     with tab1:
-        if "overview" in vistas_modules:
+        if "overview" in vistas_modules and vistas_modules["overview"]:
             vistas_modules["overview"].show(
                 filtered_data,
                 st.session_state.filters,
@@ -547,30 +709,81 @@ def main():
             
             # Métricas de letalidad
             letalidad = 0
+            fallecidos = 0
             if "con_fin_" in filtered_data["fiebre"].columns:
                 fallecidos = filtered_data["fiebre"][filtered_data["fiebre"]["con_fin_"] == 2].shape[0]
                 letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
             
-            # Mostrar métricas en tarjetas
-            col1, col2, col3 = st.columns(3)
+            # Casos confirmados
+            confirmados = 0
+            if "tip_cas_" in filtered_data["fiebre"].columns:
+                # Contar casos confirmados (tipos 3, 4 y 5)
+                confirmados = filtered_data["fiebre"][filtered_data["fiebre"]["tip_cas_"].isin([3, 4, 5])].shape[0]
+            
+            # Mostrar fecha de actualización si está disponible
+            fecha_actualizacion = ""
+            if "fecha_actualizacion" in filtered_data["metricas"].columns:
+                fecha_actualizacion = filtered_data["metricas"]["fecha_actualizacion"].iloc[0]
+            
+            # Mostrar métricas en tarjetas mejoradas
+            st.markdown('<div style="margin-bottom: 30px;">', unsafe_allow_html=True)
+            col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("Total de Casos", f"{total_casos:,}".replace(",", "."))
+                st.markdown(
+                    f"""
+                    <div class="big-metric-container" style="border-top: 5px solid {COLORS['primary']}">
+                        <div class="big-metric-title">Total de Casos</div>
+                        <div class="big-metric-value" style="color: {COLORS['primary']};">{total_casos:,}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             
             with col2:
-                st.metric("Tasa de Letalidad", f"{letalidad:.2f}%")
+                # Calcular porcentaje de confirmados
+                porcentaje_conf = (confirmados / total_casos * 100) if total_casos > 0 else 0
+                st.markdown(
+                    f"""
+                    <div class="big-metric-container" style="border-top: 5px solid {COLORS['secondary']}">
+                        <div class="big-metric-title">Casos Confirmados</div>
+                        <div class="big-metric-value" style="color: {COLORS['secondary']};">{confirmados:,}</div>
+                        <div style="font-size: 0.9rem; color: #666;">{porcentaje_conf:.1f}% del total</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             
             with col3:
-                # Mostrar el año con más casos
-                if "año" in filtered_data["fiebre"].columns and not filtered_data["fiebre"].empty:
-                    año_count = filtered_data["fiebre"]["año"].value_counts()
-                    if not año_count.empty:
-                        max_año = año_count.idxmax()
-                        st.metric("Año con más casos", f"{int(max_año)}")
-                    else:
-                        st.metric("Año con más casos", "No disponible")
-                else:
-                    st.metric("Año con más casos", "No disponible")
+                st.markdown(
+                    f"""
+                    <div class="big-metric-container" style="border-top: 5px solid {COLORS['danger']}">
+                        <div class="big-metric-title">Fallecidos</div>
+                        <div class="big-metric-value" style="color: {COLORS['danger']};">{fallecidos:,}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            with col4:
+                st.markdown(
+                    f"""
+                    <div class="big-metric-container" style="border-top: 5px solid {COLORS['warning']}">
+                        <div class="big-metric-title">Tasa de Letalidad</div>
+                        <div class="big-metric-value" style="color: {COLORS['warning']};">{letalidad:.2f}%</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+            
+            # Mostrar fecha de actualización
+            if fecha_actualizacion:
+                st.markdown(
+                    f'<div class="update-info">Última actualización: {fecha_actualizacion}</div>',
+                    unsafe_allow_html=True
+                )
+            
+            st.markdown('</div>', unsafe_allow_html=True)
             
             # Distribución por tipo de caso
             if "tip_cas_" in filtered_data["fiebre"].columns:
@@ -643,7 +856,7 @@ def main():
                 st.dataframe(año_count, use_container_width=True)
 
     with tab2:
-        if "geographic" in vistas_modules:
+        if "geographic" in vistas_modules and vistas_modules["geographic"]:
             vistas_modules["geographic"].show(
                 filtered_data,
                 st.session_state.filters,
@@ -683,7 +896,7 @@ def main():
                 st.dataframe(muni_count, use_container_width=True)
 
     with tab3:
-        if "demographic" in vistas_modules:
+        if "demographic" in vistas_modules and vistas_modules["demographic"]:
             vistas_modules["demographic"].show(
                 filtered_data,
                 st.session_state.filters,
@@ -795,7 +1008,7 @@ def main():
                 st.dataframe(etnia_count, use_container_width=True)
 
     with tab4:
-        if "insurance" in vistas_modules:
+        if "insurance" in vistas_modules and vistas_modules["insurance"]:
             vistas_modules["insurance"].show(
                 filtered_data,
                 st.session_state.filters,
@@ -850,7 +1063,7 @@ def main():
                 st.dataframe(ase_count, use_container_width=True)
 
     with tab5:
-        if "trends" in vistas_modules:
+        if "trends" in vistas_modules and vistas_modules["trends"]:
             vistas_modules["trends"].show(
                 filtered_data,
                 st.session_state.filters,
