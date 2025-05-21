@@ -1,0 +1,21 @@
+# Entornos virtuales
+venv/
+env/
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Archivos de datos grandes o sensibles
+*.csv
+*.xlsx
+!requirements.txt
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de IDE
+.idea/
+.vscode/
