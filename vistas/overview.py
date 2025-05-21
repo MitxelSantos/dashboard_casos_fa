@@ -21,7 +21,10 @@ def show(data, filters, colors):
         colors (dict): Colores institucionales
     """
     # Título y descripción
-    st.markdown('<h1 class="main-title">Fiebre Amarilla - Visión General</h1>', unsafe_allow_html=True)
+    st.markdown(
+        '<h1 class="main-title">Fiebre Amarilla - Visión General</h1>',
+        unsafe_allow_html=True,
+    )
 
     # Mostrar descripción general con un diseño más atractivo
     st.markdown(
@@ -29,137 +32,272 @@ def show(data, filters, colors):
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid {colors['primary']}; margin-bottom: 30px;">
             <h3 style="color: {colors['primary']}; margin-top: 0;">¿Qué es la Fiebre Amarilla?</h3>
             <p style="margin-bottom: 5px;">La Fiebre Amarilla es una enfermedad viral aguda transmitida por mosquitos, causada por el virus de la fiebre amarilla.</p>
-            <p style="margin-bottom: 5px;">Este dashboard presenta el análisis de casos registrados en Colombia, con enfoque particular en el departamento del Tolima.</p>
+            <p style="margin-bottom: 5px;">Este dashboard presenta el análisis de casos registrados en el departamento del Tolima y casos notificados en este territorio.</p>
             <p>La vigilancia epidemiológica de esta enfermedad es crucial debido a su potencial de causar brotes con alta mortalidad.</p>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     # Métricas principales
-    st.markdown('<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px;">Métricas Principales</h2>', unsafe_allow_html=True)
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px;">Métricas Principales</h2>',
+        unsafe_allow_html=True,
+    )
 
     # Calcular métricas generales
     total_casos = len(data["fiebre"])
-    
-    # Métricas de letalidad
-    letalidad = 0
+
+    # Inicializar contadores
     fallecidos = 0
-    if "con_fin_" in data["fiebre"].columns:
-        fallecidos = data["fiebre"][data["fiebre"]["con_fin_"] == 2].shape[0]
-        letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
-    
-    # Casos confirmados
-    confirmados = 0
-    if "tip_cas_" in data["fiebre"].columns:
-        # Contar casos confirmados (tipos 3, 4 y 5)
-        confirmados = data["fiebre"][data["fiebre"]["tip_cas_"].isin([3, 4, 5])].shape[0]
-    
+    fallecidos_confirmados = 0  # Nuevo: contador de fallecidos confirmados
+    recuperados = 0
+    casos_confirmados_total = 0  # Total de casos confirmados (incluye fallecidos)
+    casos_confirmados_activos = 0  # Casos confirmados que siguen activos
+
+    # Preparar dataframe para análisis
+    df_analisis = data["fiebre"].copy()
+
+    # Verificar si existen las columnas necesarias
+    has_tipo_caso = "tip_cas_" in df_analisis.columns
+    has_condicion_final = "con_fin_" in df_analisis.columns
+    has_recuperados = "est_rec_" in df_analisis.columns
+
+    # Definir tipos de casos confirmados (si existe la columna)
+    tipos_confirmados = [3, 4, 5]  # Confirmado por lab, clínica o nexo
+
+    # Obtener máscara de casos confirmados
+    if has_tipo_caso:
+        is_confirmado = df_analisis["tip_cas_"].isin(tipos_confirmados)
+
+        # Total de casos confirmados (independientemente del estado)
+        casos_confirmados_total = is_confirmado.sum()
+    else:
+        # Si no hay columna de tipo de caso, no podemos determinar confirmados
+        is_confirmado = pd.Series(False, index=df_analisis.index)
+
+    # Contar fallecidos y estado de los casos
+    if has_condicion_final:
+        # Fallecidos (todos)
+        is_fallecido = df_analisis["con_fin_"] == 2
+        fallecidos = is_fallecido.sum()
+
+        # Fallecidos confirmados (intersección)
+        is_fallecido_confirmado = is_fallecido & is_confirmado
+        fallecidos_confirmados = is_fallecido_confirmado.sum()
+
+        # Casos recuperados (si existe esta información)
+        if has_recuperados:
+            is_recuperado = df_analisis["est_rec_"] == 1
+            recuperados = (
+                is_recuperado & is_confirmado
+            ).sum()  # Solo contar recuperados confirmados
+
+        # Casos confirmados activos = confirmados - (fallecidos confirmados + recuperados confirmados)
+        casos_confirmados_activos = casos_confirmados_total - (
+            fallecidos_confirmados + recuperados
+        )
+
+    # Calcular tasa de letalidad entre los casos confirmados
+    # (fallecidos confirmados / total confirmados)
+    letalidad_confirmados = (
+        (fallecidos_confirmados / casos_confirmados_total * 100)
+        if casos_confirmados_total > 0
+        else 0
+    )
+
     # Fecha de última actualización
     fecha_actualizacion = datetime.now().strftime("%Y-%m-%d %H:%M")
     if "fecha_actualizacion" in data["metricas"].columns:
         fecha_actualizacion = data["metricas"]["fecha_actualizacion"].iloc[0]
-    
+
     # Calcular departamento con más casos
     depto_top = "No disponible"
     casos_top_depto = 0
-    if "ndep_resi" in data["fiebre"].columns and not data["fiebre"].empty:
+
+    # Primero intentamos por departamento de notificación si existe
+    if "ndep_not" in data["fiebre"].columns and not data["fiebre"].empty:
+        depto_series = data["fiebre"]["ndep_not"].value_counts()
+        if not depto_series.empty:
+            depto_top = depto_series.index[0]
+            casos_top_depto = depto_series.iloc[0]
+    # Si no existe o no tiene datos, usamos departamento de residencia
+    elif "ndep_resi" in data["fiebre"].columns and not data["fiebre"].empty:
         depto_series = data["fiebre"]["ndep_resi"].value_counts()
         if not depto_series.empty:
             depto_top = depto_series.index[0]
             casos_top_depto = depto_series.iloc[0]
-    
+
     # Definir iconos para cada métrica (emojis unicode)
     iconos = {
         "total": "📊",
         "confirmados": "✅",
+        "activos": "🔴",
         "fallecidos": "⚠️",
+        "recuperados": "🩺",
         "letalidad": "📈",
         "depto": "🌎",
     }
-    
-    # Crear contenedor para métricas con CSS Grid para mejor disposición
+
+    # Crear contenedor para métricas con CSS Grid
+    st.markdown(
+        "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;'>",
+        unsafe_allow_html=True,
+    )
+
+    # Métrica 1: Total de casos
     st.markdown(
         f"""
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; margin-bottom: 30px;">
-            <div class="big-metric-container" style="border-top: 5px solid {colors['primary']}">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["total"]}</div>
-                <div class="big-metric-title">Total de Casos</div>
-                <div class="big-metric-value" style="color: {colors['primary']};">{total_casos:,}</div>
-            </div>
-            
-            <div class="big-metric-container" style="border-top: 5px solid {colors['secondary']}">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["confirmados"]}</div>
-                <div class="big-metric-title">Casos Confirmados</div>
-                <div class="big-metric-value" style="color: {colors['secondary']};">{confirmados:,}</div>
-                <div style="font-size: 0.9rem; color: #666;">{(confirmados/total_casos*100) if total_casos > 0 else 0:.1f}% del total</div>
-            </div>
-            
-            <div class="big-metric-container" style="border-top: 5px solid {colors['danger']}">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["fallecidos"]}</div>
-                <div class="big-metric-title">Fallecidos</div>
-                <div class="big-metric-value" style="color: {colors['danger']};">{fallecidos:,}</div>
-            </div>
-            
-            <div class="big-metric-container" style="border-top: 5px solid {colors['warning']}">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["letalidad"]}</div>
-                <div class="big-metric-title">Tasa de Letalidad</div>
-                <div class="big-metric-value" style="color: {colors['warning']};">{letalidad:.2f}%</div>
-            </div>
-            
-            <div class="big-metric-container" style="border-top: 5px solid {colors['accent']}">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["depto"]}</div>
-                <div class="big-metric-title">Departamento Más Afectado</div>
-                <div class="big-metric-value" style="color: {colors['accent']};">{depto_top}</div>
-                <div style="font-size: 0.9rem; color: #666;">{casos_top_depto:,} casos</div>
-            </div>
+        <div class="big-metric-container" style="border-top: 5px solid {colors['primary']}">
+            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["total"]}</div>
+            <div class="big-metric-title">Total de Casos</div>
+            <div class="big-metric-value" style="color: {colors['primary']};">{total_casos:,}</div>
         </div>
-        
-        <div class="update-info">Última actualización: {fecha_actualizacion}</div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
+    )
+
+    # Métrica 2: Total Casos confirmados (incluyendo fallecidos)
+    st.markdown(
+        f"""
+        <div class="big-metric-container" style="border-top: 5px solid {colors['secondary']}">
+            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["confirmados"]}</div>
+            <div class="big-metric-title">Total Confirmados</div>
+            <div class="big-metric-value" style="color: {colors['secondary']};">{casos_confirmados_total:,}</div>
+            <div style="font-size: 0.9rem; color: #666;">{(casos_confirmados_total/total_casos*100) if total_casos > 0 else 0:.1f}% del total</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Métrica 3: Casos confirmados activos
+    st.markdown(
+        f"""
+        <div class="big-metric-container" style="border-top: 5px solid {colors['accent']}">
+            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["activos"]}</div>
+            <div class="big-metric-title">Confirmados Activos</div>
+            <div class="big-metric-value" style="color: {colors['accent']};">{casos_confirmados_activos:,}</div>
+            <div style="font-size: 0.9rem; color: #666;">{(casos_confirmados_activos/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Métrica 4: Recuperados (si está disponible)
+    if has_recuperados:
+        st.markdown(
+            f"""
+            <div class="big-metric-container" style="border-top: 5px solid {colors['success']}">
+                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["recuperados"]}</div>
+                <div class="big-metric-title">Recuperados</div>
+                <div class="big-metric-value" style="color: {colors['success']};">{recuperados:,}</div>
+                <div style="font-size: 0.9rem; color: #666;">{(recuperados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Métrica 5: Fallecidos confirmados
+    st.markdown(
+        f"""
+        <div class="big-metric-container" style="border-top: 5px solid {colors['danger']}">
+            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["fallecidos"]}</div>
+            <div class="big-metric-title">Fallecidos Confirmados</div>
+            <div class="big-metric-value" style="color: {colors['danger']};">{fallecidos_confirmados:,}</div>
+            <div style="font-size: 0.9rem; color: #666;">{(fallecidos_confirmados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Métrica 6: Tasa de letalidad
+    st.markdown(
+        f"""
+        <div class="big-metric-container" style="border-top: 5px solid {colors['warning']}">
+            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["letalidad"]}</div>
+            <div class="big-metric-title">Letalidad en Confirmados</div>
+            <div class="big-metric-value" style="color: {colors['warning']};">{letalidad_confirmados:.2f}%</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Métrica 7: Departamento más afectado
+    st.markdown(
+        f"""
+        <div class="big-metric-container" style="border-top: 5px solid {colors['primary']}">
+            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["depto"]}</div>
+            <div class="big-metric-title">Departamento Más Afectado</div>
+            <div class="big-metric-value" style="color: {colors['primary']};">{depto_top}</div>
+            <div style="font-size: 0.9rem; color: #666;">{casos_top_depto:,} casos</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Información de actualización
+    st.markdown(
+        f"<div class='update-info'>Última actualización: {fecha_actualizacion}</div>",
+        unsafe_allow_html=True,
+    )
+
+    # Aclaración sobre los datos
+    st.markdown(
+        f"""
+        <div style="background-color: #f0f8ff; padding: 10px; border-radius: 5px; border-left: 5px solid #4682b4; margin: 20px 0;">
+            <p style="margin: 0; font-size: 0.9rem;"><strong>Nota:</strong> Los datos presentados incluyen casos notificados en el Tolima y casos donde el paciente reside en el departamento pero pudo ser notificado en otra región. Utilice los filtros para analizar según necesidades específicas.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     # Sección de distribución de casos
-    st.markdown('<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución de Casos</h2>', unsafe_allow_html=True)
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución de Casos</h2>',
+        unsafe_allow_html=True,
+    )
 
     # Organizar los gráficos en dos columnas
     col1, col2 = st.columns(2)
-    
+
     with col1:
         # Distribución por tipo de caso
-        if "tip_cas_" in data["fiebre"].columns:
+        if has_tipo_caso:
             st.subheader("Distribución por Tipo de Caso")
-            
+
             # Mapeo de códigos a nombres
             tipo_mapping = {
-                1: "Sospechoso", 
-                2: "Probable", 
+                1: "Sospechoso",
+                2: "Probable",
                 3: "Confirmado por Laboratorio",
                 4: "Confirmado por Clínica",
-                5: "Confirmado por Nexo Epidemiológico"
+                5: "Confirmado por Nexo Epidemiológico",
             }
-            
+
             # Crear copia del dataframe para la transformación
             df_tipo = data["fiebre"].copy()
-            
+
             # Aplicar mapeo
-            df_tipo["tipo_caso_desc"] = df_tipo["tip_cas_"].map(tipo_mapping).fillna("Otro")
-            
+            df_tipo["tipo_caso_desc"] = (
+                df_tipo["tip_cas_"].map(tipo_mapping).fillna("Otro")
+            )
+
             # Contar casos por tipo
             tipo_count = df_tipo["tipo_caso_desc"].value_counts().reset_index()
             tipo_count.columns = ["Tipo de Caso", "Cantidad"]
-            
+
             # Crear gráfico con Plotly
             fig = px.bar(
-                tipo_count, 
-                x="Tipo de Caso", 
+                tipo_count,
+                x="Tipo de Caso",
                 y="Cantidad",
                 title="Distribución por Tipo de Caso",
                 color_discrete_sequence=[colors["primary"]],
-                text="Cantidad"  # Mostrar valores en las barras
+                text="Cantidad",  # Mostrar valores en las barras
             )
-            
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -170,63 +308,69 @@ def show(data, filters, colors):
                     "x": 0.5,
                     "xanchor": "center",
                     "yanchor": "top",
-                    "font": dict(size=16, color="#5A4214")
+                    "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(
-                    title=None,
-                    tickangle=-45,
-                    gridcolor="#f5f5f5"
-                ),
-                yaxis=dict(
-                    title="Número de Casos",
-                    gridcolor="#f5f5f5"
-                )
+                xaxis=dict(title=None, tickangle=-45, gridcolor="#f5f5f5"),
+                yaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
             )
-            
+
             # Mostrar gráfico
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No se encontraron datos sobre el tipo de caso.")
-    
+
     with col2:
-        # Distribución por condición final
-        if "con_fin_" in data["fiebre"].columns:
-            st.subheader("Condición Final de los Casos")
-            
-            # Mapeo de códigos a nombres
-            condicion_mapping = {
-                1: "Vivo", 
-                2: "Fallecido"
-            }
-            
-            # Crear copia del dataframe para la transformación
-            df_condicion = data["fiebre"].copy()
-            
-            # Aplicar mapeo
-            df_condicion["condicion_desc"] = df_condicion["con_fin_"].map(condicion_mapping).fillna("No especificado")
-            
-            # Contar casos por condición
-            condicion_count = df_condicion["condicion_desc"].value_counts().reset_index()
-            condicion_count.columns = ["Condición Final", "Cantidad"]
-            
+        # Distribución por condición final y estado (activo/recuperado/fallecido)
+        if has_condicion_final:
+            st.subheader("Estado Actual de los Casos")
+
+            # Crear dataframe para análisis de estado
+            df_estado = df_analisis.copy()
+
+            # Función para determinar el estado completo de cada caso
+            def determinar_estado_completo(row):
+                # Si no es un caso confirmado
+                if not (row["tip_cas_"] in tipos_confirmados):
+                    return "Sospechoso/Probable"
+
+                # Si es un caso confirmado
+                if row["con_fin_"] == 2:  # Fallecido
+                    return "Fallecido (confirmado)"
+                elif has_recuperados and row["est_rec_"] == 1:  # Recuperado
+                    return "Recuperado"
+                else:  # Activo
+                    return "Activo (confirmado)"
+
+            # Aplicar función de estado
+            df_estado["Estado"] = df_estado.apply(determinar_estado_completo, axis=1)
+
+            # Contar por estado
+            estado_count = df_estado["Estado"].value_counts().reset_index()
+            estado_count.columns = ["Estado", "Cantidad"]
+
             # Crear gráfico de pastel con Plotly
             fig = px.pie(
-                condicion_count, 
-                names="Condición Final", 
+                estado_count,
+                names="Estado",
                 values="Cantidad",
-                title="Condición Final de los Casos",
-                color_discrete_sequence=[colors["primary"], colors["danger"], colors["accent"]],
-                hole=0.4
+                title="Estado Actual de los Casos",
+                color_discrete_sequence=[
+                    colors["danger"],  # Fallecido
+                    colors["success"],  # Recuperado
+                    colors["accent"],  # Activo
+                    colors["secondary"],  # Sospechoso/Probable
+                ],
+                hole=0.4,
             )
-            
+
             # Agregar porcentajes en las etiquetas
             fig.update_traces(
-                textposition='inside',
-                textinfo='percent+label+value',
+                textposition="inside",
+                textinfo="percent+label+value",
                 textfont_size=12,
-                marker=dict(line=dict(color='#FFFFFF', width=2))
+                marker=dict(line=dict(color="#FFFFFF", width=2)),
             )
-            
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -237,53 +381,68 @@ def show(data, filters, colors):
                     "x": 0.5,
                     "xanchor": "center",
                     "yanchor": "top",
-                    "font": dict(size=16, color="#5A4214")
+                    "font": dict(size=16, color="#5A4214"),
                 },
                 legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.2,
-                    xanchor="center",
-                    x=0.5
-                )
+                    orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5
+                ),
             )
-            
+
             # Mostrar gráfico
             st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.warning("No se encontraron datos sobre la condición final.")
 
+            # Añadir explicación clara
+            st.info(
+                """
+                **Nota sobre el estado de los casos:**
+                - **Fallecido (confirmado)**: Casos fallecidos que fueron confirmados.
+                - **Recuperado**: Casos confirmados que se han recuperado.
+                - **Activo (confirmado)**: Casos confirmados que continúan activos.
+                - **Sospechoso/Probable**: Casos que no han sido confirmados.
+            """
+            )
+        else:
+            st.warning("No se encontraron datos sobre la condición final de los casos.")
+
+    # El resto del código sigue igual...
     # Distribución demográfica
-    st.markdown('<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución Demográfica</h2>', unsafe_allow_html=True)
-    
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución Demográfica</h2>',
+        unsafe_allow_html=True,
+    )
+
     col1, col2 = st.columns(2)
-    
+
     with col1:
         if "sexo_" in data["fiebre"].columns:
             st.subheader("Distribución por Sexo")
-            
+
             # Contar casos por sexo
             sexo_count = data["fiebre"]["sexo_"].value_counts().reset_index()
             sexo_count.columns = ["Sexo", "Cantidad"]
-            
+
             # Crear gráfico de pastel con Plotly
             fig = px.pie(
-                sexo_count, 
-                names="Sexo", 
+                sexo_count,
+                names="Sexo",
                 values="Cantidad",
                 title="Distribución por Sexo",
-                color_discrete_sequence=[colors["primary"], colors["secondary"], colors["accent"]],
-                hole=0.4
+                color_discrete_sequence=[
+                    colors["primary"],
+                    colors["secondary"],
+                    colors["accent"],
+                ],
+                hole=0.4,
             )
-            
+
             # Agregar porcentajes en las etiquetas
             fig.update_traces(
-                textposition='inside',
-                textinfo='percent+label+value',
+                textposition="inside",
+                textinfo="percent+label+value",
                 textfont_size=12,
-                marker=dict(line=dict(color='#FFFFFF', width=2))
+                marker=dict(line=dict(color="#FFFFFF", width=2)),
             )
-            
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -294,26 +453,22 @@ def show(data, filters, colors):
                     "x": 0.5,
                     "xanchor": "center",
                     "yanchor": "top",
-                    "font": dict(size=16, color="#5A4214")
+                    "font": dict(size=16, color="#5A4214"),
                 },
                 legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=-0.2,
-                    xanchor="center",
-                    x=0.5
-                )
+                    orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5
+                ),
             )
-            
+
             # Mostrar gráfico
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No se encontraron datos sobre el sexo.")
-    
+
     with col2:
         if "edad_" in data["fiebre"].columns:
             st.subheader("Distribución por Edad")
-            
+
             # Crear rangos de edad
             def crear_grupo_edad(edad):
                 if pd.isna(edad):
@@ -338,40 +493,46 @@ def show(data, filters, colors):
                     return "70-79 años"
                 else:
                     return "80+ años"
-            
+
             # Aplicar función para crear grupos de edad
             df_edad = data["fiebre"].copy()
             df_edad["grupo_edad"] = df_edad["edad_"].apply(crear_grupo_edad)
-            
+
             # Orden de los grupos de edad
             orden_grupos = [
-                "0-4 años", "5-14 años", "15-19 años", "20-29 años",
-                "30-39 años", "40-49 años", "50-59 años", "60-69 años",
-                "70-79 años", "80+ años", "No especificado"
+                "0-4 años",
+                "5-14 años",
+                "15-19 años",
+                "20-29 años",
+                "30-39 años",
+                "40-49 años",
+                "50-59 años",
+                "60-69 años",
+                "70-79 años",
+                "80+ años",
+                "No especificado",
             ]
-            
+
             # Contar casos por grupo de edad
             edad_count = df_edad["grupo_edad"].value_counts().reset_index()
             edad_count.columns = ["Grupo de Edad", "Cantidad"]
-            
+
             # Reordenar según el orden definido
             edad_count["Grupo de Edad"] = pd.Categorical(
-                edad_count["Grupo de Edad"],
-                categories=orden_grupos,
-                ordered=True
+                edad_count["Grupo de Edad"], categories=orden_grupos, ordered=True
             )
             edad_count = edad_count.sort_values("Grupo de Edad")
-            
+
             # Crear gráfico de barras con Plotly
             fig = px.bar(
-                edad_count, 
-                x="Grupo de Edad", 
+                edad_count,
+                x="Grupo de Edad",
                 y="Cantidad",
                 title="Distribución por Grupo de Edad",
                 color_discrete_sequence=[colors["secondary"]],
-                text="Cantidad"  # Mostrar valores en las barras
+                text="Cantidad",  # Mostrar valores en las barras
             )
-            
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -382,43 +543,39 @@ def show(data, filters, colors):
                     "x": 0.5,
                     "xanchor": "center",
                     "yanchor": "top",
-                    "font": dict(size=16, color="#5A4214")
+                    "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(
-                    title=None,
-                    tickangle=-45,
-                    gridcolor="#f5f5f5"
-                ),
-                yaxis=dict(
-                    title="Número de Casos",
-                    gridcolor="#f5f5f5"
-                )
+                xaxis=dict(title=None, tickangle=-45, gridcolor="#f5f5f5"),
+                yaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
             )
-            
+
             # Mostrar gráfico
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.warning("No se encontraron datos sobre la edad.")
 
     # Evolución temporal
-    st.markdown('<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Evolución Temporal</h2>', unsafe_allow_html=True)
-    
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Evolución Temporal</h2>',
+        unsafe_allow_html=True,
+    )
+
     if "año" in data["fiebre"].columns:
         # Agrupar por año
         año_count = data["fiebre"]["año"].value_counts().reset_index()
         año_count.columns = ["Año", "Cantidad"]
         año_count = año_count.sort_values("Año")
-        
+
         # Crear gráfico de área con Plotly para mayor impacto visual
         fig = px.area(
-            año_count, 
-            x="Año", 
+            año_count,
+            x="Año",
             y="Cantidad",
             title="Evolución Anual de Casos",
             color_discrete_sequence=[colors["primary"]],
-            line_shape="spline"  # Curvas suavizadas
+            line_shape="spline",  # Curvas suavizadas
         )
-        
+
         # Agregar puntos para mejor visualización
         fig.add_trace(
             go.Scatter(
@@ -426,10 +583,10 @@ def show(data, filters, colors):
                 y=año_count["Cantidad"],
                 mode="markers",
                 marker=dict(color=colors["secondary"], size=10),
-                name="Casos por año"
+                name="Casos por año",
             )
         )
-        
+
         # Mejorar layout
         fig.update_layout(
             plot_bgcolor="white",
@@ -440,31 +597,27 @@ def show(data, filters, colors):
                 "x": 0.5,
                 "xanchor": "center",
                 "yanchor": "top",
-                "font": dict(size=16, color="#5A4214")
+                "font": dict(size=16, color="#5A4214"),
             },
             showlegend=False,
-            xaxis=dict(
-                title="Año",
-                gridcolor="#f5f5f5"
-            ),
-            yaxis=dict(
-                title="Número de Casos",
-                gridcolor="#f5f5f5"
-            )
+            xaxis=dict(title="Año", gridcolor="#f5f5f5"),
+            yaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
         )
-        
+
         # Mostrar gráfico
         st.plotly_chart(fig, use_container_width=True)
-        
+
         # Agregar análisis de tendencia
         if len(año_count) >= 3:
             # Calcular tendencia simple
             primeros_años = año_count.head(3)["Cantidad"].mean()
             últimos_años = año_count.tail(3)["Cantidad"].mean()
-            
+
             cambio = últimos_años - primeros_años
-            cambio_porcentual = (cambio / primeros_años * 100) if primeros_años > 0 else 0
-            
+            cambio_porcentual = (
+                (cambio / primeros_años * 100) if primeros_años > 0 else 0
+            )
+
             # Mostrar análisis
             if cambio_porcentual > 10:
                 tendencia_color = colors["danger"]
@@ -478,7 +631,7 @@ def show(data, filters, colors):
                 tendencia_color = colors["accent"]
                 tendencia_texto = f"Tendencia estable: Variación del {abs(cambio_porcentual):.1f}% en los casos"
                 tendencia_icon = "ℹ️"
-            
+
             st.markdown(
                 f"""
                 <div style="background-color: #f8f9fa; padding: 15px; border-radius: 10px; border-left: 5px solid {tendencia_color}; margin: 20px 0;">
@@ -486,36 +639,164 @@ def show(data, filters, colors):
                     <p style="margin-bottom: 0;"><strong>{tendencia_texto}</strong> al comparar los promedios de los primeros y últimos períodos del análisis.</p>
                 </div>
                 """,
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
     else:
         st.warning("No se encontraron datos sobre el año de los casos.")
 
+    # Analizar casos activos
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Análisis de Casos Activos</h2>',
+        unsafe_allow_html=True,
+    )
+
+    # Verificar si podemos obtener datos de casos activos
+    if casos_confirmados_activos > 0 and has_tipo_caso and has_condicion_final:
+
+        # Filtrar casos activos
+        df_activos = data["fiebre"].copy()
+
+        # Definir casos activos (confirmados y no fallecidos)
+        df_activos = df_activos[
+            df_activos["tip_cas_"].isin([3, 4, 5]) & (df_activos["con_fin_"] != 2)
+        ]
+
+        # Si hay columna est_rec_, excluir recuperados
+        if "est_rec_" in data["fiebre"].columns:
+            df_activos = df_activos[df_activos["est_rec_"] != 1]
+
+        # Información general sobre casos activos
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Distribución de casos activos por sexo
+            if "sexo_" in df_activos.columns:
+                sexo_activos = df_activos["sexo_"].value_counts().reset_index()
+                sexo_activos.columns = ["Sexo", "Cantidad"]
+
+                # Gráfico de pastel
+                fig = px.pie(
+                    sexo_activos,
+                    names="Sexo",
+                    values="Cantidad",
+                    title="Casos Activos por Sexo",
+                    color_discrete_sequence=[colors["primary"], colors["secondary"]],
+                    hole=0.4,
+                )
+
+                # Configurar layout
+                fig.update_layout(
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    title={"y": 0.98, "x": 0.5, "xanchor": "center", "yanchor": "top"},
+                    title_font=dict(size=16),
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+        with col2:
+            # Distribución de casos activos por grupo de edad
+            if "edad_" in df_activos.columns:
+                # Aplicar función para crear grupos de edad
+                df_activos["grupo_edad"] = df_activos["edad_"].apply(crear_grupo_edad)
+
+                # Contar casos por grupo de edad
+                edad_activos = df_activos["grupo_edad"].value_counts().reset_index()
+                edad_activos.columns = ["Grupo de Edad", "Cantidad"]
+
+                # Reordenar según el orden definido
+                edad_activos["Grupo de Edad"] = pd.Categorical(
+                    edad_activos["Grupo de Edad"], categories=orden_grupos, ordered=True
+                )
+                edad_activos = edad_activos.sort_values("Grupo de Edad")
+
+                # Crear gráfico de barras
+                fig = px.bar(
+                    edad_activos,
+                    x="Grupo de Edad",
+                    y="Cantidad",
+                    title="Casos Activos por Grupo de Edad",
+                    color_discrete_sequence=[colors["accent"]],
+                    text="Cantidad",
+                )
+
+                # Configurar layout
+                fig.update_layout(
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    title={"y": 0.98, "x": 0.5, "xanchor": "center", "yanchor": "top"},
+                    title_font=dict(size=16),
+                    xaxis=dict(tickangle=-45),
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
+        # Mostrar mapa de casos activos por departamento
+        if "ndep_resi" in df_activos.columns:
+            st.subheader("Distribución Geográfica de Casos Activos")
+
+            # Contar casos activos por departamento
+            depto_activos = df_activos["ndep_resi"].value_counts().reset_index()
+            depto_activos.columns = ["Departamento", "Casos Activos"]
+
+            # Mostrar tabla de casos activos por departamento
+            st.dataframe(
+                depto_activos.style.format({"Casos Activos": "{:,}"}),
+                use_container_width=True,
+            )
+    else:
+        st.info(
+            "No hay casos activos para mostrar o no se cuenta con la información necesaria para identificarlos."
+        )
+
     # Distribución geográfica resumida
-    st.markdown('<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución Geográfica</h2>', unsafe_allow_html=True)
-    
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución Geográfica</h2>',
+        unsafe_allow_html=True,
+    )
+
+    # Analizar por lugar de notificación vs lugar de residencia
+    st.markdown(
+        f"""
+        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+            <h3 style="color: {colors['primary']}; margin-top: 0;">Nota sobre Distribución Geográfica</h3>
+            <p>El análisis geográfico considera dos aspectos importantes:</p>
+            <ul>
+                <li><strong>Lugar de residencia</strong>: Donde vive la persona afectada.</li>
+                <li><strong>Lugar de notificación</strong>: Donde se reportó el caso al sistema de vigilancia.</li>
+            </ul>
+            <p style="margin-bottom: 0;">Estos pueden diferir, y es importante considerarlo para la planificación de intervenciones.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     col1, col2 = st.columns(2)
-    
+
+    # Determinar qué columnas de ubicación utilizar
     with col1:
+        # Mostrar datos por departamento de residencia
         if "ndep_resi" in data["fiebre"].columns:
-            st.subheader("Top 10 Departamentos")
-            
+            st.subheader("Por Departamento de Residencia")
+
             # Contar casos por departamento
-            depto_count = data["fiebre"]["ndep_resi"].value_counts().reset_index()
-            depto_count.columns = ["Departamento", "Cantidad"]
-            depto_count = depto_count.sort_values("Cantidad", ascending=False).head(10)
-            
+            depto_resi = data["fiebre"]["ndep_resi"].value_counts().reset_index()
+            depto_resi.columns = ["Departamento", "Cantidad"]
+            depto_resi = depto_resi.sort_values("Cantidad", ascending=False).head(10)
+
             # Crear gráfico de barras horizontales con Plotly
             fig = px.bar(
-                depto_count, 
-                y="Departamento", 
+                depto_resi,
+                y="Departamento",
                 x="Cantidad",
-                title="Top 10 Departamentos con más Casos",
+                title="Top 10 Departamentos de Residencia",
                 color_discrete_sequence=[colors["primary"]],
                 text="Cantidad",
-                orientation="h"
+                orientation="h",
             )
-            
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -526,43 +807,76 @@ def show(data, filters, colors):
                     "x": 0.5,
                     "xanchor": "center",
                     "yanchor": "top",
-                    "font": dict(size=16, color="#5A4214")
+                    "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(
-                    title="Número de Casos",
-                    gridcolor="#f5f5f5"
-                ),
-                yaxis=dict(
-                    title=None,
-                    gridcolor="#f5f5f5"
-                )
+                xaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                yaxis=dict(title=None, gridcolor="#f5f5f5"),
             )
-            
+
             # Mostrar gráfico
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No se encontraron datos sobre departamentos.")
-    
+            st.warning("No se encontraron datos sobre departamentos de residencia.")
+
     with col2:
-        if "nmun_resi" in data["fiebre"].columns:
+        # Mostrar datos por departamento de notificación si existe
+        if "ndep_not" in data["fiebre"].columns:
+            st.subheader("Por Departamento de Notificación")
+
+            # Contar casos por departamento de notificación
+            depto_not = data["fiebre"]["ndep_not"].value_counts().reset_index()
+            depto_not.columns = ["Departamento", "Cantidad"]
+            depto_not = depto_not.sort_values("Cantidad", ascending=False).head(10)
+
+            # Crear gráfico de barras horizontales con Plotly
+            fig = px.bar(
+                depto_not,
+                y="Departamento",
+                x="Cantidad",
+                title="Top 10 Departamentos de Notificación",
+                color_discrete_sequence=[colors["secondary"]],
+                text="Cantidad",
+                orientation="h",
+            )
+
+            # Mejorar layout
+            fig.update_layout(
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                margin=dict(l=10, r=10, t=40, b=10),
+                title={
+                    "y": 0.98,
+                    "x": 0.5,
+                    "xanchor": "center",
+                    "yanchor": "top",
+                    "font": dict(size=16, color="#5A4214"),
+                },
+                xaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                yaxis=dict(title=None, gridcolor="#f5f5f5"),
+            )
+
+            # Mostrar gráfico
+            st.plotly_chart(fig, use_container_width=True)
+        elif "nmun_resi" in data["fiebre"].columns:
+            # Si no hay departamento de notificación, mostrar municipios de residencia
             st.subheader("Top 10 Municipios")
-            
+
             # Contar casos por municipio
             muni_count = data["fiebre"]["nmun_resi"].value_counts().reset_index()
             muni_count.columns = ["Municipio", "Cantidad"]
             muni_count = muni_count.sort_values("Cantidad", ascending=False).head(10)
-            
-            # Crear gráfico de barras horizontales con Plotly
+
+            # Crear gráfico
             fig = px.bar(
-                muni_count, 
-                y="Municipio", 
+                muni_count,
+                y="Municipio",
                 x="Cantidad",
                 title="Top 10 Municipios con más Casos",
                 color_discrete_sequence=[colors["secondary"]],
                 text="Cantidad",
-                orientation="h"
+                orientation="h",
             )
-            
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -573,26 +887,25 @@ def show(data, filters, colors):
                     "x": 0.5,
                     "xanchor": "center",
                     "yanchor": "top",
-                    "font": dict(size=16, color="#5A4214")
+                    "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(
-                    title="Número de Casos",
-                    gridcolor="#f5f5f5"
-                ),
-                yaxis=dict(
-                    title=None,
-                    gridcolor="#f5f5f5"
-                )
+                xaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                yaxis=dict(title=None, gridcolor="#f5f5f5"),
             )
-            
+
             # Mostrar gráfico
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.warning("No se encontraron datos sobre municipios.")
+            st.warning(
+                "No se encontraron datos sobre departamentos de notificación o municipios."
+            )
 
     # Información adicional y enlaces
-    st.markdown('<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Información Adicional</h2>', unsafe_allow_html=True)
-    
+    st.markdown(
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Información Adicional</h2>',
+        unsafe_allow_html=True,
+    )
+
     # Panel informativo con más información sobre la enfermedad
     st.markdown(
         f"""
@@ -606,9 +919,9 @@ def show(data, filters, colors):
             <p style="font-style: italic; margin-bottom: 0;">Para más información, consulte los lineamientos del Ministerio de Salud y Protección Social.</p>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-    
+
     # Pie de página con créditos
     st.markdown(
         f"""
@@ -618,14 +931,14 @@ def show(data, filters, colors):
             </p>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
 def create_metric_card(title, value, delta=None, color="#AB0520"):
     """
     Crea una tarjeta de métrica estilizada.
-    
+
     Args:
         title (str): Título de la métrica
         value (str): Valor de la métrica
@@ -641,5 +954,5 @@ def create_metric_card(title, value, delta=None, color="#AB0520"):
             {f'<p style="color: #666; font-size: 12px; margin-top: 5px;">{delta}</p>' if delta else ''}
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
