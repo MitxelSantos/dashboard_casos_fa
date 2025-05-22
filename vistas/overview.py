@@ -32,7 +32,7 @@ def show(data, filters, colors):
         <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid {colors['primary']}; margin-bottom: 30px;">
             <h3 style="color: {colors['primary']}; margin-top: 0;">¿Qué es la Fiebre Amarilla?</h3>
             <p style="margin-bottom: 5px;">La Fiebre Amarilla es una enfermedad viral aguda transmitida por mosquitos, causada por el virus de la fiebre amarilla.</p>
-            <p style="margin-bottom: 5px;">Este dashboard presenta el análisis de casos registrados en el departamento del Tolima y casos notificados en este territorio.</p>
+            <p style="margin-bottom: 5px;">Este dashboard presenta el análisis de casos probables registrados en el departamento del Tolima y casos notificados en este territorio.</p>
             <p>La vigilancia epidemiológica de esta enfermedad es crucial debido a su potencial de causar brotes con alta mortalidad.</p>
         </div>
         """,
@@ -116,8 +116,8 @@ def show(data, filters, colors):
     casos_top_depto = 0
 
     # Primero intentamos por departamento de notificación si existe
-    if "ndep_not" in data["fiebre"].columns and not data["fiebre"].empty:
-        depto_series = data["fiebre"]["ndep_not"].value_counts()
+    if "ndep_notif" in data["fiebre"].columns and not data["fiebre"].empty:
+        depto_series = data["fiebre"]["ndep_notif"].value_counts()
         if not depto_series.empty:
             depto_top = depto_series.index[0]
             casos_top_depto = depto_series.iloc[0]
@@ -139,102 +139,152 @@ def show(data, filters, colors):
         "depto": "🌎",
     }
 
-    # Crear contenedor para métricas con CSS Grid
+    # Estilos CSS para métricas en cuadros
     st.markdown(
-        "<div style='display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;'>",
+        """
+    <style>
+    .metrics-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+        margin-bottom: 30px;
+    }
+    .metric-box {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        padding: 15px;
+        width: 200px;
+        height: 130px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
+        transition: transform 0.3s ease;
+    }
+    .metric-box:hover {
+        transform: translateY(-5px);
+    }
+    .metric-icon {
+        font-size: 2rem;
+        margin-bottom: 8px;
+    }
+    .metric-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #666;
+        margin-bottom: 5px;
+    }
+    .metric-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 3px;
+    }
+    .metric-subtext {
+        font-size: 0.75rem;
+        color: #666;
+    }
+    </style>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Métrica 1: Total de casos
+    # Iniciar contenedor de métricas
+    st.markdown('<div class="metrics-container">', unsafe_allow_html=True)
+
+    # Métrica: Total de casos probables
     st.markdown(
         f"""
-        <div class="big-metric-container" style="border-top: 5px solid {colors['primary']}">
-            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["total"]}</div>
-            <div class="big-metric-title">Total de Casos</div>
-            <div class="big-metric-value" style="color: {colors['primary']};">{total_casos:,}</div>
-        </div>
-        """,
+    <div class="metric-box" style="border-top: 5px solid {colors['primary']}">
+        <div class="metric-icon">{iconos["total"]}</div>
+        <div class="metric-title">Total Casos Probables</div>
+        <div class="metric-value" style="color: {colors['primary']};">{total_casos:,}</div>
+    </div>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Métrica 2: Total Casos confirmados (incluyendo fallecidos)
+    # Métrica: Total Confirmados
     st.markdown(
         f"""
-        <div class="big-metric-container" style="border-top: 5px solid {colors['secondary']}">
-            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["confirmados"]}</div>
-            <div class="big-metric-title">Total Confirmados</div>
-            <div class="big-metric-value" style="color: {colors['secondary']};">{casos_confirmados_total:,}</div>
-            <div style="font-size: 0.9rem; color: #666;">{(casos_confirmados_total/total_casos*100) if total_casos > 0 else 0:.1f}% del total</div>
-        </div>
-        """,
+    <div class="metric-box" style="border-top: 5px solid {colors['secondary']}">
+        <div class="metric-icon">{iconos["confirmados"]}</div>
+        <div class="metric-title">Total Confirmados</div>
+        <div class="metric-value" style="color: {colors['secondary']};">{casos_confirmados_total:,}</div>
+        <div class="metric-subtext">{(casos_confirmados_total/total_casos*100) if total_casos > 0 else 0:.1f}% del total</div>
+    </div>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Métrica 3: Casos confirmados activos
+    # Métrica: Confirmados Activos
     st.markdown(
         f"""
-        <div class="big-metric-container" style="border-top: 5px solid {colors['accent']}">
-            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["activos"]}</div>
-            <div class="big-metric-title">Confirmados Activos</div>
-            <div class="big-metric-value" style="color: {colors['accent']};">{casos_confirmados_activos:,}</div>
-            <div style="font-size: 0.9rem; color: #666;">{(casos_confirmados_activos/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
-        </div>
-        """,
+    <div class="metric-box" style="border-top: 5px solid {colors['accent']}">
+        <div class="metric-icon">{iconos["activos"]}</div>
+        <div class="metric-title">Confirmados Activos</div>
+        <div class="metric-value" style="color: {colors['accent']};">{casos_confirmados_activos:,}</div>
+        <div class="metric-subtext">{(casos_confirmados_activos/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
+    </div>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Métrica 4: Recuperados (si está disponible)
+    # Métrica: Recuperados (si está disponible)
     if has_recuperados:
         st.markdown(
             f"""
-            <div class="big-metric-container" style="border-top: 5px solid {colors['success']}">
-                <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["recuperados"]}</div>
-                <div class="big-metric-title">Recuperados</div>
-                <div class="big-metric-value" style="color: {colors['success']};">{recuperados:,}</div>
-                <div style="font-size: 0.9rem; color: #666;">{(recuperados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
-            </div>
-            """,
+        <div class="metric-box" style="border-top: 5px solid {colors['success']}">
+            <div class="metric-icon">{iconos["recuperados"]}</div>
+            <div class="metric-title">Recuperados</div>
+            <div class="metric-value" style="color: {colors['success']};">{recuperados:,}</div>
+            <div class="metric-subtext">{(recuperados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
+        </div>
+        """,
             unsafe_allow_html=True,
         )
 
-    # Métrica 5: Fallecidos confirmados
+    # Métrica: Fallecidos Confirmados
     st.markdown(
         f"""
-        <div class="big-metric-container" style="border-top: 5px solid {colors['danger']}">
-            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["fallecidos"]}</div>
-            <div class="big-metric-title">Fallecidos Confirmados</div>
-            <div class="big-metric-value" style="color: {colors['danger']};">{fallecidos_confirmados:,}</div>
-            <div style="font-size: 0.9rem; color: #666;">{(fallecidos_confirmados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
-        </div>
-        """,
+    <div class="metric-box" style="border-top: 5px solid {colors['danger']}">
+        <div class="metric-icon">{iconos["fallecidos"]}</div>
+        <div class="metric-title">Fallecidos Confirmados</div>
+        <div class="metric-value" style="color: {colors['danger']};">{fallecidos_confirmados:,}</div>
+        <div class="metric-subtext">{(fallecidos_confirmados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
+    </div>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Métrica 6: Tasa de letalidad
+    # Métrica: Tasa de letalidad
     st.markdown(
         f"""
-        <div class="big-metric-container" style="border-top: 5px solid {colors['warning']}">
-            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["letalidad"]}</div>
-            <div class="big-metric-title">Letalidad en Confirmados</div>
-            <div class="big-metric-value" style="color: {colors['warning']};">{letalidad_confirmados:.2f}%</div>
-        </div>
-        """,
+    <div class="metric-box" style="border-top: 5px solid {colors['warning']}">
+        <div class="metric-icon">{iconos["letalidad"]}</div>
+        <div class="metric-title">Letalidad en Confirmados</div>
+        <div class="metric-value" style="color: {colors['warning']};">{letalidad_confirmados:.2f}%</div>
+    </div>
+    """,
         unsafe_allow_html=True,
     )
 
-    # Métrica 7: Departamento más afectado
+    # Métrica: Departamento más afectado
     st.markdown(
         f"""
-        <div class="big-metric-container" style="border-top: 5px solid {colors['primary']}">
-            <div style="font-size: 2rem; margin-bottom: 5px;">{iconos["depto"]}</div>
-            <div class="big-metric-title">Departamento Más Afectado</div>
-            <div class="big-metric-value" style="color: {colors['primary']};">{depto_top}</div>
-            <div style="font-size: 0.9rem; color: #666;">{casos_top_depto:,} casos</div>
-        </div>
-        """,
+    <div class="metric-box" style="border-top: 5px solid {colors['primary']}">
+        <div class="metric-icon">{iconos["depto"]}</div>
+        <div class="metric-title">Departamento Más Afectado</div>
+        <div class="metric-value" style="color: {colors['primary']};">{depto_top}</div>
+        <div class="metric-subtext">{casos_top_depto:,} casos</div>
+    </div>
+    """,
         unsafe_allow_html=True,
     )
 
+    # Cerrar contenedor de métricas
     st.markdown("</div>", unsafe_allow_html=True)
 
     # Información de actualización
@@ -247,7 +297,7 @@ def show(data, filters, colors):
     st.markdown(
         f"""
         <div style="background-color: #f0f8ff; padding: 10px; border-radius: 5px; border-left: 5px solid #4682b4; margin: 20px 0;">
-            <p style="margin: 0; font-size: 0.9rem;"><strong>Nota:</strong> Los datos presentados incluyen casos notificados en el Tolima y casos donde el paciente reside en el departamento pero pudo ser notificado en otra región. Utilice los filtros para analizar según necesidades específicas.</p>
+            <p style="margin: 0; font-size: 0.9rem;"><strong>Nota:</strong> Los datos presentados incluyen casos probables notificados en el Tolima y casos donde el paciente reside en el departamento pero pudo ser notificado en otra región. Utilice los filtros para analizar según necesidades específicas.</p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -255,7 +305,7 @@ def show(data, filters, colors):
 
     # Sección de distribución de casos
     st.markdown(
-        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución de Casos</h2>',
+        '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución de Casos Probables</h2>',
         unsafe_allow_html=True,
     )
 
@@ -265,7 +315,7 @@ def show(data, filters, colors):
     with col1:
         # Distribución por tipo de caso
         if has_tipo_caso:
-            st.subheader("Distribución por Tipo de Caso")
+            st.subheader("Distribución por Tipo de Caso Probable")
 
             # Mapeo de códigos a nombres
             tipo_mapping = {
@@ -293,9 +343,16 @@ def show(data, filters, colors):
                 tipo_count,
                 x="Tipo de Caso",
                 y="Cantidad",
-                title="Distribución por Tipo de Caso",
+                title="Distribución por Tipo de Caso Probable",
                 color_discrete_sequence=[colors["primary"]],
                 text="Cantidad",  # Mostrar valores en las barras
+            )
+
+            # Configurar para que los números no se giren
+            fig.update_traces(
+                textangle=0,  # Mantener texto horizontal
+                textposition="outside",  # Texto fuera de las barras
+                cliponaxis=False,  # Evitar recorte de texto
             )
 
             # Mejorar layout
@@ -311,7 +368,7 @@ def show(data, filters, colors):
                     "font": dict(size=16, color="#5A4214"),
                 },
                 xaxis=dict(title=None, tickangle=-45, gridcolor="#f5f5f5"),
-                yaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                yaxis=dict(title="Número de Casos Probables", gridcolor="#f5f5f5"),
             )
 
             # Mostrar gráfico
@@ -404,7 +461,6 @@ def show(data, filters, colors):
         else:
             st.warning("No se encontraron datos sobre la condición final de los casos.")
 
-    # El resto del código sigue igual...
     # Distribución demográfica
     st.markdown(
         '<h2 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px; margin-top: 40px;">Distribución Demográfica</h2>',
@@ -533,6 +589,13 @@ def show(data, filters, colors):
                 text="Cantidad",  # Mostrar valores en las barras
             )
 
+            # Configurar para que los números no se giren
+            fig.update_traces(
+                textangle=0,  # Mantener texto horizontal
+                textposition="outside",  # Texto fuera de las barras
+                cliponaxis=False,  # Evitar recorte de texto
+            )
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -571,7 +634,7 @@ def show(data, filters, colors):
             año_count,
             x="Año",
             y="Cantidad",
-            title="Evolución Anual de Casos",
+            title="Evolución Anual de Casos Probables",
             color_discrete_sequence=[colors["primary"]],
             line_shape="spline",  # Curvas suavizadas
         )
@@ -601,7 +664,7 @@ def show(data, filters, colors):
             },
             showlegend=False,
             xaxis=dict(title="Año", gridcolor="#f5f5f5"),
-            yaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+            yaxis=dict(title="Número de Casos Probables", gridcolor="#f5f5f5"),
         )
 
         # Mostrar gráfico
@@ -652,17 +715,17 @@ def show(data, filters, colors):
 
     # Verificar si podemos obtener datos de casos activos
     if casos_confirmados_activos > 0 and has_tipo_caso and has_condicion_final:
-
         # Filtrar casos activos
         df_activos = data["fiebre"].copy()
 
         # Definir casos activos (confirmados y no fallecidos)
         df_activos = df_activos[
-            df_activos["tip_cas_"].isin([3, 4, 5]) & (df_activos["con_fin_"] != 2)
+            df_activos["tip_cas_"].isin(tipos_confirmados)
+            & (df_activos["con_fin_"] != 2)
         ]
 
         # Si hay columna est_rec_, excluir recuperados
-        if "est_rec_" in data["fiebre"].columns:
+        if has_recuperados:
             df_activos = df_activos[df_activos["est_rec_"] != 1]
 
         # Información general sobre casos activos
@@ -706,6 +769,19 @@ def show(data, filters, colors):
                 edad_activos.columns = ["Grupo de Edad", "Cantidad"]
 
                 # Reordenar según el orden definido
+                orden_grupos = [
+                    "0-4 años",
+                    "5-14 años",
+                    "15-19 años",
+                    "20-29 años",
+                    "30-39 años",
+                    "40-49 años",
+                    "50-59 años",
+                    "60-69 años",
+                    "70-79 años",
+                    "80+ años",
+                    "No especificado",
+                ]
                 edad_activos["Grupo de Edad"] = pd.Categorical(
                     edad_activos["Grupo de Edad"], categories=orden_grupos, ordered=True
                 )
@@ -721,6 +797,9 @@ def show(data, filters, colors):
                     text="Cantidad",
                 )
 
+                # Configurar para que los números no se giren
+                fig.update_traces(textangle=0, textposition="outside", cliponaxis=False)
+
                 # Configurar layout
                 fig.update_layout(
                     plot_bgcolor="white",
@@ -733,7 +812,7 @@ def show(data, filters, colors):
 
                 st.plotly_chart(fig, use_container_width=True)
 
-        # Mostrar mapa de casos activos por departamento
+        # Mostrar tabla de casos activos por departamento
         if "ndep_resi" in df_activos.columns:
             st.subheader("Distribución Geográfica de Casos Activos")
 
@@ -797,6 +876,9 @@ def show(data, filters, colors):
                 orientation="h",
             )
 
+            # Configurar para que los números no se giren
+            fig.update_traces(textangle=0, textposition="outside", cliponaxis=False)
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -809,7 +891,7 @@ def show(data, filters, colors):
                     "yanchor": "top",
                     "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                xaxis=dict(title="Número de Casos Probables", gridcolor="#f5f5f5"),
                 yaxis=dict(title=None, gridcolor="#f5f5f5"),
             )
 
@@ -820,11 +902,11 @@ def show(data, filters, colors):
 
     with col2:
         # Mostrar datos por departamento de notificación si existe
-        if "ndep_not" in data["fiebre"].columns:
+        if "ndep_notif" in data["fiebre"].columns:
             st.subheader("Por Departamento de Notificación")
 
             # Contar casos por departamento de notificación
-            depto_not = data["fiebre"]["ndep_not"].value_counts().reset_index()
+            depto_not = data["fiebre"]["ndep_notif"].value_counts().reset_index()
             depto_not.columns = ["Departamento", "Cantidad"]
             depto_not = depto_not.sort_values("Cantidad", ascending=False).head(10)
 
@@ -839,6 +921,9 @@ def show(data, filters, colors):
                 orientation="h",
             )
 
+            # Configurar para que los números no se giren
+            fig.update_traces(textangle=0, textposition="outside", cliponaxis=False)
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -851,7 +936,7 @@ def show(data, filters, colors):
                     "yanchor": "top",
                     "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                xaxis=dict(title="Número de Casos Probables", gridcolor="#f5f5f5"),
                 yaxis=dict(title=None, gridcolor="#f5f5f5"),
             )
 
@@ -877,6 +962,9 @@ def show(data, filters, colors):
                 orientation="h",
             )
 
+            # Configurar para que los números no se giren
+            fig.update_traces(textangle=0, textposition="outside", cliponaxis=False)
+
             # Mejorar layout
             fig.update_layout(
                 plot_bgcolor="white",
@@ -889,7 +977,7 @@ def show(data, filters, colors):
                     "yanchor": "top",
                     "font": dict(size=16, color="#5A4214"),
                 },
-                xaxis=dict(title="Número de Casos", gridcolor="#f5f5f5"),
+                xaxis=dict(title="Número de Casos Probables", gridcolor="#f5f5f5"),
                 yaxis=dict(title=None, gridcolor="#f5f5f5"),
             )
 

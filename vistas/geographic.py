@@ -45,11 +45,13 @@ def show(data, filters, colors):
     )
 
     # Verificar si tenemos las columnas necesarias para el análisis
+    # CORRECCIÓN: Usar los nombres correctos de las columnas
     has_residencia = (
         "ndep_resi" in data["fiebre"].columns and "nmun_resi" in data["fiebre"].columns
     )
     has_notificacion = (
-        "ndep_not" in data["fiebre"].columns and "nmun_not" in data["fiebre"].columns
+        "ndep_notif" in data["fiebre"].columns
+        and "nmun_notif" in data["fiebre"].columns
     )
 
     if not (has_residencia or has_notificacion):
@@ -69,7 +71,8 @@ def show(data, filters, colors):
         df_resi = data["fiebre"]["ndep_resi"].value_counts().reset_index()
         df_resi.columns = ["Departamento", "Casos por Residencia"]
 
-        df_noti = data["fiebre"]["ndep_not"].value_counts().reset_index()
+        # CORRECCIÓN: Usar la columna correcta para notificación
+        df_noti = data["fiebre"]["ndep_notif"].value_counts().reset_index()
         df_noti.columns = ["Departamento", "Casos por Notificación"]
 
         # Unir los dataframes para comparar
@@ -189,16 +192,17 @@ def show(data, filters, colors):
         st.subheader("Análisis de Flujo entre Departamentos")
 
         # Crear dataframe con casos que tienen diferente departamento de residencia y notificación
-        df_flujo = data["fiebre"][["ndep_resi", "ndep_not"]].copy()
+        # CORRECCIÓN: Usar las columnas correctas
+        df_flujo = data["fiebre"][["ndep_resi", "ndep_notif"]].copy()
         df_flujo = df_flujo.dropna()  # Eliminar filas con valores faltantes
 
         # Filtrar solo los que tienen diferente departamento
-        df_flujo = df_flujo[df_flujo["ndep_resi"] != df_flujo["ndep_not"]]
+        df_flujo = df_flujo[df_flujo["ndep_resi"] != df_flujo["ndep_notif"]]
 
         if not df_flujo.empty:
             # Contar frecuencias de flujos
             flujo_count = (
-                df_flujo.groupby(["ndep_resi", "ndep_not"]).size().reset_index()
+                df_flujo.groupby(["ndep_resi", "ndep_notif"]).size().reset_index()
             )
             flujo_count.columns = ["Origen", "Destino", "Cantidad"]
 
@@ -262,7 +266,8 @@ def show(data, filters, colors):
         st.warning(
             "Solo hay datos disponibles de lugar de notificación. No se puede realizar la comparativa con lugar de residencia."
         )
-        show_departamentos_chart(data, colors, "ndep_not", "Notificación")
+        # CORRECCIÓN: Usar la columna correcta
+        show_departamentos_chart(data, colors, "ndep_notif", "Notificación")
 
     # Sección 2: Análisis por Municipio
     st.markdown(
@@ -289,8 +294,9 @@ def show(data, filters, colors):
             depto_col = "ndep_resi"
             muni_col = "nmun_resi"
         else:  # Lugar de Notificación
-            depto_col = "ndep_not"
-            muni_col = "nmun_not"
+            # CORRECCIÓN: Usar las columnas correctas
+            depto_col = "ndep_notif"
+            muni_col = "nmun_notif"
 
         # Verificar que existan datos para estas columnas
         if depto_col in data["fiebre"].columns and muni_col in data["fiebre"].columns:
