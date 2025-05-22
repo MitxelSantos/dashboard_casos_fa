@@ -166,7 +166,7 @@ def show(data, filters, colors):
 
         # Formatear para mostrar enteros
         df_comparativa_display = df_comparativa.copy()
-        for col in ["Casos por Residencia", "Casos por Notificación"]:
+        for col in ["Casos por Residencia", "Casos por Notificación", "Diferencia"]:
             df_comparativa_display[col] = df_comparativa_display[col].astype(int)
 
         # Añadir columna de color para la diferencia

@@ -139,153 +139,153 @@ def show(data, filters, colors):
         "depto": "🌎",
     }
 
-    # Estilos CSS para métricas en cuadros
-    st.markdown(
-        """
-    <style>
-    .metrics-container {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 15px;
-        justify-content: center;
-        margin-bottom: 30px;
-    }
-    .metric-box {
-        background-color: white;
-        border-radius: 8px;
-        box-shadow: 0 3px 10px rgba(0,0,0,0.1);
-        padding: 15px;
-        width: 200px;
-        height: 130px;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
-        transition: transform 0.3s ease;
-    }
-    .metric-box:hover {
-        transform: translateY(-5px);
-    }
-    .metric-icon {
-        font-size: 2rem;
-        margin-bottom: 8px;
-    }
-    .metric-title {
-        font-size: 0.9rem;
-        font-weight: 600;
-        color: #666;
-        margin-bottom: 5px;
-    }
-    .metric-value {
-        font-size: 1.8rem;
-        font-weight: 700;
-        margin-bottom: 3px;
-    }
-    .metric-subtext {
-        font-size: 0.75rem;
-        color: #666;
-    }
-    </style>
-    """,
-        unsafe_allow_html=True,
-    )
+    # Crear columnas para las métricas (layout responsivo)
+    if has_recuperados:
+        # Si hay datos de recuperados, usar 7 columnas
+        cols = st.columns(7)
+    else:
+        # Si no hay datos de recuperados, usar 6 columnas
+        cols = st.columns(6)
 
-    # Iniciar contenedor de métricas
-    st.markdown('<div class="metrics-container">', unsafe_allow_html=True)
+    # Función para crear métrica mejorada
+    def create_metric_box(col, title, value, subtext=None, color=None, icon=None):
+        """Crea una caja de métrica usando Streamlit nativo"""
+        with col:
+            # CSS personalizado solo para la caja individual
+            st.markdown(
+                f"""
+                <div style="
+                    background-color: white;
+                    border-radius: 10px;
+                    padding: 20px;
+                    text-align: center;
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+                    border-top: 4px solid {color if color else colors['primary']};
+                    height: 140px;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    margin-bottom: 20px;
+                    transition: transform 0.3s ease;
+                ">
+                    <div style="font-size: 1.5rem; margin-bottom: 8px;">{icon if icon else '📊'}</div>
+                    <div style="
+                        font-size: 0.85rem;
+                        font-weight: 600;
+                        color: #666;
+                        margin-bottom: 8px;
+                        line-height: 1.2;
+                    ">{title}</div>
+                    <div style="
+                        font-size: 1.6rem;
+                        font-weight: 700;
+                        color: {color if color else colors['primary']};
+                        margin-bottom: 5px;
+                    ">{value}</div>
+                    {f'<div style="font-size: 0.7rem; color: #666; line-height: 1.1;">{subtext}</div>' if subtext else ''}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # Crear las métricas usando las columnas
+    col_idx = 0
 
     # Métrica: Total de casos probables
-    st.markdown(
-        f"""
-    <div class="metric-box" style="border-top: 5px solid {colors['primary']}">
-        <div class="metric-icon">{iconos["total"]}</div>
-        <div class="metric-title">Total Casos Probables</div>
-        <div class="metric-value" style="color: {colors['primary']};">{total_casos:,}</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
+    create_metric_box(
+        cols[col_idx],
+        "Total Casos Probables",
+        f"{total_casos:,}",
+        color=colors["primary"],
+        icon=iconos["total"],
     )
+    col_idx += 1
 
     # Métrica: Total Confirmados
-    st.markdown(
-        f"""
-    <div class="metric-box" style="border-top: 5px solid {colors['secondary']}">
-        <div class="metric-icon">{iconos["confirmados"]}</div>
-        <div class="metric-title">Total Confirmados</div>
-        <div class="metric-value" style="color: {colors['secondary']};">{casos_confirmados_total:,}</div>
-        <div class="metric-subtext">{(casos_confirmados_total/total_casos*100) if total_casos > 0 else 0:.1f}% del total</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
+    create_metric_box(
+        cols[col_idx],
+        "Total Confirmados",
+        f"{casos_confirmados_total:,}",
+        f"{(casos_confirmados_total/total_casos*100) if total_casos > 0 else 0:.1f}% del total",
+        color=colors["secondary"],
+        icon=iconos["confirmados"],
     )
+    col_idx += 1
 
     # Métrica: Confirmados Activos
-    st.markdown(
-        f"""
-    <div class="metric-box" style="border-top: 5px solid {colors['accent']}">
-        <div class="metric-icon">{iconos["activos"]}</div>
-        <div class="metric-title">Confirmados Activos</div>
-        <div class="metric-value" style="color: {colors['accent']};">{casos_confirmados_activos:,}</div>
-        <div class="metric-subtext">{(casos_confirmados_activos/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
+    create_metric_box(
+        cols[col_idx],
+        "Confirmados Activos",
+        f"{casos_confirmados_activos:,}",
+        f"{(casos_confirmados_activos/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados",
+        color=colors["accent"],
+        icon=iconos["activos"],
     )
+    col_idx += 1
 
     # Métrica: Recuperados (si está disponible)
     if has_recuperados:
-        st.markdown(
-            f"""
-        <div class="metric-box" style="border-top: 5px solid {colors['success']}">
-            <div class="metric-icon">{iconos["recuperados"]}</div>
-            <div class="metric-title">Recuperados</div>
-            <div class="metric-value" style="color: {colors['success']};">{recuperados:,}</div>
-            <div class="metric-subtext">{(recuperados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
-        </div>
-        """,
-            unsafe_allow_html=True,
+        create_metric_box(
+            cols[col_idx],
+            "Recuperados",
+            f"{recuperados:,}",
+            f"{(recuperados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados",
+            color=colors["success"],
+            icon=iconos["recuperados"],
         )
+        col_idx += 1
 
     # Métrica: Fallecidos Confirmados
-    st.markdown(
-        f"""
-    <div class="metric-box" style="border-top: 5px solid {colors['danger']}">
-        <div class="metric-icon">{iconos["fallecidos"]}</div>
-        <div class="metric-title">Fallecidos Confirmados</div>
-        <div class="metric-value" style="color: {colors['danger']};">{fallecidos_confirmados:,}</div>
-        <div class="metric-subtext">{(fallecidos_confirmados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
+    create_metric_box(
+        cols[col_idx],
+        "Fallecidos Confirmados",
+        f"{fallecidos_confirmados:,}",
+        f"{(fallecidos_confirmados/casos_confirmados_total*100) if casos_confirmados_total > 0 else 0:.1f}% de confirmados",
+        color=colors["danger"],
+        icon=iconos["fallecidos"],
     )
+    col_idx += 1
 
     # Métrica: Tasa de letalidad
-    st.markdown(
-        f"""
-    <div class="metric-box" style="border-top: 5px solid {colors['warning']}">
-        <div class="metric-icon">{iconos["letalidad"]}</div>
-        <div class="metric-title">Letalidad en Confirmados</div>
-        <div class="metric-value" style="color: {colors['warning']};">{letalidad_confirmados:.2f}%</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
+    create_metric_box(
+        cols[col_idx],
+        "Letalidad en Confirmados",
+        f"{letalidad_confirmados:.2f}%",
+        color=colors["warning"],
+        icon=iconos["letalidad"],
     )
+    col_idx += 1
 
     # Métrica: Departamento más afectado
-    st.markdown(
-        f"""
-    <div class="metric-box" style="border-top: 5px solid {colors['primary']}">
-        <div class="metric-icon">{iconos["depto"]}</div>
-        <div class="metric-title">Departamento Más Afectado</div>
-        <div class="metric-value" style="color: {colors['primary']};">{depto_top}</div>
-        <div class="metric-subtext">{casos_top_depto:,} casos</div>
-    </div>
-    """,
-        unsafe_allow_html=True,
+    create_metric_box(
+        cols[col_idx],
+        "Departamento Más Afectado",
+        f"{depto_top}",
+        f"{casos_top_depto:,} casos",
+        color=colors["primary"],
+        icon=iconos["depto"],
     )
 
-    # Cerrar contenedor de métricas
-    st.markdown("</div>", unsafe_allow_html=True)
+    # CSS adicional para responsividad
+    st.markdown(
+        """
+        <style>
+        /* Responsividad para pantallas pequeñas */
+        @media (max-width: 768px) {
+            .stColumns > div > div {
+                margin-bottom: 10px !important;
+            }
+        }
+        
+        /* Hover effect mejorado */
+        div[style*="box-shadow"]:hover {
+            transform: translateY(-3px) !important;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Información de actualización
     st.markdown(
