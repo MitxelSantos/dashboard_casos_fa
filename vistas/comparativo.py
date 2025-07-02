@@ -1,6 +1,6 @@
 """
 Vista de seguimiento temporal del dashboard de Fiebre Amarilla.
-Enfoque minimalista en la relación temporal entre epizootias y casos humanos.
+SIMPLIFICADO: Solo gráficos temporales básicos, sin análisis estadísticos complejos.
 """
 
 import streamlit as st
@@ -50,13 +50,13 @@ def show(data_filtered, filters, colors):
     # Gráfico temporal principal
     show_temporal_evolution_chart(temporal_data, colors)
 
-    # Métricas temporales
+    # Métricas temporales básicas
     st.markdown("---")
     show_temporal_metrics(temporal_data, casos, epizootias, colors)
 
-    # Análisis de correlación temporal
+    # Gráficos adicionales
     st.markdown("---")
-    show_correlation_analysis(temporal_data, colors)
+    show_additional_charts(temporal_data, colors)
 
 
 def create_temporal_analysis(casos, epizootias):
@@ -245,136 +245,88 @@ def show_temporal_metrics(temporal_data, casos, epizootias, colors):
         )
 
 
-def show_correlation_analysis(temporal_data, colors):
+def show_additional_charts(temporal_data, colors):
     """
-    Muestra análisis de correlación temporal simple.
+    Muestra gráficos adicionales para análisis temporal.
     """
-    st.subheader("🔍 Relación Temporal")
-
-    if len(temporal_data) < 3:
-        st.info("Se necesitan más datos para analizar la relación temporal.")
-        return
-
-    # Calcular correlación
-    correlacion = temporal_data["casos"].corr(temporal_data["epizootias_positivas"])
-
-    # Análisis de adelanto/retraso (si las epizootias preceden a los casos)
-    correlacion_adelanto = None
-    if len(temporal_data) > 1:
-        # Comparar epizootias del mes anterior con casos del mes actual
-        temporal_shifted = temporal_data.copy()
-        temporal_shifted["epizootias_mes_anterior"] = temporal_shifted[
-            "epizootias_positivas"
-        ].shift(1)
-        correlacion_adelanto = temporal_shifted["casos"].corr(
-            temporal_shifted["epizootias_mes_anterior"]
-        )
-
+    st.subheader("📈 Análisis Temporal Adicional")
+    
     col1, col2 = st.columns(2)
-
+    
     with col1:
-        # Mostrar correlación contemporánea
-        st.metric(
-            label="Correlación Simultánea",
-            value=f"{correlacion:.3f}",
-            help="Correlación entre casos y epizootias en el mismo período",
-        )
-
-        # Interpretación de la correlación
-        if abs(correlacion) > 0.7:
-            interpretacion = "Correlación fuerte"
-            color_interp = colors["danger"]
-        elif abs(correlacion) > 0.4:
-            interpretacion = "Correlación moderada"
-            color_interp = colors["warning"]
-        elif abs(correlacion) > 0.2:
-            interpretacion = "Correlación débil"
-            color_interp = colors["info"]
-        else:
-            interpretacion = "Sin correlación aparente"
-            color_interp = colors["success"]
-
-        st.markdown(
-            f"""
-        <div style="
-            background-color: #f8f9fa; 
-            padding: 10px; 
-            border-radius: 6px; 
-            border-left: 4px solid {color_interp};
-            text-align: center;
-        ">
-            <strong>{interpretacion}</strong>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
-
+        # Gráfico de barras por mes
+        if not temporal_data.empty:
+            fig_bars = go.Figure()
+            
+            # Barras de casos
+            fig_bars.add_trace(go.Bar(
+                x=temporal_data["año_mes"],
+                y=temporal_data["casos"],
+                name="Casos",
+                marker_color=colors["danger"],
+                opacity=0.8
+            ))
+            
+            # Barras de epizootias positivas
+            fig_bars.add_trace(go.Bar(
+                x=temporal_data["año_mes"],
+                y=temporal_data["epizootias_positivas"],
+                name="Epizootias Positivas",
+                marker_color=colors["warning"],
+                opacity=0.8
+            ))
+            
+            fig_bars.update_layout(
+                title="Distribución Mensual",
+                xaxis_title="Mes",
+                yaxis_title="Número de Eventos",
+                height=400,
+                barmode='group'
+            )
+            
+            st.plotly_chart(fig_bars, use_container_width=True)
+    
     with col2:
-        if correlacion_adelanto is not None:
-            st.metric(
-                label="Correlación con Desfase",
-                value=f"{correlacion_adelanto:.3f}",
-                help="Correlación entre epizootias del mes anterior y casos del mes actual",
+        # Gráfico de actividad total
+        if not temporal_data.empty:
+            fig_activity = px.area(
+                temporal_data,
+                x="periodo",
+                y="actividad_total",
+                title="Actividad Total por Mes",
+                color_discrete_sequence=[colors["info"]],
+                labels={
+                    "actividad_total": "Total de Eventos",
+                    "periodo": "Período"
+                }
             )
+            
+            fig_activity.update_layout(height=400)
+            st.plotly_chart(fig_activity, use_container_width=True)
 
-            # Interpretación del sistema de alerta temprana
-            if correlacion_adelanto > correlacion and correlacion_adelanto > 0.3:
-                alerta_text = "Las epizootias pueden predecir casos futuros"
-                alerta_color = colors["warning"]
-            elif correlacion > correlacion_adelanto and correlacion > 0.3:
-                alerta_text = "Eventos simultáneos, vigilancia coordinada"
-                alerta_color = colors["info"]
-            else:
-                alerta_text = "Vigilancia independiente recomendada"
-                alerta_color = colors["success"]
-
-            st.markdown(
-                f"""
-            <div style="
-                background-color: #f8f9fa; 
-                padding: 10px; 
-                border-radius: 6px; 
-                border-left: 4px solid {alerta_color};
-                text-align: center;
-            ">
-                <strong>{alerta_text}</strong>
-            </div>
-            """,
-                unsafe_allow_html=True,
-            )
-
-    # Gráfico de dispersión para visualizar la relación
-    if (
-        temporal_data["casos"].sum() > 0
-        and temporal_data["epizootias_positivas"].sum() > 0
-    ):
-        st.subheader("📈 Visualización de la Relación")
-
-        fig_scatter = px.scatter(
-            temporal_data,
-            x="epizootias_positivas",
-            y="casos",
-            title="Relación entre Epizootias Positivas y Casos Humanos por Mes",
-            labels={
-                "epizootias_positivas": "Epizootias Positivas (mes)",
-                "casos": "Casos Humanos (mes)",
-            },
-            hover_data=["año_mes"],
-            color_discrete_sequence=[colors["primary"]],
+    # Tabla resumen mensual
+    st.subheader("📋 Resumen Mensual")
+    
+    if not temporal_data.empty:
+        # Crear tabla resumen
+        resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias_total", "epizootias_positivas"]].copy()
+        resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Total Epizootias", "Epizootias Positivas"]
+        
+        # Ordenar por mes descendente
+        resumen_tabla = resumen_tabla.sort_values("Mes", ascending=False)
+        
+        st.dataframe(resumen_tabla, use_container_width=True, height=300)
+        
+        # Opción de descarga
+        csv_temporal = resumen_tabla.to_csv(index=False)
+        st.download_button(
+            label="📄 Descargar Datos Temporales",
+            data=csv_temporal,
+            file_name=f"analisis_temporal_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
         )
 
-        # Agregar línea de tendencia si hay correlación
-        if abs(correlacion) > 0.2:
-            fig_scatter.add_traces(
-                px.scatter(
-                    temporal_data, x="epizootias_positivas", y="casos", trendline="ols"
-                ).data[1]
-            )
-
-        fig_scatter.update_layout(height=400)
-        st.plotly_chart(fig_scatter, use_container_width=True)
-
-    # Resumen de interpretación médica
+    # Interpretación simplificada
     st.markdown("---")
     st.markdown(
         f"""
@@ -382,11 +334,8 @@ def show_correlation_analysis(temporal_data, colors):
         <h5 style="color: {colors['info']}; margin-top: 0;">💡 Interpretación para Vigilancia Epidemiológica</h5>
         <p><strong>Función de las Epizootias:</strong> Las epizootias positivas actúan como un sistema de alerta temprana, 
         ya que los primates no humanos son más susceptibles al virus y pueden mostrar signos de infección antes que los humanos.</p>
-        <p><strong>Recomendación:</strong> 
-        {'Implementar vigilancia intensiva tras detección de epizootias positivas.' if correlacion_adelanto and correlacion_adelanto > 0.3
-         else 'Mantener vigilancia coordinada entre fauna y población humana.' if correlacion > 0.3
-         else 'Continuar vigilancia rutinaria de ambos componentes.'}
-        </p>
+        <p><strong>Recomendación:</strong> Mantener vigilancia coordinada entre fauna y población humana, 
+        intensificando las medidas preventivas cuando se detecten epizootias positivas.</p>
     </div>
     """,
         unsafe_allow_html=True,
