@@ -1,6 +1,5 @@
 """
-Componente de barra lateral del dashboard - Simplificado para profesionales médicos.
-CORREGIDO: Sin información técnica innecesaria.
+Componente de barra lateral del dashboard - Minimalista.
 """
 
 import streamlit as st
@@ -24,60 +23,30 @@ IMAGES_DIR = ASSETS_DIR / "images"
 
 def create_sidebar():
     """
-    Crea la barra lateral del dashboard simplificada para médicos.
+    Crea la barra lateral del dashboard minimalista.
     """
     with st.sidebar:
         # Logo de la Gobernación
         display_logo()
 
-        # Información médica relevante
+        # Separador minimalista
         st.markdown("---")
-
-        # Información de contacto médico
-        st.markdown(
-            """
-        <div style="
-            background-color: #f8f9fa; 
-            padding: 15px; 
-            border-radius: 8px; 
-            border-left: 4px solid #7D0F2B;
-            margin-bottom: 15px;
-        ">
-            <h4 style="color: #7D0F2B; margin: 0 0 10px 0; font-size: 1rem;">
-                🏥 Información de Contacto
-            </h4>
-            <p style="margin: 5px 0; font-size: 0.85rem; color: #2c2c2c;">
-                <strong>Secretaría de Salud del Tolima</strong><br>
-                Vigilancia Epidemiológica
-            </p>
-            <p style="margin: 5px 0; font-size: 0.8rem; color: #666;">
-                Para reportes urgentes de casos<br>
-                sospechosos de fiebre amarilla.
-            </p>
-        </div>
-        """,
-            unsafe_allow_html=True,
-        )
 
 
 def display_logo():
     """
     Muestra el logo de manera responsive con búsqueda corregida.
-    CORREGIDO: Búsqueda mejorada del logo.
     """
     logo_displayed = False
 
-    # Lista de rutas posibles para el logo (CORREGIDA)
+    # Lista de rutas posibles para el logo
     possible_logo_paths = [
-        # Directorio raíz (primera opción - donde está el logo)
         ROOT_DIR / "Gobernacion.png",
         ROOT_DIR / "gobernacion.png",
         ROOT_DIR / "logo.png",
-        # Carpeta data (segunda opción)
         DATA_DIR / "Gobernacion.png",
         DATA_DIR / "gobernacion.png",
         DATA_DIR / "logo.png",
-        # Assets/images (tercera opción)
         IMAGES_DIR / "Gobernacion.png",
         IMAGES_DIR / "logo_gobernacion.png",
         IMAGES_DIR / "gobernacion.png",
@@ -103,7 +72,7 @@ def display_logo():
                     display_logo_image(logo_path)
                     logo_displayed = True
         except Exception:
-            pass  # Silenciar errores de Google Drive
+            pass
 
     # Si no se encuentra ningún logo, mostrar placeholder
     if not logo_displayed:
@@ -115,38 +84,14 @@ def display_logo_image(logo_path):
     Muestra una imagen de logo de manera responsive.
     """
     try:
-        # CSS para hacer la imagen responsive
-        st.markdown(
-            """
-            <style>
-            .logo-container {
-                display: flex;
-                justify-content: center;
-                margin-bottom: 1.5rem;
-            }
-            .logo-container img {
-                max-width: 100%;
-                height: auto;
-                max-height: 120px;
-                border-radius: 8px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Mostrar imagen con contenedor responsive
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image(
                 logo_path,
-                caption=None,  # Sin caption para médicos
+                caption=None,
                 use_container_width=True,
             )
-
     except Exception:
-        # Si hay error mostrando la imagen, usar placeholder
         create_logo_placeholder()
 
 
@@ -179,44 +124,10 @@ def create_logo_placeholder():
     )
 
 
-def show_medical_help():
-    """
-    Muestra ayuda específica para profesionales médicos.
-    """
-    with st.sidebar.expander("❓ Guía Médica"):
-        st.markdown(
-            """
-            **🩺 Para Profesionales de la Salud:**
-            
-            **🏥 Información Principal:**
-            - Fichas con situación epidemiológica actual
-            - Alertas médicas prioritarias
-            - Indicadores clínicos relevantes
-            
-            **📊 Análisis Comparativo:**
-            - Correlación casos humanos vs fauna
-            - Patrones geográficos de transmisión
-            - Evolución temporal de la enfermedad
-            
-            **🔍 Filtros:**
-            - Use filtros para análisis específicos por área
-            - Los datos se actualizan automáticamente
-            - Exporte reportes para referencias médicas
-            
-            **⚠️ Casos Sospechosos:**
-            Reporte inmediatamente casos sospechosos
-            a la Secretaría de Salud del Tolima.
-            """,
-        )
-
-
 def show_data_update_info():
     """
-    Muestra información médicamente relevante sobre actualización de datos.
+    Muestra información mínima sobre actualización de datos.
     """
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🔄 Última Actualización")
-
     # Verificar fechas de modificación de archivos principales
     files_to_check = [
         (DATA_DIR / "BD_positivos.xlsx", "Casos"),
@@ -237,36 +148,56 @@ def show_data_update_info():
             break
 
     if latest_update:
-        st.sidebar.caption(f"📅 {latest_update.strftime('%d/%m/%Y %H:%M')}")
-    else:
-        st.sidebar.caption("📅 Fecha no disponible")
+        st.sidebar.caption(f"📅 {latest_update.strftime('%d/%m/%Y')}")
 
-    # Botón de recarga simplificado
-    if st.sidebar.button("🔄 Actualizar", help="Recargar datos más recientes"):
+    # Botón de recarga minimalista
+    if st.sidebar.button("🔄", help="Actualizar datos"):
         st.cache_data.clear()
         st.rerun()
 
 
+def add_copyright():
+    """
+    Agrega copyright minimalista al final de la sidebar.
+    """
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        """
+        <div style="
+            text-align: center; 
+            color: #666; 
+            font-size: 0.7rem;
+            padding: 0.5rem 0;
+        ">
+            <div style="margin-bottom: 4px;">
+                Dashboard Fiebre Amarilla
+            </div>
+            <div style="opacity: 0.8;">
+                © 2025 Ing. Jose Miguel Santos
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def add_responsive_css():
     """
-    Agrega CSS para mejorar la responsividad del sidebar médico.
+    Agrega CSS minimalista para el sidebar.
     """
     st.markdown(
         """
         <style>
-        /* Sidebar médico responsive */
         .css-1d391kg {
             min-width: 280px;
             background-color: #fafafa;
         }
         
-        /* Texto responsive en sidebar */
         .sidebar .stMarkdown {
             font-size: clamp(0.8rem, 2vw, 0.9rem);
             line-height: 1.4;
         }
         
-        /* Botones médicos responsive */
         .sidebar .stButton > button {
             width: 100%;
             font-size: clamp(0.8rem, 2vw, 0.9rem);
@@ -283,22 +214,9 @@ def add_responsive_css():
             transition: all 0.3s ease;
         }
         
-        /* Expandir médico */
-        .sidebar .streamlit-expanderHeader {
-            background-color: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            font-weight: 600;
-        }
-        
-        /* Mobile adjustments para médicos */
         @media (max-width: 768px) {
             .css-1d391kg {
                 min-width: 250px;
-            }
-            
-            .sidebar .stMarkdown h4 {
-                font-size: 1rem !important;
             }
         }
         </style>
@@ -307,12 +225,12 @@ def add_responsive_css():
     )
 
 
-# Función principal para inicializar sidebar médico
+# Función principal para inicializar sidebar minimalista
 def init_responsive_sidebar():
     """
-    Inicializa la barra lateral simplificada para profesionales médicos.
+    Inicializa la barra lateral minimalista.
     """
     add_responsive_css()
     create_sidebar()
     show_data_update_info()
-    show_medical_help()
+    add_copyright()

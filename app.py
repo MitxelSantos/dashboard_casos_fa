@@ -116,7 +116,7 @@ def load_new_datasets():
         # Estrategia 1: Intentar cargar desde carpeta data/ (PRIORIDAD MÁXIMA)
         if data_casos_path.exists() and data_epizootias_path.exists():
             try:
-                status_text.text("📂 Cargando desde carpeta data/ (recomendado)...")
+                status_text.text("📂 Cargando desde carpeta data/...")
                 casos_df = pd.read_excel(
                     data_casos_path, sheet_name="ACUMU", engine="openpyxl"
                 )
@@ -125,7 +125,6 @@ def load_new_datasets():
                 )
                 data_source = "data_folder"
                 logger.info("✅ Datos cargados exitosamente desde carpeta data/")
-                st.success("✅ Archivos cargados desde data/ (recomendado)")
             except Exception as e:
                 logger.warning(f"⚠️ Error al cargar desde carpeta data/: {str(e)}")
                 casos_df = None
@@ -162,9 +161,7 @@ def load_new_datasets():
                 )
 
                 if check_google_drive_availability():
-                    status_text.text(
-                        "☁️ Archivos locales no encontrados. Intentando cargar desde Google Drive..."
-                    )
+                    status_text.text("☁️ Intentando cargar desde Google Drive...")
                     progress_bar.progress(20)
 
                     # Verificar si están configurados los IDs de Google Drive
@@ -197,73 +194,15 @@ def load_new_datasets():
 
                         if casos_df is not None and epizootias_df is not None:
                             data_source = "google_drive"
-                            st.success("☁️ Archivos cargados desde Google Drive")
-                        else:
-                            st.warning(
-                                "⚠️ No se pudieron cargar todos los archivos desde Google Drive"
-                            )
-                    else:
-                        st.warning(
-                            "⚠️ Google Drive no está configurado (falta drive_files en secrets)"
-                        )
-                else:
-                    st.warning("⚠️ Google Drive no está disponible")
 
             except ImportError:
-                st.warning("⚠️ Utilidades de Google Drive no disponibles")
+                pass
             except Exception as e:
                 logger.error(f"❌ Error al cargar desde Google Drive: {str(e)}")
-                st.error(f"❌ Error al cargar desde Google Drive: {str(e)}")
 
-        # ==================== VALIDACIÓN Y MENSAJE DE ERROR RESPONSIVE ====================
+        # ==================== VALIDACIÓN Y MENSAJE DE ERROR ====================
         if casos_df is None or epizootias_df is None:
-            # Mostrar información sobre ubicaciones esperadas de manera responsive
             st.error("❌ No se pudieron cargar los archivos de datos")
-
-            # Crear UI responsive para mostrar instrucciones
-            with st.expander("📁 Instrucciones de Setup", expanded=True):
-                col1, col2 = st.columns([2, 1])
-
-                with col1:
-                    st.markdown(
-                        """
-                        ### 🎯 Estructura Recomendada (data/)
-                        ```
-                        proyecto/
-                        ├── data/                          ← CREAR ESTA CARPETA
-                        │   ├── BD_positivos.xlsx         ← Casos confirmados
-                        │   ├── Información_Datos_FA.xlsx ← Epizootias  
-                        │   └── Gobernacion.png           ← Logo (opcional)
-                        └── app.py
-                        ```
-                        
-                        ### ⚠️ Estructura Alternativa (raíz)
-                        ```
-                        proyecto/
-                        ├── BD_positivos.xlsx
-                        ├── Información_Datos_FA.xlsx
-                        ├── Gobernacion.png
-                        └── app.py
-                        ```
-                        """
-                    )
-
-                with col2:
-                    st.markdown(
-                        """
-                        ### 📋 Archivos Requeridos
-                        
-                        **Excel con hojas específicas:**
-                        - `BD_positivos.xlsx` 
-                          - Hoja: "ACUMU"
-                        - `Información_Datos_FA.xlsx`
-                          - Hoja: "Base de Datos"
-                        
-                        **Logo (opcional):**
-                        - `Gobernacion.png`
-                        """
-                    )
-
             return {
                 "casos": pd.DataFrame(),
                 "epizootias": pd.DataFrame(),
@@ -277,7 +216,7 @@ def load_new_datasets():
             }
 
         progress_bar.progress(30)
-        status_text.text("🔧 Limpiando y procesando datos...")
+        status_text.text("🔧 Procesando datos...")
 
         # ==================== PROCESAMIENTO DE DATOS ====================
         # Limpiar datos de casos
@@ -490,20 +429,6 @@ def load_new_datasets():
 
         progress_bar.progress(100)
 
-        # Mostrar información sobre la fuente de datos utilizada
-        source_messages = {
-            "data_folder": "✅ Datos cargados desde carpeta data/ (recomendado)",
-            "root_folder": "✅ Datos cargados desde directorio raíz",
-            "google_drive": "☁️ Datos cargados desde Google Drive",
-        }
-
-        if data_source:
-            status_text.text(
-                source_messages.get(data_source, "✅ Datos cargados correctamente")
-            )
-        else:
-            status_text.text("✅ Datos cargados correctamente")
-
         # Limpiar elementos de UI con delay para legibilidad
         import time
 
@@ -560,7 +485,7 @@ def create_filters_responsive(data):
 
     except ImportError:
         # Fallback al sistema básico si no está disponible
-        st.sidebar.subheader("🔍 Filtros Básicos")
+        st.sidebar.subheader("🔍 Filtros")
 
         # Filtro de municipio básico
         municipio_options = ["Todos"] + [
@@ -620,46 +545,6 @@ def create_filters_responsive(data):
         return filters, data_filtered
 
 
-def show_active_filters_responsive(filters):
-    """
-    Muestra los filtros activos de manera completamente responsive.
-    """
-    if not filters.get("active_filters"):
-        return
-
-    active_filters = filters["active_filters"]
-
-    # Crear banner responsive con filtros activos
-    filters_text = " | ".join(active_filters[:3])  # Máximo 3 filtros visibles
-    if len(active_filters) > 3:
-        filters_text += f" | +{len(active_filters) - 3} más"
-
-    # Truncar para móviles
-    if len(filters_text) > 100:
-        filters_text = filters_text[:97] + "..."
-
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {COLORS['primary']} 0%, {COLORS['accent']} 100%);
-            color: white; 
-            padding: clamp(8px, 2vw, 12px); 
-            border-radius: 8px; 
-            margin-bottom: clamp(12px, 3vw, 20px);
-            font-size: clamp(0.8rem, 2vw, 0.9rem);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-            border-left: 4px solid {COLORS['secondary']};
-        ">
-            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                <span style="font-weight: 600;">🔍 Filtros aplicados:</span>
-                <span style="opacity: 0.95;">{filters_text}</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def configure_page_responsive():
     """
     Configura la página de Streamlit con máxima responsividad.
@@ -696,24 +581,11 @@ def configure_page_responsive():
             color: var(--primary-color);
             font-size: clamp(1.8rem, 6vw, 2.8rem);
             font-weight: 700;
-            margin-bottom: clamp(0.5rem, 2vw, 1rem);
+            margin-bottom: clamp(1rem, 3vw, 2rem);
             text-align: center;
             padding-bottom: clamp(0.5rem, 2vw, 1rem);
             border-bottom: 3px solid var(--secondary-color);
             line-height: 1.2;
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }}
-        
-        .subtitle {{
-            color: var(--accent-color);
-            font-size: clamp(1rem, 4vw, 1.4rem);
-            text-align: center;
-            margin-bottom: clamp(1rem, 3vw, 2rem);
-            line-height: 1.4;
-            font-weight: 500;
         }}
         
         /* Contenedor principal responsive */
@@ -806,11 +678,6 @@ def configure_page_responsive():
         @media (max-width: 768px) {{
             .main-title {{
                 font-size: 1.8rem !important;
-                margin-bottom: 0.75rem !important;
-            }}
-            
-            .subtitle {{
-                font-size: 1rem !important;
                 margin-bottom: 1rem !important;
             }}
             
@@ -851,153 +718,6 @@ def configure_page_responsive():
     )
 
 
-def create_responsive_metrics_display(data_filtered, colors):
-    """
-    Crea visualización de métricas usando métricas nativas de Streamlit.
-    CORREGIDO: Ya no usa HTML/CSS que causaba problemas de renderizado.
-    """
-    total_casos = len(data_filtered["casos"])
-    total_epizootias = len(data_filtered["epizootias"])
-
-    # Calcular métricas adicionales de manera segura
-    fallecidos = 0
-    letalidad = 0
-    if total_casos > 0 and "condicion_final" in data_filtered["casos"].columns:
-        fallecidos = (data_filtered["casos"]["condicion_final"] == "Fallecido").sum()
-        letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
-
-    positivos = 0
-    tasa_positividad = 0
-    if total_epizootias > 0 and "descripcion" in data_filtered["epizootias"].columns:
-        positivos = (data_filtered["epizootias"]["descripcion"] == "POSITIVO FA").sum()
-        tasa_positividad = (
-            (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
-        )
-
-    # Calcular veredas afectadas
-    veredas_afectadas = 0
-    if "vereda_normalizada" in data_filtered["casos"].columns:
-        veredas_casos = set(data_filtered["casos"]["vereda_normalizada"].dropna())
-    else:
-        veredas_casos = set()
-
-    if "vereda_normalizada" in data_filtered["epizootias"].columns:
-        veredas_epi = set(data_filtered["epizootias"]["vereda_normalizada"].dropna())
-    else:
-        veredas_epi = set()
-
-    veredas_afectadas = len(veredas_casos.union(veredas_epi))
-
-    # Usar métricas nativas de Streamlit - SIEMPRE FUNCIONAN
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    with col1:
-        st.metric(
-            label="🦠 Casos Confirmados",
-            value=f"{total_casos:,}",
-            delta=f"{fallecidos} fallecidos" if fallecidos > 0 else "Sin fallecidos",
-            help="Total de casos confirmados de fiebre amarilla",
-        )
-
-    with col2:
-        st.metric(
-            label="🐒 Epizootias",
-            value=f"{total_epizootias:,}",
-            delta=f"{positivos} positivas" if positivos > 0 else "Sin positivas",
-            help="Total de epizootias registradas",
-        )
-
-    with col3:
-        st.metric(
-            label="🏘️ Veredas Afectadas",
-            value=f"{veredas_afectadas:,}",
-            delta=None,
-            help="Número de veredas con casos o epizootias",
-        )
-
-    with col4:
-        st.metric(
-            label="⚰️ Tasa Letalidad",
-            value=f"{letalidad:.1f}%",
-            delta=None,
-            help="Porcentaje de casos que resultaron en fallecimiento",
-        )
-
-    with col5:
-        st.metric(
-            label="🔴 Positividad",
-            value=f"{tasa_positividad:.1f}%",
-            delta=None,
-            help="Porcentaje de epizootias positivas para fiebre amarilla",
-        )
-
-    # Información de fechas de última actualización
-    st.markdown("---")
-
-    # Calcular fechas importantes
-    ultima_fecha_caso = None
-    ultima_fecha_epi_positiva = None
-
-    if (
-        not data_filtered["casos"].empty
-        and "fecha_inicio_sintomas" in data_filtered["casos"].columns
-    ):
-        fechas_casos = data_filtered["casos"]["fecha_inicio_sintomas"].dropna()
-        if not fechas_casos.empty:
-            ultima_fecha_caso = fechas_casos.max()
-
-    if (
-        not data_filtered["epizootias"].empty
-        and "fecha_recoleccion" in data_filtered["epizootias"].columns
-    ):
-        epi_positivas = data_filtered["epizootias"][
-            data_filtered["epizootias"]["descripcion"] == "POSITIVO FA"
-        ]
-        if not epi_positivas.empty:
-            fechas_positivas = epi_positivas["fecha_recoleccion"].dropna()
-            if not fechas_positivas.empty:
-                ultima_fecha_epi_positiva = fechas_positivas.max()
-
-    # Mostrar información de fechas
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if ultima_fecha_caso:
-            st.metric(
-                label="📅 Último Caso",
-                value=ultima_fecha_caso.strftime("%Y-%m-%d"),
-                help="Fecha del último caso confirmado",
-            )
-        else:
-            st.metric(
-                label="📅 Último Caso",
-                value="Sin datos",
-                help="No hay fechas de casos disponibles",
-            )
-
-    with col2:
-        if ultima_fecha_epi_positiva:
-            st.metric(
-                label="🔴 Última Epizootia +",
-                value=ultima_fecha_epi_positiva.strftime("%Y-%m-%d"),
-                help="Fecha de la última epizootia positiva",
-            )
-        else:
-            st.metric(
-                label="🔴 Última Epizootia +",
-                value="Sin datos",
-                help="No hay epizootias positivas registradas",
-            )
-
-    with col3:
-        # Fecha de actualización del dashboard
-        st.metric(
-            label="🔄 Actualización",
-            value=datetime.now().strftime("%Y-%m-%d"),
-            help="Fecha de última actualización del dashboard",
-        )
-
-
 def main():
     """Aplicación principal del dashboard simplificado."""
     # Configurar página con responsividad máxima
@@ -1018,54 +738,25 @@ def main():
 
     if data["casos"].empty and data["epizootias"].empty:
         # Error responsive con instrucciones claras
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            st.error("❌ No se pudieron cargar los datos")
-            st.markdown(
-                """
-                **🎯 Pasos para solucionar:**
-                1. Crear carpeta `data/` en el directorio del proyecto
-                2. Colocar archivos Excel en `data/`:
-                   - `BD_positivos.xlsx` (con hoja 'ACUMU')
-                   - `Información_Datos_FA.xlsx` (con hoja 'Base de Datos')
-                3. Opcionalmente: agregar `Gobernacion.png` para el logo
-                4. Recargar la página
-                """
-            )
-
-        with col2:
-            st.info(
-                "💡 **Ayuda**\n\nEjecute `python install_dependencies.py` para verificar la instalación"
-            )
-
+        st.error("❌ No se pudieron cargar los datos")
+        st.info("Coloque los archivos de datos en la carpeta 'data/' y recargue la página.")
         return
 
     # Crear filtros responsive
     filters, data_filtered = create_filters_responsive(data)
 
-    # Banner principal responsive
+    # TÍTULO PRINCIPAL SIMPLIFICADO
     st.markdown(
         '<h1 class="main-title">Dashboard Fiebre Amarilla - Tolima</h1>',
         unsafe_allow_html=True,
     )
-    st.markdown(
-        '<p class="subtitle">Vigilancia Epidemiológica para Profesionales de la Salud</p>',
-        unsafe_allow_html=True,
-    )
 
-    # Mostrar filtros activos de manera responsive
-    show_active_filters_responsive(filters)
-
-    # Métricas principales responsive
-    create_responsive_metrics_display(data_filtered, COLORS)
-
-    # Pestañas principales CORREGIDAS - CAMBIO AQUÍ
+    # PESTAÑAS PRINCIPALES
     tab1, tab2, tab3 = st.tabs(
         [
             "🗺️ Mapas",
-            "🏥 Información Principal",  # CAMBIADO de "📋 Tablas Detalladas"
-            "📊 Análisis Comparativo",
+            "🏥 Información Principal",
+            "📊 Seguimiento Temporal",
         ]
     )
 
@@ -1094,35 +785,10 @@ def main():
             try:
                 vistas_modules["comparativo"].show(data_filtered, filters, COLORS)
             except Exception as e:
-                st.error(f"Error en módulo comparativo: {str(e)}")
-                st.info("🔧 Vista comparativa simplificada en desarrollo.")
+                st.error(f"Error en módulo de seguimiento temporal: {str(e)}")
+                st.info("🔧 Vista de seguimiento temporal en desarrollo.")
         else:
-            st.info("🔧 Módulo comparativo en desarrollo.")
-
-    # Footer responsive médico
-    st.markdown("---")
-    st.markdown(
-        f"""
-        <div style="
-            text-align: center; 
-            color: #666; 
-            font-size: clamp(0.7rem, 2vw, 0.85rem);
-            padding: clamp(1rem, 3vw, 1.5rem) 0;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 8px;
-            margin-top: clamp(1rem, 3vw, 2rem);
-        ">
-            <div style="margin-bottom: 0.5rem;">
-                <strong>🏥 Dashboard Fiebre Amarilla - Secretaría de Salud del Tolima</strong>
-            </div>
-            <div style="opacity: 0.8;">
-                Información epidemiológica para profesionales de la salud |
-                Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M')} 
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            st.info("🔧 Módulo de seguimiento temporal en desarrollo.")
 
 
 if __name__ == "__main__":
