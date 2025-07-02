@@ -1,0 +1,241 @@
+/* Estilos personalizados para el Dashboard de Fiebre Amarilla - Tolima */
+/* Desarrollado para la Secretaría de Salud del Tolima */
+
+/* Colores institucionales del Tolima */
+:root {
+    --primary-color: #7D0F2B;    /* Vinotinto */
+    --secondary-color: #F2A900;  /* Amarillo dorado */
+    --accent-color: #5A4214;     /* Marrón dorado oscuro */
+    --light-color: #F9F6E9;      /* Crema claro */
+    --dark-color: #2C2C2C;       /* Gris oscuro */
+    --success-color: #509E2F;    /* Verde */
+    --warning-color: #F7941D;    /* Naranja */
+    --danger-color: #E51937;     /* Rojo brillante */
+}
+
+/* Estilos para el encabezado */
+h1, h2, h3 {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+h1 {
+    border-bottom: 2px solid var(--secondary-color);
+    padding-bottom: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Estilos para las tarjetas de métricas */
+.metric-card {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    transition: transform 0.3s ease;
+    border-left: 4px solid var(--primary-color);
+}
+
+.metric-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary-color);
+    margin-bottom: 0.5rem;
+}
+
+.metric-label {
+    color: var(--dark-color);
+    font-weight: 500;
+}
+
+/* Tarjetas de métricas mejoradas */
+.metric-card-container {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    text-align: center;
+    border-left: 4px solid var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.metric-card-container:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+    transition: all 0.3s ease;
+}
+
+.metric-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--dark-color);
+    margin-bottom: 0.5rem;
+}
+
+.metric-value {
+    font-size: clamp(1.2rem, 3vw, 1.8rem);
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+/* Colores especiales para cada métrica */
+.metric-total { border-color: var(--primary-color); }
+.metric-confirmados { border-color: var(--secondary-color); }
+.metric-fallecidos { border-color: var(--danger-color); }
+.metric-letalidad { border-color: var(--warning-color); }
+
+/* Personalización de la barra lateral */
+.sidebar .sidebar-content {
+    background-color: var(--light-color);
+}
+
+/* Personalización de pestañas */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 1rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-radius: 4px;
+}
+
+.stTabs [data-baseweb="tab-highlight"] {
+    background-color: var(--primary-color);
+}
+
+/* Personalización de botones */
+.stButton>button {
+    border-radius: 4px;
+    font-weight: 500;
+    border: none;
+    padding: 0.5rem 1rem;
+    transition: all 0.3s ease;
+}
+
+.stButton>button[data-baseweb="button"]:first-child {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.stButton>button[data-baseweb="button"]:first-child:hover {
+    background-color: #920415;
+}
+
+.stButton>button[data-baseweb="button"]:not(:first-child) {
+    background-color: white;
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+}
+
+.stButton>button[data-baseweb="button"]:not(:first-child):hover {
+    background-color: #f5f5f5;
+}
+
+/* Personalización de selectores */
+.stSelectbox label,
+.stMultiselect label {
+    color: var(--primary-color);
+    font-weight: 500;
+}
+
+/* Personalización de gráficos */
+.plot-container {
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    padding: 1rem;
+}
+
+/* Estilo para el pie de página */
+footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+    font-size: 0.8rem;
+    color: gray;
+}
+
+/* Estilos para tablas */
+.dataframe {
+    border-collapse: collapse;
+    width: 100%;
+    border: 1px solid #e0e0e0;
+}
+
+.dataframe th {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: 500;
+    padding: 0.75rem;
+    text-align: left;
+}
+
+.dataframe td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.dataframe tr:nth-child(even) {
+    background-color: #f9f9f9;
+}
+
+.dataframe tr:hover {
+    background-color: #f1f1f1;
+}
+
+/* Personalización de alertas y mensajes */
+.stAlert {
+    border-radius: 4px;
+}
+
+/* Nuevos estilos para imágenes y banners */
+.logo-container {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.info-banner {
+    background-color: var(--light-color);
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    border-left: 4px solid var(--primary-color);
+}
+
+.image-caption {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--dark-color);
+    margin-top: 0.5rem;
+}
+
+/* Banner de filtros activos */
+.filters-banner {
+    background-color: var(--primary-color);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+
+/* Personalización para dispositivos móviles */
+@media (max-width: 768px) {
+    .metric-value {
+        font-size: 1.5rem;
+    }
+
+    h1 {
+        font-size: 1.5rem;
+    }
+
+    h2 {
+        font-size: 1.25rem;
+    }
+}

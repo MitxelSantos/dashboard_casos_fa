@@ -1,0 +1,195 @@
+/* Estilos responsivos para el Dashboard de Fiebre Amarilla - Tolima */
+
+/* Base - aplicado a todos los tamaños */
+.stApp {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+/* Ajustes para textos numéricos */
+.metric-value,
+.st-emotion-cache-10trblm {
+    word-break: normal;
+    font-size: clamp(0.8rem, 1.5vw, 1.2rem);
+    white-space: normal !important;
+}
+
+/* Tarjetas de métricas responsivas */
+.metric-card {
+    min-width: 100px;
+    min-height: 80px;
+    padding: clamp(0.5rem, 1vw, 1.5rem);
+}
+
+/* Ajustes para pantallas medianas (portátiles) */
+@media (max-width: 1200px) {
+    .st-emotion-cache-1r6slb0 {
+        /* Selector para contenedores de Streamlit */
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+    }
+
+    /* Hacer los gráficos más pequeños en altura */
+    .plot-container {
+        height: auto !important;
+        max-height: 400px;
+    }
+
+    /* Reducir padding en elementos */
+    .st-emotion-cache-1wmy9hl {
+        padding: 0.5rem !important;
+    }
+
+    /* Ajustes para la barra lateral */
+    .st-emotion-cache-16txtl3 {
+        padding: 1rem !important;
+    }
+
+    /* Reducir espacio entre elementos */
+    .st-emotion-cache-16idsys p {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Ajustar tamaño de las métricas */
+    .metric-title {
+        font-size: 0.7rem;
+    }
+    
+    .metric-value {
+        font-size: 1rem;
+    }
+}
+
+/* Ajustes para pantallas pequeñas (tablets) */
+@media (max-width: 992px) {
+    /* Reducir espacios */
+    .st-emotion-cache-1wmy9hl {
+        padding: 0.4rem !important;
+    }
+    
+    /* Ajustar métricas */
+    .metric-card {
+        padding: 0.8rem;
+    }
+    
+    /* Hacer que las tarjetas de métricas tengan igual altura */
+    .row-widget.stHorizontal {
+        align-items: stretch;
+    }
+    
+    /* Reducir tamaño de título */
+    h1 {
+        font-size: 1.8rem;
+    }
+    
+    h2 {
+        font-size: 1.5rem;
+    }
+    
+    h3 {
+        font-size: 1.3rem;
+    }
+}
+
+/* Ajustes para pantallas muy pequeñas (dispositivos móviles) */
+@media (max-width: 768px) {
+
+    /* Reducir aún más los espacios */
+    .st-emotion-cache-1wmy9hl {
+        padding: 0.25rem !important;
+    }
+
+    /* Ajustes para gráficos en móviles */
+    .plot-container {
+        max-height: 300px;
+    }
+
+    /* Hacer que las columnas se apilen */
+    .st-emotion-cache-ocqkz7 {
+        flex-direction: column;
+    }
+
+    /* Ajustar tamaño de texto */
+    h1 {
+        font-size: 1.5rem !important;
+    }
+
+    h2,
+    h3 {
+        font-size: 1.2rem !important;
+    }
+    
+    /* Achicar tarjetas de métricas */
+    .metric-card {
+        padding: 0.6rem;
+        min-height: 60px;
+    }
+    
+    .metric-title {
+        font-size: 0.6rem;
+        margin-bottom: 0.2rem;
+    }
+    
+    .metric-value {
+        font-size: 0.9rem;
+    }
+    
+    /* Ajustar espacio entre elementos */
+    .stTabs {
+        margin-top: 0.5rem;
+    }
+    
+    /* Hacer la barra lateral menos invasiva */
+    .st-emotion-cache-16txtl3 {
+        padding: 0.5rem !important;
+    }
+    
+    /* Reducir tamaño de selectores y sliders */
+    .stSelectbox, .stSlider {
+        margin-bottom: 0.8rem;
+    }
+}
+
+/* Ajustes para pantallas extra pequeñas */
+@media (max-width: 576px) {
+    /* Máximos ajustes de espacio */
+    .st-emotion-cache-1wmy9hl {
+        padding: 0.15rem !important;
+    }
+    
+    /* Apilar absolutamente todo */
+    .row-widget.stHorizontal > div {
+        flex: 0 1 100%;
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Reducir espacio entre elementos */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.3rem;
+    }
+    
+    /* Hacer las pestañas más pequeñas */
+    .stTabs [data-baseweb="tab"] {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.7rem;
+    }
+    
+    /* Simplificar gráficos */
+    .js-plotly-plot .plotly .modebar-btn {
+        height: 24px !important;
+        width: 24px !important;
+    }
+    
+    /* Aun más pequeños los encabezados */
+    h1 {
+        font-size: 1.3rem !important;
+    }
+
+    h2 {
+        font-size: 1.1rem !important;
+    }
+
+    h3 {
+        font-size: 1rem !important;
+    }
+}

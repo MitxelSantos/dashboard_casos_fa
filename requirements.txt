@@ -1,0 +1,25 @@
+# Dependencias esenciales del Dashboard Fiebre Amarilla
+# Instalar con: pip install -r requirements_minimal.txt
+
+# Framework principal
+streamlit>=1.25.0
+
+# Manipulación de datos
+pandas>=1.5.0
+numpy>=1.22.0
+
+# Visualización
+plotly>=5.13.0
+matplotlib>=3.6.0
+
+# Lectura de archivos Excel
+openpyxl>=3.0.10
+
+# Manipulación de imágenes
+Pillow>=9.3.0
+
+# Utilidades
+requests>=2.28.1
+
+# Estadísticas (para análisis avanzados)
+scipy>=1.9.0
