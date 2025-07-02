@@ -126,6 +126,7 @@ def create_logo_placeholder():
 def add_copyright():
     """
     Agrega copyright minimalista al final de la sidebar.
+    MOVIDO AL FINAL para que aparezca después de los filtros.
     """
     st.sidebar.markdown("---")
     st.sidebar.markdown(
@@ -199,4 +200,4 @@ def init_responsive_sidebar():
     """
     add_responsive_css()
     create_sidebar()
-    add_copyright()
+    # Copyright se agrega al final desde filters.py
