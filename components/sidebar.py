@@ -10,6 +10,7 @@ from datetime import datetime
 # Importación opcional de Google Drive
 try:
     from gdrive_utils import get_file_from_drive, check_google_drive_availability
+
     GDRIVE_AVAILABLE = True
 except ImportError:
     GDRIVE_AVAILABLE = False
@@ -31,9 +32,10 @@ def create_sidebar():
 
         # Información médica relevante
         st.markdown("---")
-        
+
         # Información de contacto médico
-        st.markdown("""
+        st.markdown(
+            """
         <div style="
             background-color: #f8f9fa; 
             padding: 15px; 
@@ -53,7 +55,9 @@ def create_sidebar():
                 sospechosos de fiebre amarilla.
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
 
 def display_logo():
@@ -65,16 +69,14 @@ def display_logo():
 
     # Lista de rutas posibles para el logo (CORREGIDA)
     possible_logo_paths = [
-        # Carpeta data (prioridad principal)
+        # Directorio raíz (primera opción - donde está el logo)
+        ROOT_DIR / "Gobernacion.png",
+        ROOT_DIR / "gobernacion.png",
+        ROOT_DIR / "logo.png",
+        # Carpeta data (segunda opción)
         DATA_DIR / "Gobernacion.png",
         DATA_DIR / "gobernacion.png",
         DATA_DIR / "logo.png",
-        
-        # Directorio raíz (segunda opción)
-        ROOT_DIR / "Gobernacion.png",
-        ROOT_DIR / "gobernacion.png", 
-        ROOT_DIR / "logo.png",
-        
         # Assets/images (tercera opción)
         IMAGES_DIR / "Gobernacion.png",
         IMAGES_DIR / "logo_gobernacion.png",
@@ -84,7 +86,7 @@ def display_logo():
     # Buscar logo en las rutas definidas
     for logo_path in possible_logo_paths:
         if logo_path.exists():
-            display_logo_image(str(logo_path), f"Logo encontrado: {logo_path.parent.name}/")
+            display_logo_image(str(logo_path))
             logo_displayed = True
             break
 
@@ -98,7 +100,7 @@ def display_logo():
                 logo_id = st.secrets.drive_files["logo_gobernacion"]
                 logo_path = get_file_from_drive(logo_id, "Gobernacion.png")
                 if logo_path and Path(logo_path).exists():
-                    display_logo_image(logo_path, "Logo desde Google Drive")
+                    display_logo_image(logo_path)
                     logo_displayed = True
         except Exception:
             pass  # Silenciar errores de Google Drive
@@ -108,7 +110,7 @@ def display_logo():
         create_logo_placeholder()
 
 
-def display_logo_image(logo_path, caption_text):
+def display_logo_image(logo_path):
     """
     Muestra una imagen de logo de manera responsive.
     """
@@ -138,9 +140,9 @@ def display_logo_image(logo_path, caption_text):
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image(
-                logo_path, 
-                caption=None,  # Sin caption visible para médicos
-                use_container_width=True
+                logo_path,
+                caption=None,  # Sin caption para médicos
+                use_container_width=True,
             )
 
     except Exception:
@@ -186,7 +188,7 @@ def show_medical_help():
             """
             **🩺 Para Profesionales de la Salud:**
             
-            **📋 Información Principal:**
+            **🏥 Información Principal:**
             - Fichas con situación epidemiológica actual
             - Alertas médicas prioritarias
             - Indicadores clínicos relevantes
@@ -227,8 +229,9 @@ def show_data_update_info():
     for file_path, file_type in files_to_check:
         if file_path.exists():
             import os
+
             modified_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-            
+
             if latest_update is None or modified_time > latest_update:
                 latest_update = modified_time
             break

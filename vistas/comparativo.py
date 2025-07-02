@@ -79,13 +79,16 @@ def show_clinical_comparison(casos, epizootias, colors):
     positividad = 0
     if not epizootias.empty and "descripcion" in epizootias.columns:
         positivos = (epizootias["descripcion"] == "POSITIVO FA").sum()
-        positividad = (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
+        positividad = (
+            (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
+        )
 
     # Tarjetas comparativas médicas
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div style="
             background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
             border: 2px solid {colors['danger']};
@@ -101,10 +104,13 @@ def show_clinical_comparison(casos, epizootias, colors):
                 {fallecidos} fallecidos
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     with col2:
-        st.markdown(f"""
+        st.markdown(
+            f"""
         <div style="
             background: linear-gradient(135deg, #fffbf0 0%, #fef3c7 100%);
             border: 2px solid {colors['warning']};
@@ -120,11 +126,18 @@ def show_clinical_comparison(casos, epizootias, colors):
                 {positivos} positivas
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     with col3:
-        color_letalidad = colors['danger'] if letalidad > 10 else colors['warning'] if letalidad > 0 else colors['success']
-        st.markdown(f"""
+        color_letalidad = (
+            colors["danger"]
+            if letalidad > 10
+            else colors["warning"] if letalidad > 0 else colors["success"]
+        )
+        st.markdown(
+            f"""
         <div style="
             background: white;
             border: 2px solid {color_letalidad};
@@ -140,11 +153,18 @@ def show_clinical_comparison(casos, epizootias, colors):
                 Mortalidad clínica
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     with col4:
-        color_positividad = colors['danger'] if positividad > 15 else colors['warning'] if positividad > 0 else colors['success']
-        st.markdown(f"""
+        color_positividad = (
+            colors["danger"]
+            if positividad > 15
+            else colors["warning"] if positividad > 0 else colors["success"]
+        )
+        st.markdown(
+            f"""
         <div style="
             background: white;
             border: 2px solid {color_positividad};
@@ -160,7 +180,9 @@ def show_clinical_comparison(casos, epizootias, colors):
                 Circulación viral
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # Gráficos comparativos médicos
     st.subheader("📈 Comparación Visual")
@@ -272,12 +294,17 @@ def show_geographic_pattern(casos, epizootias, colors):
 
     # Tabla médica SIN background_gradient (evita error matplotlib)
     st.write("**📋 Situación Epidemiológica por Municipio:**")
-    
+
     # Mostrar datos en formato médico amigable
     for _, row in geo_data.head(10).iterrows():
-        riesgo_color = colors['danger'] if row['Riesgo'] == 'ALTO' else colors['warning'] if row['Riesgo'] == 'MODERADO' else colors['success']
-        
-        st.markdown(f"""
+        riesgo_color = (
+            colors["danger"]
+            if row["Riesgo"] == "ALTO"
+            else colors["warning"] if row["Riesgo"] == "MODERADO" else colors["success"]
+        )
+
+        st.markdown(
+            f"""
         <div style="
             background-color: white;
             border: 1px solid #dee2e6;
@@ -308,7 +335,9 @@ def show_geographic_pattern(casos, epizootias, colors):
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
     # Gráficos geográficos médicos
     col1, col2 = st.columns(2)
@@ -425,7 +454,7 @@ def show_temporal_evolution(casos, epizootias, colors):
             mode="lines+markers",
             name="Casos Humanos",
             line=dict(color=colors["danger"], width=3),
-            marker=dict(size=8, symbol='circle'),
+            marker=dict(size=8, symbol="circle"),
             yaxis="y1",
         )
     )
@@ -438,7 +467,7 @@ def show_temporal_evolution(casos, epizootias, colors):
             mode="lines+markers",
             name="Epizootias Positivas",
             line=dict(color=colors["warning"], width=3),
-            marker=dict(size=8, symbol='diamond'),
+            marker=dict(size=8, symbol="diamond"),
             yaxis="y2",
         )
     )
@@ -448,22 +477,19 @@ def show_temporal_evolution(casos, epizootias, colors):
         title="Evolución Epidemiológica: Casos Humanos vs Circulación Viral",
         xaxis_title="Período",
         yaxis=dict(
-            title="Casos Humanos", 
-            side="left", 
-            color=colors["danger"],
-            showgrid=True
+            title="Casos Humanos", side="left", color=colors["danger"], showgrid=True
         ),
         yaxis2=dict(
-            title="Epizootias Positivas", 
-            side="right", 
-            overlaying="y", 
+            title="Epizootias Positivas",
+            side="right",
+            overlaying="y",
             color=colors["warning"],
-            showgrid=False
+            showgrid=False,
         ),
         height=500,
         hovermode="x unified",
         legend=dict(x=0.02, y=0.98),
-        plot_bgcolor='rgba(248,249,250,0.8)'
+        plot_bgcolor="rgba(248,249,250,0.8)",
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -478,27 +504,31 @@ def show_temporal_evolution(casos, epizootias, colors):
         casos_stats = temporal_data["casos"].describe()
         total_casos_periodo = temporal_data["casos"].sum()
         periodos_con_casos = (temporal_data["casos"] > 0).sum()
-        
+
         st.write(f"- **Total en período:** {int(total_casos_periodo)} casos")
         st.write(f"- **Promedio mensual:** {casos_stats['mean']:.1f} casos")
         st.write(f"- **Pico máximo:** {int(casos_stats['max'])} casos")
-        st.write(f"- **Períodos activos:** {periodos_con_casos} de {len(temporal_data)}")
+        st.write(
+            f"- **Períodos activos:** {periodos_con_casos} de {len(temporal_data)}"
+        )
 
     with col2:
         st.markdown("**🐒 Patrón de Circulación Viral:**")
         epi_stats = temporal_data["positivos"].describe()
         total_positivos_periodo = temporal_data["positivos"].sum()
         periodos_con_positivos = (temporal_data["positivos"] > 0).sum()
-        
+
         st.write(f"- **Total positivas:** {int(total_positivos_periodo)} epizootias")
         st.write(f"- **Promedio mensual:** {epi_stats['mean']:.1f} positivas")
         st.write(f"- **Pico máximo:** {int(epi_stats['max'])} positivas")
-        st.write(f"- **Períodos activos:** {periodos_con_positivos} de {len(temporal_data)}")
+        st.write(
+            f"- **Períodos activos:** {periodos_con_positivos} de {len(temporal_data)}"
+        )
 
     # Correlación médica simple
     if len(temporal_data) > 3:
         correlacion = temporal_data["casos"].corr(temporal_data["positivos"])
-        
+
         if abs(correlacion) > 0.5:
             patron = "Correlación significativa entre casos humanos y fauna"
             color_patron = colors["warning"]
@@ -549,9 +579,11 @@ def create_medical_geographic_summary(casos, epizootias):
         if not casos.empty and "municipio" in casos.columns:
             casos_municipio = casos[casos["municipio"] == municipio]
             casos_count = len(casos_municipio)
-            
-            if 'condicion_final' in casos_municipio.columns:
-                fallecidos_count = (casos_municipio["condicion_final"] == "Fallecido").sum()
+
+            if "condicion_final" in casos_municipio.columns:
+                fallecidos_count = (
+                    casos_municipio["condicion_final"] == "Fallecido"
+                ).sum()
 
         # Contar epizootias
         epi_count = 0
@@ -627,16 +659,12 @@ def create_medical_temporal_summary(casos, epizootias):
                 (epizootias["fecha_recoleccion"] >= periodo)
                 & (epizootias["fecha_recoleccion"] <= fin_periodo)
             ]
-            
-            if 'descripcion' in epi_periodo.columns:
+
+            if "descripcion" in epi_periodo.columns:
                 positivos_periodo = (epi_periodo["descripcion"] == "POSITIVO FA").sum()
 
         temporal_data.append(
-            {
-                "periodo": periodo, 
-                "casos": casos_periodo, 
-                "positivos": positivos_periodo
-            }
+            {"periodo": periodo, "casos": casos_periodo, "positivos": positivos_periodo}
         )
 
     if temporal_data:

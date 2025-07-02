@@ -23,7 +23,7 @@ def show(data_filtered, filters, colors):
         colors (dict): Colores institucionales
     """
     st.markdown(
-        '<h1 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px;">📋 Información Principal</h1>',
+        '<h1 style="color: #5A4214; border-bottom: 2px solid #F2A900; padding-bottom: 8px;">🏥 Información Principal</h1>',
         unsafe_allow_html=True,
     )
     
