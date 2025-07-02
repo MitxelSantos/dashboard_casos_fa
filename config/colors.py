@@ -1,5 +1,6 @@
 """
 Colores institucionales del Tolima y paleta de colores del dashboard.
+OPTIMIZADO: Para profesionales médicos con colores claros y contrastantes.
 """
 
 # Colores principales institucionales del Tolima
@@ -16,9 +17,9 @@ COLORS = {
     "dark": "#2C2C2C",  # Gris oscuro para texto
 }
 
-# Paletas de colores para gráficos
+# Paletas de colores para gráficos médicos
 COLOR_PALETTES = {
-    "categorical": [
+    "medical_categorical": [
         COLORS["primary"],
         COLORS["secondary"],
         COLORS["accent"],
@@ -27,26 +28,62 @@ COLOR_PALETTES = {
         COLORS["danger"],
         COLORS["info"],
     ],
-    "sequential_primary": ["#FFFFFF", COLORS["primary"]],
-    "sequential_secondary": ["#FFFFFF", COLORS["secondary"]],
-    "diverging": [COLORS["success"], "#FFFFFF", COLORS["danger"]],
+    "clinical_severity": [
+        COLORS["success"],    # Bajo riesgo
+        COLORS["warning"],    # Riesgo moderado
+        COLORS["danger"]      # Alto riesgo
+    ],
+    "epidemiological": [
+        COLORS["info"],       # Vigilancia
+        COLORS["warning"],    # Alerta
+        COLORS["danger"]      # Emergencia
+    ],
+    "sequential_cases": ["#FFFFFF", COLORS["danger"]],
+    "sequential_surveillance": ["#FFFFFF", COLORS["warning"]],
 }
 
-# Configuración de estilos CSS
+# Configuración de estilos CSS médicos
 CSS_STYLES = {
-    "metric_box": {
+    "medical_card": {
         "background_color": "white",
-        "border_radius": "8px",
-        "box_shadow": "0 3px 10px rgba(0,0,0,0.1)",
-        "padding": "15px",
-        "width": "200px",
-        "height": "130px",
-        "hover_transform": "translateY(-5px)",
+        "border_radius": "12px",
+        "box_shadow": "0 4px 15px rgba(0,0,0,0.1)",
+        "padding": "20px",
+        "min_height": "180px",
+        "border_top": f"4px solid {COLORS['primary']}",
+        "hover_transform": "translateY(-3px)",
     },
-    "info_banner": {
+    "alert_banner": {
         "background_color": COLORS["light"],
         "border_left_color": COLORS["primary"],
         "border_radius": "10px",
         "padding": "20px",
     },
+    "clinical_metric": {
+        "font_size": "2.2rem",
+        "font_weight": "800",
+        "color": COLORS["primary"]
+    }
+}
+
+# Mapeo de colores para condiciones médicas
+MEDICAL_COLOR_MAP = {
+    "critical": COLORS["danger"],
+    "high": COLORS["warning"], 
+    "moderate": COLORS["info"],
+    "low": COLORS["success"],
+    "unknown": COLORS["dark"]
+}
+
+# Colores específicos para fiebre amarilla
+YELLOW_FEVER_COLORS = {
+    "confirmed_case": COLORS["danger"],
+    "suspected_case": COLORS["warning"],
+    "negative_case": COLORS["success"],
+    "deceased": COLORS["dark"],
+    "recovered": COLORS["success"],
+    "positive_epizootic": COLORS["danger"],
+    "negative_epizootic": COLORS["success"],
+    "unsuitable_sample": COLORS["warning"],
+    "under_study": COLORS["info"]
 }

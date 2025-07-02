@@ -20,11 +20,12 @@ Pillow>=10.0.0
 # Utilidades de red (para Google Drive opcional)
 requests>=2.31.0
 
-# Procesamiento de texto (unicodedata incluido en Python estándar)
-# No requiere instalación adicional
+# NOTA: matplotlib eliminado intencionalmente
+# Era causa del error: "background_gradient requires matplotlib"
+# El dashboard funciona completamente sin matplotlib usando solo Plotly
 
-# DEPENDENCIAS REMOVIDAS (ya no necesarias):
-# - matplotlib (reemplazado completamente por Plotly)
+# DEPENDENCIAS REMOVIDAS:
+# - matplotlib (causaba errores y no es necesario)
 # - scipy (análisis estadístico avanzado removido)
 # - seaborn (no usado en versión simplificada)
 # - folium (mapas pendientes para futuro)

@@ -1,5 +1,6 @@
 """
-Componente de barra lateral del dashboard - Simplificado y responsive.
+Componente de barra lateral del dashboard - Simplificado para profesionales médicos.
+CORREGIDO: Sin información técnica innecesaria.
 """
 
 import streamlit as st
@@ -9,7 +10,6 @@ from datetime import datetime
 # Importación opcional de Google Drive
 try:
     from gdrive_utils import get_file_from_drive, check_google_drive_availability
-
     GDRIVE_AVAILABLE = True
 except ImportError:
     GDRIVE_AVAILABLE = False
@@ -23,63 +23,70 @@ IMAGES_DIR = ASSETS_DIR / "images"
 
 def create_sidebar():
     """
-    Crea la barra lateral del dashboard simplificada.
-
-    Returns:
-        None
+    Crea la barra lateral del dashboard simplificada para médicos.
     """
     with st.sidebar:
         # Logo de la Gobernación
         display_logo()
 
-        # Información adicional simplificada
+        # Información médica relevante
         st.markdown("---")
-
-        # Información responsive
-        st.markdown(
-            """
-            <div style="text-align: center; font-size: 0.85rem; color: #666;">
-                <p style="margin-bottom: 0.5rem;">
-                    <strong>Departamento del Tolima</strong>
-                </p>
-                <p style="margin-bottom: 0;">
-                    © 2025
-                </p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        
+        # Información de contacto médico
+        st.markdown("""
+        <div style="
+            background-color: #f8f9fa; 
+            padding: 15px; 
+            border-radius: 8px; 
+            border-left: 4px solid #7D0F2B;
+            margin-bottom: 15px;
+        ">
+            <h4 style="color: #7D0F2B; margin: 0 0 10px 0; font-size: 1rem;">
+                🏥 Información de Contacto
+            </h4>
+            <p style="margin: 5px 0; font-size: 0.85rem; color: #2c2c2c;">
+                <strong>Secretaría de Salud del Tolima</strong><br>
+                Vigilancia Epidemiológica
+            </p>
+            <p style="margin: 5px 0; font-size: 0.8rem; color: #666;">
+                Para reportes urgentes de casos<br>
+                sospechosos de fiebre amarilla.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
 
 
 def display_logo():
     """
-    Muestra el logo de manera responsive.
-    Busca primero en la carpeta data, luego en assets/images, y finalmente en Google Drive.
-
-    Returns:
-        None
+    Muestra el logo de manera responsive con búsqueda corregida.
+    CORREGIDO: Búsqueda mejorada del logo.
     """
     logo_displayed = False
 
-    # Buscar logo en carpeta data (prioridad principal)
-    data_logo_path = DATA_DIR / "Gobernacion.png"
-    if data_logo_path.exists():
-        display_logo_image(str(data_logo_path), "Logo encontrado en carpeta data")
-        logo_displayed = True
+    # Lista de rutas posibles para el logo (CORREGIDA)
+    possible_logo_paths = [
+        # Carpeta data (prioridad principal)
+        DATA_DIR / "Gobernacion.png",
+        DATA_DIR / "gobernacion.png",
+        DATA_DIR / "logo.png",
+        
+        # Directorio raíz (segunda opción)
+        ROOT_DIR / "Gobernacion.png",
+        ROOT_DIR / "gobernacion.png", 
+        ROOT_DIR / "logo.png",
+        
+        # Assets/images (tercera opción)
+        IMAGES_DIR / "Gobernacion.png",
+        IMAGES_DIR / "logo_gobernacion.png",
+        IMAGES_DIR / "gobernacion.png",
+    ]
 
-    # Buscar logo en assets/images como respaldo
-    if not logo_displayed:
-        assets_logo_paths = [
-            IMAGES_DIR / "Gobernacion.png",
-            IMAGES_DIR / "logo_gobernacion.png",
-            IMAGES_DIR / "gobernacion.png",
-        ]
-
-        for logo_path in assets_logo_paths:
-            if logo_path.exists():
-                display_logo_image(str(logo_path), "Logo encontrado en assets")
-                logo_displayed = True
-                break
+    # Buscar logo en las rutas definidas
+    for logo_path in possible_logo_paths:
+        if logo_path.exists():
+            display_logo_image(str(logo_path), f"Logo encontrado: {logo_path.parent.name}/")
+            logo_displayed = True
+            break
 
     # Intentar cargar logo desde Google Drive si está disponible
     if not logo_displayed and GDRIVE_AVAILABLE and check_google_drive_availability():
@@ -91,12 +98,10 @@ def display_logo():
                 logo_id = st.secrets.drive_files["logo_gobernacion"]
                 logo_path = get_file_from_drive(logo_id, "Gobernacion.png")
                 if logo_path and Path(logo_path).exists():
-                    display_logo_image(logo_path, "Logo cargado desde Google Drive")
+                    display_logo_image(logo_path, "Logo desde Google Drive")
                     logo_displayed = True
-        except Exception as e:
-            st.sidebar.caption(
-                f"⚠️ Error cargando logo desde Google Drive: {str(e)[:50]}..."
-            )
+        except Exception:
+            pass  # Silenciar errores de Google Drive
 
     # Si no se encuentra ningún logo, mostrar placeholder
     if not logo_displayed:
@@ -106,10 +111,6 @@ def display_logo():
 def display_logo_image(logo_path, caption_text):
     """
     Muestra una imagen de logo de manera responsive.
-
-    Args:
-        logo_path (str): Ruta al archivo de logo
-        caption_text (str): Texto de caption para debug
     """
     try:
         # CSS para hacer la imagen responsive
@@ -137,15 +138,13 @@ def display_logo_image(logo_path, caption_text):
         col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
             st.image(
-                logo_path, caption="Gobernación del Tolima", use_container_width=True
+                logo_path, 
+                caption=None,  # Sin caption visible para médicos
+                use_container_width=True
             )
 
-        # Caption de debug solo en desarrollo
-        if st.session_state.get("debug_mode", False):
-            st.caption(f"🔍 {caption_text}")
-
-    except Exception as e:
-        st.sidebar.error(f"Error mostrando logo: {str(e)}")
+    except Exception:
+        # Si hay error mostrando la imagen, usar placeholder
         create_logo_placeholder()
 
 
@@ -178,198 +177,124 @@ def create_logo_placeholder():
     )
 
 
-def show_data_source_info():
+def show_medical_help():
     """
-    Muestra información responsive sobre la fuente de datos actual.
+    Muestra ayuda específica para profesionales médicos.
     """
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📊 Fuente de Datos")
-
-    # Verificar archivos locales en carpeta data
-    casos_file = DATA_DIR / "BD_positivos.xlsx"
-    epi_file = DATA_DIR / "Información_Datos_FA.xlsx"
-
-    # También verificar en directorio raíz como respaldo
-    casos_file_root = ROOT_DIR / "BD_positivos.xlsx"
-    epi_file_root = ROOT_DIR / "Información_Datos_FA.xlsx"
-
-    # Estado de los archivos
-    casos_disponible = casos_file.exists() or casos_file_root.exists()
-    epi_disponible = epi_file.exists() or epi_file_root.exists()
-
-    if casos_disponible and epi_disponible:
-        source_location = "data/" if casos_file.exists() else "raíz"
-        st.sidebar.success(f"✅ Archivos locales ({source_location})")
-        st.sidebar.caption("Datos cargados desde archivos Excel locales")
-    elif GDRIVE_AVAILABLE and check_google_drive_availability():
-        st.sidebar.info("☁️ Google Drive")
-        st.sidebar.caption("Datos cargados desde Google Drive")
-    else:
-        st.sidebar.warning("⚠️ Fuente no disponible")
-        st.sidebar.caption("Verifique que los archivos de datos estén disponibles")
-
-
-def show_system_status():
-    """
-    Muestra el estado del sistema de manera responsive y compacta.
-    """
-    with st.sidebar.expander("🔧 Estado del Sistema"):
-        # Estado de archivos de datos
-        st.markdown("**📁 Archivos de datos:**")
-
-        # Verificar en carpeta data primero
-        casos_data = DATA_DIR / "BD_positivos.xlsx"
-        epi_data = DATA_DIR / "Información_Datos_FA.xlsx"
-
-        # Verificar en raíz como respaldo
-        casos_root = ROOT_DIR / "BD_positivos.xlsx"
-        epi_root = ROOT_DIR / "Información_Datos_FA.xlsx"
-
-        # Status casos
-        if casos_data.exists():
-            st.markdown("✅ BD_positivos.xlsx (data/)")
-        elif casos_root.exists():
-            st.markdown("✅ BD_positivos.xlsx (raíz)")
-        else:
-            st.markdown("❌ BD_positivos.xlsx")
-
-        # Status epizootias
-        if epi_data.exists():
-            st.markdown("✅ Información_Datos_FA.xlsx (data/)")
-        elif epi_root.exists():
-            st.markdown("✅ Información_Datos_FA.xlsx (raíz)")
-        else:
-            st.markdown("❌ Información_Datos_FA.xlsx")
-
-        # Estado de Google Drive
-        st.markdown("**☁️ Google Drive:**")
-        if GDRIVE_AVAILABLE:
-            if check_google_drive_availability():
-                st.markdown("✅ Configurado")
-            else:
-                st.markdown("⚠️ No configurado")
-        else:
-            st.markdown("❌ No disponible")
-
-        # Estado del logo
-        st.markdown("**🖼️ Logo:**")
-        logo_data = DATA_DIR / "Gobernacion.png"
-        logo_assets = IMAGES_DIR / "logo_gobernacion.png"
-
-        if logo_data.exists():
-            st.markdown("✅ Gobernacion.png (data/)")
-        elif logo_assets.exists():
-            st.markdown("✅ logo_gobernacion.png (assets/)")
-        else:
-            st.markdown("❌ Logo no encontrado")
-
-
-def create_help_section():
-    """
-    Crea una sección de ayuda responsive y compacta.
-    """
-    with st.sidebar.expander("❓ Ayuda"):
+    with st.sidebar.expander("❓ Guía Médica"):
         st.markdown(
             """
-            **🚀 Inicio rápido:**
-            1. Coloque los archivos Excel en `data/`
-            2. Use filtros en la barra lateral
-            3. Navegue por las pestañas
+            **🩺 Para Profesionales de la Salud:**
             
-            **📊 Archivos requeridos:**
-            - `BD_positivos.xlsx` (casos confirmados)
-            - `Información_Datos_FA.xlsx` (epizootias)
-            - `Gobernacion.png` (logo, opcional)
+            **📋 Información Principal:**
+            - Fichas con situación epidemiológica actual
+            - Alertas médicas prioritarias
+            - Indicadores clínicos relevantes
             
-            **🔍 Funciones:**
-            - **Mapas**: Distribución geográfica (próximamente)
-            - **Tablas**: Datos detallados y fichas informativas
-            - **Comparativo**: Análisis básico entre casos y epizootias
+            **📊 Análisis Comparativo:**
+            - Correlación casos humanos vs fauna
+            - Patrones geográficos de transmisión
+            - Evolución temporal de la enfermedad
             
-            **⚡ Consejos:**
-            - Use "Restablecer Filtros" para limpiar selecciones
-            - Los filtros se combinan automáticamente
-            - Exporte datos desde "Tablas Detalladas"
+            **🔍 Filtros:**
+            - Use filtros para análisis específicos por área
+            - Los datos se actualizan automáticamente
+            - Exporte reportes para referencias médicas
+            
+            **⚠️ Casos Sospechosos:**
+            Reporte inmediatamente casos sospechosos
+            a la Secretaría de Salud del Tolima.
             """,
         )
 
 
 def show_data_update_info():
     """
-    Muestra información responsive sobre actualización de datos.
+    Muestra información médicamente relevante sobre actualización de datos.
     """
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 🔄 Última Actualización")
 
-    # Verificar fechas de modificación de archivos
+    # Verificar fechas de modificación de archivos principales
     files_to_check = [
         (DATA_DIR / "BD_positivos.xlsx", "Casos"),
+        (ROOT_DIR / "BD_positivos.xlsx", "Casos"),
         (DATA_DIR / "Información_Datos_FA.xlsx", "Epizootias"),
-        (ROOT_DIR / "BD_positivos.xlsx", "Casos (raíz)"),
-        (ROOT_DIR / "Información_Datos_FA.xlsx", "Epizootias (raíz)"),
+        (ROOT_DIR / "Información_Datos_FA.xlsx", "Epizootias"),
     ]
 
+    latest_update = None
     for file_path, file_type in files_to_check:
         if file_path.exists():
             import os
-
             modified_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-            st.sidebar.caption(
-                f"{file_type}: {modified_time.strftime('%Y-%m-%d %H:%M')}"
-            )
-            break  # Solo mostrar el primero encontrado
+            
+            if latest_update is None or modified_time > latest_update:
+                latest_update = modified_time
+            break
 
-    # Botón de recarga
-    if st.sidebar.button("🔄 Recargar Datos", help="Limpia caché y recarga datos"):
-        # Limpiar caché de Streamlit
+    if latest_update:
+        st.sidebar.caption(f"📅 {latest_update.strftime('%d/%m/%Y %H:%M')}")
+    else:
+        st.sidebar.caption("📅 Fecha no disponible")
+
+    # Botón de recarga simplificado
+    if st.sidebar.button("🔄 Actualizar", help="Recargar datos más recientes"):
         st.cache_data.clear()
         st.rerun()
 
 
 def add_responsive_css():
     """
-    Agrega CSS para mejorar la responsividad del sidebar.
+    Agrega CSS para mejorar la responsividad del sidebar médico.
     """
     st.markdown(
         """
         <style>
-        /* Sidebar responsive */
+        /* Sidebar médico responsive */
         .css-1d391kg {
             min-width: 280px;
+            background-color: #fafafa;
         }
         
         /* Texto responsive en sidebar */
         .sidebar .stMarkdown {
             font-size: clamp(0.8rem, 2vw, 0.9rem);
+            line-height: 1.4;
         }
         
-        /* Botones responsive en sidebar */
+        /* Botones médicos responsive */
         .sidebar .stButton > button {
             width: 100%;
             font-size: clamp(0.8rem, 2vw, 0.9rem);
+            background-color: #7D0F2B;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 0.5rem 1rem;
+            font-weight: 600;
         }
         
-        /* Métricas responsive */
-        .css-1r6slb0 {
-            font-size: clamp(1rem, 3vw, 1.2rem);
+        .sidebar .stButton > button:hover {
+            background-color: #5A4214;
+            transition: all 0.3s ease;
         }
         
-        /* Inputs responsive en sidebar */
-        .sidebar .stSelectbox > div > div {
-            font-size: clamp(0.8rem, 2vw, 0.9rem);
+        /* Expandir médico */
+        .sidebar .streamlit-expanderHeader {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            font-weight: 600;
         }
         
-        /* Mobile adjustments */
+        /* Mobile adjustments para médicos */
         @media (max-width: 768px) {
             .css-1d391kg {
                 min-width: 250px;
             }
             
-            .sidebar .stMarkdown h1 {
-                font-size: 1.5rem !important;
-            }
-            
-            .sidebar .stMarkdown h3 {
+            .sidebar .stMarkdown h4 {
                 font-size: 1rem !important;
             }
         }
@@ -379,14 +304,12 @@ def add_responsive_css():
     )
 
 
-# Función principal para inicializar sidebar responsive
+# Función principal para inicializar sidebar médico
 def init_responsive_sidebar():
     """
-    Inicializa la barra lateral con todas las mejoras responsive.
+    Inicializa la barra lateral simplificada para profesionales médicos.
     """
     add_responsive_css()
     create_sidebar()
-    show_data_source_info()
     show_data_update_info()
-    show_system_status()
-    create_help_section()
+    show_medical_help()

@@ -874,7 +874,7 @@ def create_responsive_metrics_display(data_filtered, colors):
         )
 
 def main():
-    """Aplicación principal del dashboard simplificado."""
+    """Aplicación principal del dashboard médico simplificado."""
     # Configurar página con responsividad máxima
     configure_page_responsive()
 
@@ -922,7 +922,7 @@ def main():
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<p class="subtitle">Vigilancia Epidemiológica Integrada</p>',
+        '<p class="subtitle">Vigilancia Epidemiológica para Profesionales de la Salud</p>',
         unsafe_allow_html=True,
     )
 
@@ -932,10 +932,10 @@ def main():
     # Métricas principales responsive
     create_responsive_metrics_display(data_filtered, COLORS)
 
-    # Pestañas principales simplificadas
+    # Pestañas principales CORREGIDAS - CAMBIO AQUÍ
     tab1, tab2, tab3 = st.tabs([
         "🗺️ Mapas", 
-        "📋 Tablas Detalladas", 
+        "🏥 Información Principal",  # CAMBIADO de "📋 Tablas Detalladas"
         "📊 Análisis Comparativo"
     ])
 
@@ -954,10 +954,10 @@ def main():
             try:
                 vistas_modules["tablas"].show(data_filtered, filters, COLORS)
             except Exception as e:
-                st.error(f"Error en módulo de tablas: {str(e)}")
-                st.info("🔧 Vista de tablas simplificada en desarrollo.")
+                st.error(f"Error en módulo de información principal: {str(e)}")
+                st.info("🔧 Vista de información principal en desarrollo.")
         else:
-            st.info("🔧 Módulo de tablas en desarrollo.")
+            st.info("🔧 Módulo de información principal en desarrollo.")
 
     with tab3:
         if "comparativo" in vistas_modules and vistas_modules["comparativo"]:
@@ -969,7 +969,7 @@ def main():
         else:
             st.info("🔧 Módulo comparativo en desarrollo.")
 
-    # Footer responsive
+    # Footer responsive médico
     st.markdown("---")
     st.markdown(
         f"""
@@ -983,11 +983,11 @@ def main():
             margin-top: clamp(1rem, 3vw, 2rem);
         ">
             <div style="margin-bottom: 0.5rem;">
-                <strong>Dashboard Fiebre Amarilla - Secretaría de Salud del Tolima</strong>
+                <strong>🏥 Dashboard Fiebre Amarilla - Secretaría de Salud del Tolima</strong>
             </div>
             <div style="opacity: 0.8;">
-                Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 
-                Versión 2.1 Optimizada
+                Información epidemiológica para profesionales de la salud |
+                Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M')} 
             </div>
         </div>
         """,
