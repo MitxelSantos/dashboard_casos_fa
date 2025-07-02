@@ -1,6 +1,7 @@
 """
 Vista de tablas detalladas del dashboard de Fiebre Amarilla.
 Muestra datos completos de casos confirmados y epizootias en formato tabular.
+ACTUALIZADO: Fechas sin hora, estadísticas mejoradas y fichas informativas.
 """
 
 import streamlit as st
@@ -10,6 +11,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
+from utils.data_processor import prepare_dataframe_for_display
 
 def show(data_filtered, filters, colors):
     """
@@ -28,9 +30,9 @@ def show(data_filtered, filters, colors):
     # Información general
     st.markdown(f"""
     <div style="background-color: #f8f9fa; padding: 20px; border-radius: 10px; border-left: 5px solid {colors['primary']}; margin-bottom: 30px;">
-        <h3 style="color: {colors['primary']}; margin-top: 0;">Datos Detallados</h3>
+        <h3 style="color: {colors['primary']}; margin-top: 0;">Fichas Informativas</h3>
         <p>Esta sección presenta los datos completos de casos confirmados y epizootias en formato tabular, 
-        permitiendo la exploración detallada y exportación de la información.</p>
+        con fichas informativas detalladas y opciones de exportación.</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -46,56 +48,155 @@ def show(data_filtered, filters, colors):
     with tab3:
         show_executive_summary(data_filtered, filters, colors)
 
+def create_informative_cards(data_filtered, colors):
+    """
+    Crea fichas informativas mejoradas con más detalles.
+    
+    Args:
+        data_filtered (dict): Datos filtrados
+        colors (dict): Colores institucionales
+    """
+    casos = data_filtered["casos"]
+    epizootias = data_filtered["epizootias"]
+    
+    # Calcular métricas avanzadas
+    total_casos = len(casos)
+    total_epizootias = len(epizootias)
+    
+    # Calcular veredas afectadas
+    veredas_afectadas = set()
+    if not casos.empty and 'vereda_normalizada' in casos.columns:
+        veredas_afectadas.update(casos['vereda_normalizada'].dropna())
+    if not epizootias.empty and 'vereda_normalizada' in epizootias.columns:
+        veredas_afectadas.update(epizootias['vereda_normalizada'].dropna())
+    
+    # Calcular municipios afectados
+    municipios_afectados = set()
+    if not casos.empty and 'municipio_normalizado' in casos.columns:
+        municipios_afectados.update(casos['municipio_normalizado'].dropna())
+    if not epizootias.empty and 'municipio_normalizado' in epizootias.columns:
+        municipios_afectados.update(epizootias['municipio_normalizado'].dropna())
+    
+    # Métricas de casos
+    fallecidos = 0
+    letalidad = 0
+    if total_casos > 0 and 'condicion_final' in casos.columns:
+        fallecidos = (casos['condicion_final'] == 'Fallecido').sum()
+        letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
+    
+    # Métricas de epizootias
+    positivos = 0
+    positividad = 0
+    if total_epizootias > 0 and 'descripcion' in epizootias.columns:
+        positivos = (epizootias['descripcion'] == 'POSITIVO FA').sum()
+        positividad = (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
+    
+    # Fechas importantes
+    ultima_fecha_caso = None
+    ultima_fecha_epi_positiva = None
+    
+    if not casos.empty and 'fecha_inicio_sintomas' in casos.columns:
+        fechas_casos = casos['fecha_inicio_sintomas'].dropna()
+        if not fechas_casos.empty:
+            ultima_fecha_caso = fechas_casos.max()
+    
+    if not epizootias.empty and 'fecha_recoleccion' in epizootias.columns:
+        epi_positivas = epizootias[epizootias['descripcion'] == 'POSITIVO FA']
+        if not epi_positivas.empty:
+            fechas_positivas = epi_positivas['fecha_recoleccion'].dropna()
+            if not fechas_positivas.empty:
+                ultima_fecha_epi_positiva = fechas_positivas.max()
+    
+    # Mostrar fichas informativas
+    st.subheader("📊 Fichas Informativas")
+    
+    # Primera fila - Métricas principales
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric(
+            label="🦠 Casos Confirmados",
+            value=f"{total_casos:,}",
+            delta=f"{fallecidos} fallecidos" if fallecidos > 0 else "Sin fallecidos",
+            help="Total de casos confirmados de fiebre amarilla"
+        )
+    
+    with col2:
+        st.metric(
+            label="🐒 Epizootias",
+            value=f"{total_epizootias:,}",
+            delta=f"{positivos} positivas" if positivos > 0 else "Sin positivas",
+            help="Total de epizootias registradas"
+        )
+    
+    with col3:
+        st.metric(
+            label="🏘️ Veredas Afectadas",
+            value=f"{len(veredas_afectadas):,}",
+            delta=f"En {len(municipios_afectados)} municipios",
+            help="Número de veredas con casos o epizootias"
+        )
+    
+    with col4:
+        st.metric(
+            label="⚰️ Tasa Letalidad",
+            value=f"{letalidad:.1f}%",
+            delta=f"Positividad epi: {positividad:.1f}%",
+            help="Porcentaje de casos que resultaron en fallecimiento"
+        )
+    
+    # Segunda fila - Fechas importantes
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if ultima_fecha_caso:
+            st.metric(
+                label="📅 Último Caso",
+                value=ultima_fecha_caso.strftime("%Y-%m-%d"),
+                help="Fecha del último caso confirmado"
+            )
+        else:
+            st.metric(
+                label="📅 Último Caso",
+                value="Sin datos",
+                help="No hay fechas de casos disponibles"
+            )
+    
+    with col2:
+        if ultima_fecha_epi_positiva:
+            st.metric(
+                label="🔴 Última Epizootia +",
+                value=ultima_fecha_epi_positiva.strftime("%Y-%m-%d"),
+                help="Fecha de la última epizootia positiva"
+            )
+        else:
+            st.metric(
+                label="🔴 Última Epizootia +",
+                value="Sin datos",
+                help="No hay epizootias positivas registradas"
+            )
+    
+    with col3:
+        st.metric(
+            label="🔄 Actualización",
+            value=datetime.now().strftime("%Y-%m-%d"),
+            help="Fecha de última actualización del dashboard"
+        )
+
 def show_casos_table(data_filtered, filters, colors):
     """Muestra tabla detallada de casos confirmados."""
     casos = data_filtered["casos"]
     
     st.subheader("🦠 Casos Confirmados - Datos Detallados")
     
+    # Mostrar fichas informativas
+    create_informative_cards(data_filtered, colors)
+    
     if casos.empty:
         st.info("No hay casos confirmados que coincidan con los filtros seleccionados.")
         return
     
-    # Métricas rápidas
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label="Total Casos",
-            value=len(casos),
-            delta=None
-        )
-    
-    with col2:
-        if 'condicion_final' in casos.columns:
-            fallecidos = (casos['condicion_final'] == 'Fallecido').sum()
-            st.metric(
-                label="Fallecidos", 
-                value=fallecidos,
-                delta=f"{fallecidos/len(casos)*100:.1f}% letalidad"
-            )
-        else:
-            st.metric(label="Fallecidos", value="N/D")
-    
-    with col3:
-        if 'municipio' in casos.columns:
-            municipios_unicos = casos['municipio'].nunique()
-            st.metric(
-                label="Municipios",
-                value=municipios_unicos
-            )
-        else:
-            st.metric(label="Municipios", value="N/D")
-    
-    with col4:
-        if 'edad' in casos.columns:
-            edad_promedio = casos['edad'].mean()
-            st.metric(
-                label="Edad Promedio",
-                value=f"{edad_promedio:.1f} años" if not pd.isna(edad_promedio) else "N/D"
-            )
-        else:
-            st.metric(label="Edad Promedio", value="N/D")
+    st.markdown("---")
     
     # Opciones de visualización
     st.subheader("⚙️ Opciones de Visualización")
@@ -168,13 +269,16 @@ def show_casos_table(data_filtered, filters, colors):
     if sexo_filter != "Todos":
         casos_display = casos_display[casos_display['sexo'] == sexo_filter]
     
-    # Preparar datos para mostrar
+    # Preparar datos para mostrar (formatear fechas)
     if selected_columns:
         casos_display = casos_display[selected_columns]
         
         # Ordenar si se especificó
         if sort_column and sort_column in casos_display.columns:
             casos_display = casos_display.sort_values(sort_column, ascending=sort_ascending)
+    
+    # Preparar DataFrame para display (fechas sin hora)
+    casos_display = prepare_dataframe_for_display(casos_display)
     
     # Reemplazar valores faltantes
     casos_display = casos_display.fillna('No disponible')
@@ -237,7 +341,7 @@ def show_casos_table(data_filtered, filters, colors):
     with col3:
         # Estadísticas rápidas
         if st.button("📈 Mostrar Estadísticas", key="casos_stats"):
-            show_casos_statistics(casos_display, colors)
+            show_casos_statistics_improved(casos_display, colors)
 
 def show_epizootias_table(data_filtered, filters, colors):
     """Muestra tabla detallada de epizootias."""
@@ -245,49 +349,14 @@ def show_epizootias_table(data_filtered, filters, colors):
     
     st.subheader("🐒 Epizootias - Datos Detallados")
     
+    # Mostrar fichas informativas
+    create_informative_cards(data_filtered, colors)
+    
     if epizootias.empty:
         st.info("No hay epizootias que coincidan con los filtros seleccionados.")
         return
     
-    # Métricas rápidas
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            label="Total Epizootias",
-            value=len(epizootias)
-        )
-    
-    with col2:
-        if 'descripcion' in epizootias.columns:
-            positivos = (epizootias['descripcion'] == 'POSITIVO FA').sum()
-            st.metric(
-                label="Positivos FA",
-                value=positivos,
-                delta=f"{positivos/len(epizootias)*100:.1f}% positividad"
-            )
-        else:
-            st.metric(label="Positivos FA", value="N/D")
-    
-    with col3:
-        if 'municipio' in epizootias.columns:
-            municipios_unicos = epizootias['municipio'].nunique()
-            st.metric(
-                label="Municipios",
-                value=municipios_unicos
-            )
-        else:
-            st.metric(label="Municipios", value="N/D")
-    
-    with col4:
-        if 'proveniente' in epizootias.columns:
-            fuentes_unicas = epizootias['proveniente'].nunique()
-            st.metric(
-                label="Fuentes",
-                value=fuentes_unicas
-            )
-        else:
-            st.metric(label="Fuentes", value="N/D")
+    st.markdown("---")
     
     # Opciones de visualización
     st.subheader("⚙️ Opciones de Visualización")
@@ -368,6 +437,9 @@ def show_epizootias_table(data_filtered, filters, colors):
         if sort_column and sort_column in epizootias_display.columns:
             epizootias_display = epizootias_display.sort_values(sort_column, ascending=sort_ascending)
     
+    # Preparar DataFrame para display (fechas sin hora)
+    epizootias_display = prepare_dataframe_for_display(epizootias_display)
+    
     # Reemplazar valores faltantes
     epizootias_display = epizootias_display.fillna('No disponible')
     
@@ -429,14 +501,19 @@ def show_epizootias_table(data_filtered, filters, colors):
     with col3:
         # Estadísticas rápidas
         if st.button("📈 Mostrar Estadísticas", key="epi_stats"):
-            show_epizootias_statistics(epizootias_display, colors)
+            show_epizootias_statistics_improved(epizootias_display, colors)
 
 def show_executive_summary(data_filtered, filters, colors):
     """Muestra resumen ejecutivo combinado."""
     st.subheader("📊 Resumen Ejecutivo")
     
+    # Mostrar fichas informativas
+    create_informative_cards(data_filtered, colors)
+    
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]
+    
+    st.markdown("---")
     
     # Crear resumen combinado
     summary_data = []
@@ -470,6 +547,13 @@ def show_executive_summary(data_filtered, filters, colors):
         elif not epi_mpio.empty and 'municipio' in epi_mpio.columns:
             municipio_display = epi_mpio['municipio'].iloc[0]
         
+        # Calcular veredas afectadas en el municipio
+        veredas_mpio = set()
+        if not casos_mpio.empty and 'vereda_normalizada' in casos_mpio.columns:
+            veredas_mpio.update(casos_mpio['vereda_normalizada'].dropna())
+        if not epi_mpio.empty and 'vereda_normalizada' in epi_mpio.columns:
+            veredas_mpio.update(epi_mpio['vereda_normalizada'].dropna())
+        
         summary_data.append({
             'Municipio': municipio_display,
             'Casos Confirmados': total_casos,
@@ -478,6 +562,7 @@ def show_executive_summary(data_filtered, filters, colors):
             'Total Epizootias': total_epizootias,
             'Positivos FA': positivos_fa,
             'Positividad (%)': round(positivos_fa / total_epizootias * 100, 1) if total_epizootias > 0 else 0,
+            'Veredas Afectadas': len(veredas_mpio),
             'Riesgo': 'Alto' if (total_casos > 5 or positivos_fa > 3) else 'Medio' if (total_casos > 0 or positivos_fa > 0) else 'Bajo'
         })
     
@@ -561,49 +646,140 @@ def show_executive_summary(data_filtered, filters, colors):
     else:
         st.info("No hay datos disponibles para generar el resumen ejecutivo.")
 
-def show_casos_statistics(casos_display, colors):
-    """Muestra estadísticas detalladas de casos."""
+def show_casos_statistics_improved(casos_display, colors):
+    """
+    Muestra estadísticas detalladas de casos con gráficos mejorados que ocupan todo el espacio.
+    """
     if casos_display.empty:
         st.warning("No hay datos para mostrar estadísticas.")
         return
     
-    st.subheader("📈 Estadísticas de Casos Confirmados")
+    st.markdown("---")
+    st.subheader("📈 Estadísticas Detalladas de Casos")
     
-    # Estadísticas por columnas numéricas
+    # Estadísticas numéricas básicas
     numeric_columns = casos_display.select_dtypes(include=[np.number]).columns
     
     if len(numeric_columns) > 0:
+        st.write("**📊 Estadísticas Descriptivas:**")
         stats_df = casos_display[numeric_columns].describe()
         st.dataframe(stats_df, use_container_width=True)
     
-    # Distribuciones por columnas categóricas
+    # Gráficos categóricos mejorados - OCUPAN TODO EL ESPACIO
     categorical_columns = casos_display.select_dtypes(include=['object']).columns
     
     if len(categorical_columns) > 0:
-        st.subheader("📊 Distribuciones")
+        st.write("**📊 Distribuciones por Categorías:**")
         
-        for col in categorical_columns[:5]:  # Limitar a 5 columnas
-            if casos_display[col].nunique() <= 20:  # Solo mostrar si hay pocos valores únicos
+        # Organizar gráficos en columnas
+        num_charts = min(len(categorical_columns), 6)  # Máximo 6 gráficos
+        
+        for i, col in enumerate(categorical_columns[:num_charts]):
+            if casos_display[col].nunique() <= 15:  # Solo mostrar si hay pocos valores únicos
                 value_counts = casos_display[col].value_counts()
-                st.write(f"**{col}:**")
-                st.bar_chart(value_counts)
+                
+                # Alternar entre gráficos de barras y torta
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Gráfico de barras
+                    fig_bar = px.bar(
+                        x=value_counts.index,
+                        y=value_counts.values,
+                        title=f'Distribución por {col} (Barras)',
+                        color=value_counts.values,
+                        color_continuous_scale='Blues'
+                    )
+                    fig_bar.update_layout(
+                        height=400,
+                        xaxis_title=col,
+                        yaxis_title='Cantidad',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                
+                with col2:
+                    # Gráfico de torta
+                    fig_pie = px.pie(
+                        values=value_counts.values,
+                        names=value_counts.index,
+                        title=f'Distribución por {col} (Torta)'
+                    )
+                    fig_pie.update_layout(height=400)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # Mostrar tabla de frecuencias
+                st.write(f"**Frecuencias para {col}:**")
+                freq_df = pd.DataFrame({
+                    col: value_counts.index,
+                    'Cantidad': value_counts.values,
+                    'Porcentaje': (value_counts.values / value_counts.sum() * 100).round(1)
+                })
+                st.dataframe(freq_df, use_container_width=True, hide_index=True)
+                
+                st.markdown("---")
 
-def show_epizootias_statistics(epizootias_display, colors):
-    """Muestra estadísticas detalladas de epizootias."""
+def show_epizootias_statistics_improved(epizootias_display, colors):
+    """
+    Muestra estadísticas detalladas de epizootias con gráficos mejorados que ocupan todo el espacio.
+    """
     if epizootias_display.empty:
         st.warning("No hay datos para mostrar estadísticas.")
         return
     
-    st.subheader("📈 Estadísticas de Epizootias")
+    st.markdown("---")
+    st.subheader("📈 Estadísticas Detalladas de Epizootias")
     
-    # Estadísticas por columnas categóricas
+    # Gráficos categóricos mejorados - OCUPAN TODO EL ESPACIO
     categorical_columns = epizootias_display.select_dtypes(include=['object']).columns
     
     if len(categorical_columns) > 0:
-        st.subheader("📊 Distribuciones")
+        st.write("**📊 Distribuciones por Categorías:**")
         
-        for col in categorical_columns[:5]:  # Limitar a 5 columnas
-            if epizootias_display[col].nunique() <= 20:  # Solo mostrar si hay pocos valores únicos
+        # Organizar gráficos en columnas
+        num_charts = min(len(categorical_columns), 6)  # Máximo 6 gráficos
+        
+        for i, col in enumerate(categorical_columns[:num_charts]):
+            if epizootias_display[col].nunique() <= 15:  # Solo mostrar si hay pocos valores únicos
                 value_counts = epizootias_display[col].value_counts()
-                st.write(f"**{col}:**")
-                st.bar_chart(value_counts)
+                
+                # Alternar entre gráficos de barras y torta
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Gráfico de barras
+                    fig_bar = px.bar(
+                        x=value_counts.index,
+                        y=value_counts.values,
+                        title=f'Distribución por {col} (Barras)',
+                        color=value_counts.values,
+                        color_continuous_scale='Oranges'
+                    )
+                    fig_bar.update_layout(
+                        height=400,
+                        xaxis_title=col,
+                        yaxis_title='Cantidad',
+                        showlegend=False
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                
+                with col2:
+                    # Gráfico de torta
+                    fig_pie = px.pie(
+                        values=value_counts.values,
+                        names=value_counts.index,
+                        title=f'Distribución por {col} (Torta)'
+                    )
+                    fig_pie.update_layout(height=400)
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                
+                # Mostrar tabla de frecuencias
+                st.write(f"**Frecuencias para {col}:**")
+                freq_df = pd.DataFrame({
+                    col: value_counts.index,
+                    'Cantidad': value_counts.values,
+                    'Porcentaje': (value_counts.values / value_counts.sum() * 100).round(1)
+                })
+                st.dataframe(freq_df, use_container_width=True, hide_index=True)
+                
+                st.markdown("---")

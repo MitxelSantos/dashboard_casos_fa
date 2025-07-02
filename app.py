@@ -32,7 +32,7 @@ IMAGES_DIR.mkdir(exist_ok=True)
 import sys
 sys.path.insert(0, str(ROOT_DIR))
 
-# Importar configuraciones y utilidades (CORREGIDAS)
+# Importar configuraciones y utilidades
 from config.colors import COLORS
 from config.settings import DASHBOARD_CONFIG
 
@@ -45,10 +45,10 @@ except ImportError:
     RESPONSIVE_AVAILABLE = False
     logger.warning("Módulos responsive no disponibles, usando versión básica")
 
-from utils.data_processor import normalize_text, excel_date_to_datetime
+from utils.data_processor import normalize_text, excel_date_to_datetime, capitalize_names
 
 # Lista de vistas a importar
-vista_modules = ["timeline", "tablas", "comparativo"]
+vista_modules = ["mapas", "tablas", "comparativo"]
 vistas_modules = {}
 
 def import_vista_module(module_name):
@@ -66,7 +66,7 @@ def import_vista_module(module_name):
         logger.error(f"❌ Error inesperado importando {module_name}: {str(e)}")
         return None
 
-# Importar módulos de vistas con mejor manejo de errores (SIN MAPAS)
+# Importar módulos de vistas
 for module_name in vista_modules:
     vistas_modules[module_name] = import_vista_module(module_name)
 
@@ -126,8 +126,6 @@ def load_new_datasets():
                 epizootias_df = pd.read_excel(root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
                 data_source = "root_folder"
                 logger.info("✅ Datos cargados exitosamente desde directorio raíz")
-                #st.success("✅ Archivos cargados desde directorio raíz")
-                ##st.info("💡 Recomendación: Mueva los archivos a la carpeta data/ para mejor organización")
             except Exception as e:
                 logger.warning(f"⚠️ Error al cargar desde directorio raíz: {str(e)}")
                 casos_df = None
@@ -269,8 +267,10 @@ def load_new_datasets():
         # Normalizar municipios y veredas en casos
         if 'municipio' in casos_df.columns:
             casos_df['municipio_normalizado'] = casos_df['municipio'].apply(normalize_text)
+            casos_df['municipio'] = casos_df['municipio'].apply(capitalize_names)
         if 'vereda' in casos_df.columns:
             casos_df['vereda_normalizada'] = casos_df['vereda'].apply(normalize_text)
+            casos_df['vereda'] = casos_df['vereda'].apply(capitalize_names)
         
         # Convertir fechas de casos
         if 'fecha_inicio_sintomas' in casos_df.columns:
@@ -299,8 +299,10 @@ def load_new_datasets():
         # Normalizar municipios y veredas en epizootias
         if 'municipio' in epizootias_df.columns:
             epizootias_df['municipio_normalizado'] = epizootias_df['municipio'].apply(normalize_text)
+            epizootias_df['municipio'] = epizootias_df['municipio'].apply(capitalize_names)
         if 'vereda' in epizootias_df.columns:
             epizootias_df['vereda_normalizada'] = epizootias_df['vereda'].apply(normalize_text)
+            epizootias_df['vereda'] = epizootias_df['vereda'].apply(capitalize_names)
         
         # Convertir fechas de epizootias
         if 'fecha_recoleccion' in epizootias_df.columns:
@@ -756,8 +758,22 @@ def create_responsive_metrics_display(data_filtered, colors):
         positivos = (data_filtered["epizootias"]["descripcion"] == "POSITIVO FA").sum()
         tasa_positividad = (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
     
+    # Calcular veredas afectadas
+    veredas_afectadas = 0
+    if 'vereda_normalizada' in data_filtered["casos"].columns:
+        veredas_casos = set(data_filtered["casos"]['vereda_normalizada'].dropna())
+    else:
+        veredas_casos = set()
+    
+    if 'vereda_normalizada' in data_filtered["epizootias"].columns:
+        veredas_epi = set(data_filtered["epizootias"]['vereda_normalizada'].dropna())
+    else:
+        veredas_epi = set()
+    
+    veredas_afectadas = len(veredas_casos.union(veredas_epi))
+    
     # Usar métricas nativas de Streamlit - SIEMPRE FUNCIONAN
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric(
@@ -776,12 +792,14 @@ def create_responsive_metrics_display(data_filtered, colors):
         )
     
     with col3:
-        color_letalidad = "normal"
-        if letalidad > 30:
-            color_letalidad = "inverse"
-        elif letalidad > 10:
-            color_letalidad = "off"
-            
+        st.metric(
+            label="🏘️ Veredas Afectadas",
+            value=f"{veredas_afectadas:,}",
+            delta=None,
+            help="Número de veredas con casos o epizootias"
+        )
+    
+    with col4:
         st.metric(
             label="⚰️ Tasa Letalidad",
             value=f"{letalidad:.1f}%",
@@ -789,7 +807,7 @@ def create_responsive_metrics_display(data_filtered, colors):
             help="Porcentaje de casos que resultaron en fallecimiento"
         )
     
-    with col4:
+    with col5:
         st.metric(
             label="🔴 Positividad",
             value=f"{tasa_positividad:.1f}%",
@@ -797,25 +815,66 @@ def create_responsive_metrics_display(data_filtered, colors):
             help="Porcentaje de epizootias positivas para fiebre amarilla"
         )
     
-    # Agregar información adicional debajo de las métricas
-    if total_casos > 0 or total_epizootias > 0:
-        st.markdown("---")
-        
-        # Información contextual en columnas
-        info_col1, info_col2 = st.columns(2)
-        
-        with info_col1:
-            if total_casos > 0:
-                municipios_con_casos = data_filtered["casos"]['municipio_normalizado'].nunique() if 'municipio_normalizado' in data_filtered["casos"].columns else 0
-                st.caption(f"📍 **{municipios_con_casos}** municipios con casos confirmados")
-        
-        with info_col2:
-            if total_epizootias > 0:
-                municipios_con_epi = data_filtered["epizootias"]['municipio_normalizado'].nunique() if 'municipio_normalizado' in data_filtered["epizootias"].columns else 0
-                st.caption(f"🐒 **{municipios_con_epi}** municipios con epizootias")
+    # Información de fechas de última actualización
+    st.markdown("---")
+    
+    # Calcular fechas importantes
+    ultima_fecha_caso = None
+    ultima_fecha_epi_positiva = None
+    
+    if not data_filtered["casos"].empty and 'fecha_inicio_sintomas' in data_filtered["casos"].columns:
+        fechas_casos = data_filtered["casos"]['fecha_inicio_sintomas'].dropna()
+        if not fechas_casos.empty:
+            ultima_fecha_caso = fechas_casos.max()
+    
+    if not data_filtered["epizootias"].empty and 'fecha_recoleccion' in data_filtered["epizootias"].columns:
+        epi_positivas = data_filtered["epizootias"][data_filtered["epizootias"]['descripcion'] == 'POSITIVO FA']
+        if not epi_positivas.empty:
+            fechas_positivas = epi_positivas['fecha_recoleccion'].dropna()
+            if not fechas_positivas.empty:
+                ultima_fecha_epi_positiva = fechas_positivas.max()
+    
+    # Mostrar información de fechas
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if ultima_fecha_caso:
+            st.metric(
+                label="📅 Último Caso",
+                value=ultima_fecha_caso.strftime("%Y-%m-%d"),
+                help="Fecha del último caso confirmado"
+            )
+        else:
+            st.metric(
+                label="📅 Último Caso",
+                value="Sin datos",
+                help="No hay fechas de casos disponibles"
+            )
+    
+    with col2:
+        if ultima_fecha_epi_positiva:
+            st.metric(
+                label="🔴 Última Epizootia +",
+                value=ultima_fecha_epi_positiva.strftime("%Y-%m-%d"),
+                help="Fecha de la última epizootia positiva"
+            )
+        else:
+            st.metric(
+                label="🔴 Última Epizootia +",
+                value="Sin datos",
+                help="No hay epizootias positivas registradas"
+            )
+    
+    with col3:
+        # Fecha de actualización del dashboard
+        st.metric(
+            label="🔄 Actualización",
+            value=datetime.now().strftime("%Y-%m-%d"),
+            help="Fecha de última actualización del dashboard"
+        )
 
 def main():
-    """Aplicación principal del dashboard completamente responsive SIN MAPAS."""
+    """Aplicación principal del dashboard simplificado."""
     # Configurar página con responsividad máxima
     configure_page_responsive()
 
@@ -826,8 +885,7 @@ def main():
     except ImportError:
         # Fallback básico
         with st.sidebar:
-            st.title("🦟 Fiebre Amarilla")
-            st.subheader("Vigilancia Epidemiológica")
+            st.title("Dashboard Tolima")
 
     # Cargar datos con indicadores responsive
     data = load_new_datasets()
@@ -864,7 +922,7 @@ def main():
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<p class="subtitle">Análisis Integrado de Casos Confirmados y Epizootias</p>',
+        '<p class="subtitle">Vigilancia Epidemiológica Integrada</p>',
         unsafe_allow_html=True,
     )
 
@@ -874,22 +932,22 @@ def main():
     # Métricas principales responsive
     create_responsive_metrics_display(data_filtered, COLORS)
 
-    # Pestañas principales con contenido responsive (SIN MAPAS)
+    # Pestañas principales simplificadas
     tab1, tab2, tab3 = st.tabs([
-        "📈 Línea de Tiempo", 
+        "🗺️ Mapas", 
         "📋 Tablas Detalladas", 
         "📊 Análisis Comparativo"
     ])
 
     with tab1:
-        if "timeline" in vistas_modules and vistas_modules["timeline"]:
+        if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
-                vistas_modules["timeline"].show(data_filtered, filters, COLORS)
+                vistas_modules["mapas"].show(data_filtered, filters, COLORS)
             except Exception as e:
-                st.error(f"Error en módulo de timeline: {str(e)}")
-                st.info("🔧 Vista de timeline simplificada en desarrollo.")
+                st.error(f"Error en módulo de mapas: {str(e)}")
+                st.info("🗺️ Vista de mapas en desarrollo.")
         else:
-            st.info("🔧 Módulo de timeline en desarrollo.")
+            st.info("🗺️ Vista de mapas en desarrollo.")
 
     with tab2:
         if "tablas" in vistas_modules and vistas_modules["tablas"]:
@@ -929,7 +987,7 @@ def main():
             </div>
             <div style="opacity: 0.8;">
                 Última actualización: {datetime.now().strftime('%Y-%m-%d %H:%M')} | 
-                Versión 2.0 Responsive (Sin Mapas)
+                Versión 2.1 Optimizada
             </div>
         </div>
         """,

@@ -1,7 +1,7 @@
 """
-Configuraciones globales del dashboard de Fiebre Amarilla.
-Actualizado para los nuevos datos de casos confirmados y epizootias.
-VERSIÓN SIN MAPAS - Eliminadas referencias a funcionalidad de mapas.
+Configuraciones globales del dashboard de Fiebre Amarilla v2.1.
+OPTIMIZADO: Eliminadas referencias a timeline y funcionalidades no usadas.
+ENFOQUE: Dashboard informativo simplificado.
 """
 
 from pathlib import Path
@@ -17,7 +17,7 @@ DATA_FILES = {
     "casos_confirmados": "BD_positivos.xlsx",
     "epizootias": "Información_Datos_FA.xlsx",
     "casos_sheet": "ACUMU",
-    "epizootias_sheet": "Base de Datos"
+    "epizootias_sheet": "Base de Datos",
 }
 
 # Configuración de la aplicación
@@ -32,88 +32,88 @@ DASHBOARD_CONFIG = {
 
 # Mapeos de columnas para casos confirmados
 CASOS_COLUMNS_MAP = {
-    'edad_': 'edad',
-    'sexo_': 'sexo', 
-    'vereda_': 'vereda',
-    'nmun_proce': 'municipio',
-    'cod_ase_': 'eps',
-    'Condición Final': 'condicion_final',
-    'Inicio de sintomas': 'fecha_inicio_sintomas'
+    "edad_": "edad",
+    "sexo_": "sexo",
+    "vereda_": "vereda",
+    "nmun_proce": "municipio",
+    "cod_ase_": "eps",
+    "Condición Final": "condicion_final",
+    "Inicio de sintomas": "fecha_inicio_sintomas",
 }
 
 # Mapeos de columnas para epizootias
 EPIZOOTIAS_COLUMNS_MAP = {
-    'MUNICIPIO': 'municipio',
-    'VEREDA': 'vereda',
-    'FECHA RECOLECCIÓN ': 'fecha_recoleccion',
-    'PROVENIENTE ': 'proveniente',
-    'DESCRIPCIÓN': 'descripcion'
+    "MUNICIPIO": "municipio",
+    "VEREDA": "vereda",
+    "FECHA RECOLECCIÓN ": "fecha_recoleccion",
+    "PROVENIENTE ": "proveniente",
+    "DESCRIPCIÓN": "descripcion",
 }
 
 # Mapeos de valores para casos confirmados
 CONDICION_FINAL_MAP = {
-    'Fallecido': {
-        'color': '#E51937',  # COLORS['danger']
-        'icon': '⚰️', 
-        'categoria': 'Crítico',
-        'descripcion': 'Paciente fallecido'
+    "Fallecido": {
+        "color": "#E51937",  # COLORS['danger']
+        "icon": "⚰️",
+        "categoria": "Crítico",
+        "descripcion": "Paciente fallecido",
     },
-    'Vivo': {
-        'color': '#509E2F',  # COLORS['success']
-        'icon': '💚', 
-        'categoria': 'Bueno',
-        'descripcion': 'Paciente vivo'
-    }
+    "Vivo": {
+        "color": "#509E2F",  # COLORS['success']
+        "icon": "💚",
+        "categoria": "Bueno",
+        "descripcion": "Paciente vivo",
+    },
 }
 
 # Mapeos de valores para epizootias
 DESCRIPCION_EPIZOOTIAS_MAP = {
-    'POSITIVO FA': {
-        'color': '#E51937',  # COLORS['danger']
-        'icon': '🔴', 
-        'categoria': 'Positivo',
-        'descripcion': 'Muestra positiva para fiebre amarilla'
+    "POSITIVO FA": {
+        "color": "#E51937",  # COLORS['danger']
+        "icon": "🔴",
+        "categoria": "Positivo",
+        "descripcion": "Muestra positiva para fiebre amarilla",
     },
-    'NEGATIVO FA': {
-        'color': '#509E2F',  # COLORS['success']
-        'icon': '🟢', 
-        'categoria': 'Negativo',
-        'descripcion': 'Muestra negativa para fiebre amarilla'
+    "NEGATIVO FA": {
+        "color": "#509E2F",  # COLORS['success']
+        "icon": "🟢",
+        "categoria": "Negativo",
+        "descripcion": "Muestra negativa para fiebre amarilla",
     },
-    'NO APTA': {
-        'color': '#F7941D',  # COLORS['warning']
-        'icon': '🟡', 
-        'categoria': 'No apta',
-        'descripcion': 'Muestra no apta para análisis'
+    "NO APTA": {
+        "color": "#F7941D",  # COLORS['warning']
+        "icon": "🟡",
+        "categoria": "No apta",
+        "descripcion": "Muestra no apta para análisis",
     },
-    'EN ESTUDIO': {
-        'color': '#4682B4',  # COLORS['info']
-        'icon': '🔵', 
-        'categoria': 'En estudio',
-        'descripcion': 'Muestra en proceso de análisis'
-    }
+    "EN ESTUDIO": {
+        "color": "#4682B4",  # COLORS['info']
+        "icon": "🔵",
+        "categoria": "En estudio",
+        "descripcion": "Muestra en proceso de análisis",
+    },
 }
 
 # Mapeos de fuentes de epizootias
 PROVENIENTE_MAP = {
-    'VIGILANCIA COMUNITARIA (EPIZOOTIAS)': {
-        'abreviacion': 'Vigilancia Com.',
-        'tipo': 'Comunitaria',
-        'descripcion': 'Reporte de la comunidad'
+    "VIGILANCIA COMUNITARIA (EPIZOOTIAS)": {
+        "abreviacion": "Vigilancia Com.",
+        "tipo": "Comunitaria",
+        "descripcion": "Reporte de la comunidad",
     },
-    'VIGILANCIA PROVENIENTE DE PROCESOS DE INCAUTACIÓN O RESCATE DE FAUNA SILVETRE': {
-        'abreviacion': 'Incautación',
-        'tipo': 'Institucional',
-        'descripcion': 'Incautación o rescate de fauna'
-    }
+    "VIGILANCIA PROVENIENTE DE PROCESOS DE INCAUTACIÓN O RESCATE DE FAUNA SILVETRE": {
+        "abreviacion": "Incautación",
+        "tipo": "Institucional",
+        "descripcion": "Incautación o rescate de fauna",
+    },
 }
 
 # Mapeos de sexo
 SEXO_MAP = {
-    'M': 'Masculino',
-    'F': 'Femenino',
-    'Masculino': 'Masculino',
-    'Femenino': 'Femenino'
+    "M": "Masculino",
+    "F": "Femenino",
+    "Masculino": "Masculino",
+    "Femenino": "Femenino",
 }
 
 # Grupos de edad predefinidos
@@ -127,15 +127,15 @@ GRUPOS_EDAD = [
     {"min": 50, "max": 59, "label": "50-59 años", "categoria": "Adulto Mayor"},
     {"min": 60, "max": 69, "label": "60-69 años", "categoria": "Adulto Mayor"},
     {"min": 70, "max": 79, "label": "70-79 años", "categoria": "Adulto Mayor"},
-    {"min": 80, "max": 120, "label": "80+ años", "categoria": "Adulto Mayor"}
+    {"min": 80, "max": 120, "label": "80+ años", "categoria": "Adulto Mayor"},
 ]
 
-# Configuraciones de visualización (SIN MAPAS)
+# Configuraciones de visualización (SIN MAPAS, SIN TIMELINE)
 VISUALIZATION_CONFIG = {
     "max_items_chart": 15,  # Máximo de elementos en gráficos
     "default_chart_height": 400,
     "date_format": "%Y-%m-%d",
-    "datetime_format": "%Y-%m-%d %H:%M"
+    "datetime_format": "%Y-%m-%d %H:%M",
 }
 
 # Configuración de métricas principales
@@ -143,64 +143,65 @@ METRICAS_CONFIG = {
     "casos_confirmados": {
         "titulo": "Casos Confirmados",
         "icon": "🦠",
-        "color": "danger"
+        "color": "danger",
     },
-    "epizootias": {
-        "titulo": "Epizootias",
-        "icon": "🐒", 
-        "color": "warning"
-    },
+    "epizootias": {"titulo": "Epizootias", "icon": "🐒", "color": "warning"},
+    "veredas_afectadas": {"titulo": "Veredas Afectadas", "icon": "🏘️", "color": "info"},
     "letalidad": {
         "titulo": "Tasa de Letalidad",
         "icon": "⚰️",
         "color": "danger",
-        "formato": "porcentaje"
+        "formato": "porcentaje",
     },
     "positividad": {
         "titulo": "Positividad Epizootias",
         "icon": "🔴",
         "color": "warning",
-        "formato": "porcentaje"
-    }
+        "formato": "porcentaje",
+    },
 }
 
-# Configuración de filtros
+# Configuración de filtros (JERARQUÍA CLARA)
 FILTROS_CONFIG = {
     "municipio": {
-        "titulo": "📍 Seleccionar Municipio",
+        "titulo": "📍 MUNICIPIO (Principal)",
         "help": "Seleccione un municipio para filtrar los datos",
-        "default": "Todos"
+        "default": "Todos",
+        "jerarquia": 1,  # Prioridad máxima
     },
     "vereda": {
-        "titulo": "🏘️ Seleccionar Vereda",
+        "titulo": "🏘️ VEREDA (Secundario)",
         "help": "Primero seleccione un municipio para ver sus veredas",
-        "default": "Todas"
+        "default": "Todas",
+        "jerarquia": 2,  # Prioridad alta
     },
     "tipo_datos": {
         "titulo": "📋 Mostrar",
         "opciones": ["Casos Confirmados", "Epizootias"],
-        "default": ["Casos Confirmados", "Epizootias"]
+        "default": ["Casos Confirmados", "Epizootias"],
+        "jerarquia": 3,  # Prioridad media
     },
     "fecha_rango": {
         "titulo": "📅 Rango de Fechas",
-        "help": "Seleccione el rango de fechas para analizar"
-    }
+        "help": "Seleccione el rango de fechas para analizar",
+        "jerarquia": 3,  # Prioridad media
+    },
 }
 
-# Configuración de pestañas (SIN MAPAS)
+# Configuración de pestañas (OPTIMIZADO)
 TABS_CONFIG = {
-    "timeline": {
-        "titulo": "📈 Línea de Tiempo",
-        "descripcion": "Evolución temporal de casos vs epizootias"
+    "mapas": {
+        "titulo": "🗺️ Mapas",
+        "descripcion": "Distribución geográfica (próximamente)",
     },
     "tablas": {
-        "titulo": "📋 Tablas Detalladas", 
-        "descripcion": "Datos detallados en formato tabular"
+        "titulo": "📋 Tablas Detalladas",
+        "descripcion": "Fichas informativas y datos detallados",
     },
     "comparativo": {
         "titulo": "📊 Análisis Comparativo",
-        "descripcion": "Comparación y análisis cruzado de datos"
-    }
+        "descripcion": "Comparación básica entre casos y epizootias",
+    },
 }
 
 # Configuración de logging
@@ -211,15 +212,15 @@ LOGGING_CONFIG = {
 
 # Configuración de archivos de salida
 OUTPUT_CONFIG = {
-    "export_formats": ["CSV", "Excel", "PDF"],
+    "export_formats": ["CSV", "Excel"],  # Removido PDF por simplicidad
     "temp_folder": "temp",
-    "reports_folder": "reports"
+    "reports_folder": "reports",
 }
 
 # Textos informativos
 TEXTOS_INFO = {
     "bienvenida": """
-    Este dashboard presenta el análisis integrado de casos confirmados de fiebre amarilla 
+    Dashboard informativo para el análisis de casos confirmados de fiebre amarilla 
     y epizootias registradas en el departamento del Tolima.
     """,
     "casos_confirmados": """
@@ -232,18 +233,37 @@ TEXTOS_INFO = {
     """,
     "interpretacion_letalidad": """
     La tasa de letalidad indica el porcentaje de casos confirmados que resultaron en fallecimiento.
-    Una tasa alta puede indicar diagnóstico tardío o formas graves de la enfermedad.
     """,
     "interpretacion_positividad": """
     La positividad en epizootias indica el porcentaje de muestras que resultaron positivas 
     para fiebre amarilla, señalando circulación viral en fauna silvestre.
-    """
+    """,
+    "veredas_afectadas": """
+    El número de veredas afectadas muestra la distribución geográfica de los eventos 
+    de fiebre amarilla en el territorio.
+    """,
 }
 
-# Configuración de colores por departamento (si se requiere)
+# Configuración de colores por departamento
 DEPARTAMENTOS_CONFIG = {
     "TOLIMA": {
         "color_principal": "#7D0F2B",
-        "color_secundario": "#F2A900"
+        "color_secundario": "#F2A900",
+        "color_acento": "#5A4214",
     }
+}
+
+# Versión del dashboard
+VERSION_INFO = {
+    "version": "2.1.0",
+    "descripcion": "Dashboard Informativo Optimizado",
+    "fecha_release": "2025-01-02",
+    "características": [
+        "Diseño responsive",
+        "Filtros jerárquicos",
+        "Fichas informativas",
+        "Análisis comparativo básico",
+        "Exportación de datos",
+        "Vista de mapas preparada",
+    ],
 }

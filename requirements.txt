@@ -1,25 +1,31 @@
-# Dependencias esenciales del Dashboard Fiebre Amarilla
-# Instalar con: pip install -r requirements_minimal.txt
+# Dependencias optimizadas del Dashboard Fiebre Amarilla v2.1
+# Instalar con: pip install -r requirements.txt
 
 # Framework principal
-streamlit>=1.25.0
+streamlit>=1.28.0
 
 # Manipulación de datos
-pandas>=1.5.0
-numpy>=1.22.0
+pandas>=2.0.0
+numpy>=1.24.0
 
 # Visualización
-plotly>=5.13.0
-matplotlib>=3.6.0
+plotly>=5.17.0
 
 # Lectura de archivos Excel
-openpyxl>=3.0.10
+openpyxl>=3.1.0
 
-# Manipulación de imágenes
-Pillow>=9.3.0
+# Manipulación de imágenes (para logos)
+Pillow>=10.0.0
 
-# Utilidades
-requests>=2.28.1
+# Utilidades de red (para Google Drive opcional)
+requests>=2.31.0
 
-# Estadísticas (para análisis avanzados)
-scipy>=1.9.0
+# Procesamiento de texto (unicodedata incluido en Python estándar)
+# No requiere instalación adicional
+
+# DEPENDENCIAS REMOVIDAS (ya no necesarias):
+# - matplotlib (reemplazado completamente por Plotly)
+# - scipy (análisis estadístico avanzado removido)
+# - seaborn (no usado en versión simplificada)
+# - folium (mapas pendientes para futuro)
+# - geopandas (mapas pendientes para futuro)
