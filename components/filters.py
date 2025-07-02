@@ -471,55 +471,19 @@ def create_advanced_filters(data):
     }
 
 
-def create_consolidated_filter_info(filters_location, filters_content, filters_advanced):
-    """
-    Crea información consolidada de filtros en una sola caja compacta.
-
-    Args:
-        filters_location (dict): Filtros de ubicación
-        filters_content (dict): Filtros de contenido
-        filters_advanced (dict): Filtros avanzados
-    """
-    # Construir información consolidada
-    info_lines = []
-    
-    # Información sobre datos mostrados (siempre ambos)
-    info_lines.append("📋 <strong>Datos:</strong> Casos y Epizootias")
-    
-    # Información sobre fechas disponibles
-    if filters_content.get("fecha_min") and filters_content.get("fecha_max"):
-        fecha_min_str = filters_content["fecha_min"].strftime("%Y-%m-%d")
-        fecha_max_str = filters_content["fecha_max"].strftime("%Y-%m-%d")
-        info_lines.append(f"📅 <strong>Disponibles:</strong> {fecha_min_str} a {fecha_max_str}")
-    
-    # Información sobre período seleccionado
-    if filters_content.get("fecha_rango") and len(filters_content["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        dias_seleccionados = (fecha_fin - fecha_inicio).days + 1
-        info_lines.append(f"📊 <strong>Período:</strong> {dias_seleccionados} días")
-    
-    # Mostrar caja consolidada si hay información
-    if info_lines:
-        info_content = "<br>".join(info_lines)
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-info-box">
-                <div class="filter-info-title">ℹ️ Información de Datos</div>
-                {info_content}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+# ELIMINADA: Función de información consolidada según solicitud
 
 
-def create_filter_summary(filters_location, filters_content, filters_advanced):
+def create_filter_summary(filters_location, filters_content, filters_advanced, data):
     """
     Crea un resumen responsive de los filtros aplicados.
+    ACTUALIZADA: Solo muestra período y edad cuando son diferentes del rango completo.
 
     Args:
         filters_location (dict): Filtros de ubicación
         filters_content (dict): Filtros de contenido
         filters_advanced (dict): Filtros avanzados
+        data (dict): Datos originales para comparar rangos
 
     Returns:
         list: Lista de filtros activos
@@ -533,10 +497,18 @@ def create_filter_summary(filters_location, filters_content, filters_advanced):
     if filters_location["vereda_display"] != "Todas":
         active_filters.append(f"🏘️ Vereda: {filters_location['vereda_display']}")
 
-    # Filtros de contenido
+    # Filtros de contenido - SOLO si son diferentes del rango completo
     if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
         fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        active_filters.append(f"📅 Período: {fecha_inicio} - {fecha_fin}")
+        
+        # Comparar con el rango completo disponible
+        fecha_min_original = filters_content.get("fecha_min")
+        fecha_max_original = filters_content.get("fecha_max")
+        
+        # Solo agregar si es diferente del rango completo
+        if (fecha_min_original and fecha_max_original and 
+            (fecha_inicio != fecha_min_original.date() or fecha_fin != fecha_max_original.date())):
+            active_filters.append(f"📅 Período: {fecha_inicio} - {fecha_fin}")
 
     # Filtros avanzados (menor prioridad en el resumen)
     if filters_advanced["condicion_final"] != "Todas":
@@ -545,9 +517,21 @@ def create_filter_summary(filters_location, filters_content, filters_advanced):
     if filters_advanced["sexo"] != "Todos":
         active_filters.append(f"👤 Sexo: {filters_advanced['sexo']}")
 
+    # Edad - SOLO si es diferente del rango completo
     if filters_advanced["edad_rango"]:
-        edad_min, edad_max = filters_advanced["edad_rango"]
-        active_filters.append(f"🎂 Edad: {edad_min}-{edad_max} años")
+        edad_min_sel, edad_max_sel = filters_advanced["edad_rango"]
+        
+        # Obtener rango completo de edad de los datos
+        edad_min_original = 0
+        edad_max_original = 100
+        
+        if not data["casos"].empty and "edad" in data["casos"].columns:
+            edad_min_original = int(data["casos"]["edad"].min()) if not data["casos"]["edad"].isna().all() else 0
+            edad_max_original = int(data["casos"]["edad"].max()) if not data["casos"]["edad"].isna().all() else 100
+        
+        # Solo agregar si es diferente del rango completo
+        if edad_min_sel != edad_min_original or edad_max_sel != edad_max_original:
+            active_filters.append(f"🎂 Edad: {edad_min_sel}-{edad_max_sel} años")
 
     if filters_advanced["resultado_epizootia"] != "Todos":
         resultado_short = (
@@ -724,37 +708,25 @@ def reset_all_filters():
     Resetea todos los filtros a sus valores por defecto.
     CORREGIDO: Manejo seguro de session_state sin errores.
     """
-    # Lista de todas las claves de filtros y sus valores por defecto
-    filter_defaults = {
-        "municipio_filter": "Todos",
-        "vereda_filter": "Todas",
-        "fecha_filter": None,  # Se manejará especialmente
-        "condicion_filter": "Todas",
-        "sexo_filter": "Todos",
-        "edad_filter": None,  # Se manejará especialmente
-        "resultado_filter": "Todos",
-        "fuente_filter": "Todas",
-    }
+    # Lista de todas las claves de filtros
+    filter_keys = [
+        "municipio_filter",
+        "vereda_filter", 
+        "fecha_filter",
+        "condicion_filter",
+        "sexo_filter",
+        "edad_filter",
+        "resultado_filter",
+        "fuente_filter",
+    ]
 
     # Resetear cada filtro en session_state de manera segura
-    for key, default_value in filter_defaults.items():
-        try:
-            if key in st.session_state:
-                # Solo actualizar si el valor es diferente para evitar re-runs innecesarios
-                if st.session_state[key] != default_value:
-                    if key == "fecha_filter":
-                        # Para fechas, simplemente eliminar la clave
-                        del st.session_state[key]
-                    elif key == "edad_filter":
-                        # Para edad, simplemente eliminar la clave
-                        if key in st.session_state:
-                            del st.session_state[key]
-                    else:
-                        # Para otros filtros, asignar valor por defecto
-                        st.session_state[key] = default_value
-        except Exception as e:
-            # Manejo silencioso de errores - continuar con otros filtros
-            continue
+    for key in filter_keys:
+        if key in st.session_state:
+            try:
+                del st.session_state[key]
+            except Exception:
+                continue
 
 
 def create_filter_export_options(data_filtered):
@@ -831,7 +803,7 @@ def create_filter_export_options(data_filtered):
 def create_complete_filter_system(data):
     """
     Crea el sistema completo de filtros responsive con JERARQUÍA CLARA.
-    MODIFICADO: Añadida información consolidada y copyright al final.
+    MODIFICADO: Eliminada información consolidada, copyright al final.
 
     Args:
         data (dict): Datos cargados
@@ -844,12 +816,9 @@ def create_complete_filter_system(data):
     filters_content = create_content_filters(data)  # PRIORIDAD MEDIA
     filters_advanced = create_advanced_filters(data)  # PRIORIDAD BAJA
 
-    # Mostrar información consolidada de filtros
-    create_consolidated_filter_info(filters_location, filters_content, filters_advanced)
-
-    # Crear resumen de filtros activos
+    # Crear resumen de filtros activos (pasando data para comparar rangos)
     active_filters = create_filter_summary(
-        filters_location, filters_content, filters_advanced
+        filters_location, filters_content, filters_advanced, data
     )
 
     # Mostrar filtros activos en sidebar
@@ -894,8 +863,8 @@ def create_complete_filter_system(data):
         data, filters_location, filters_content, filters_advanced
     )
 
-    # Mostrar opciones de exportación (jerarquía baja)
-    create_filter_export_options(data_filtered)
+    # Mostrar opciones de exportación (jerarquía baja) - ELIMINADO para consolidar
+    # create_filter_export_options(data_filtered)
     
     # AGREGAR COPYRIGHT AL FINAL
     from components.sidebar import add_copyright

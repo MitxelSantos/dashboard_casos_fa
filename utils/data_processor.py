@@ -1,7 +1,7 @@
 """
 Procesamiento y filtrado de datos del dashboard de Fiebre Amarilla.
 Actualizado para manejar casos confirmados y epizootias con normalización robusta.
-AGREGADO: Función capitalize_names para formateo de nombres.
+CORREGIDO: Función de fechas para formato DD/MM/YYYY.
 """
 
 import pandas as pd
@@ -97,10 +97,10 @@ def capitalize_names(text):
 def excel_date_to_datetime(excel_date):
     """
     Convierte fecha de Excel a datetime.
-    Maneja tanto números seriales como fechas ya convertidas.
+    CORREGIDO: Maneja formato DD/MM/YYYY correctamente.
 
     Args:
-        excel_date: Número de fecha de Excel o datetime
+        excel_date: Número de fecha de Excel, datetime, o string
 
     Returns:
         datetime: Fecha convertida o None si no es válida
@@ -110,22 +110,53 @@ def excel_date_to_datetime(excel_date):
         if isinstance(excel_date, (pd.Timestamp, datetime)):
             return excel_date
 
-        # Si es string, intentar parsear
-        if isinstance(excel_date, str):
-            return pd.to_datetime(excel_date, errors="coerce")
-
         # Si está vacío o es NaN
         if pd.isna(excel_date) or excel_date == "":
             return None
+
+        # Si es string, intentar parsear con formato DD/MM/YYYY
+        if isinstance(excel_date, str):
+            # Intentar diferentes formatos comunes
+            formatos_fecha = [
+                "%d/%m/%Y",      # DD/MM/YYYY
+                "%d/%m/%y",      # DD/MM/YY  
+                "%d-%m-%Y",      # DD-MM-YYYY
+                "%d-%m-%y",      # DD-MM-YY
+                "%Y-%m-%d",      # YYYY-MM-DD
+                "%d.%m.%Y",      # DD.MM.YYYY
+                "%d.%m.%y",      # DD.MM.YY
+            ]
+            
+            for formato in formatos_fecha:
+                try:
+                    fecha_convertida = datetime.strptime(excel_date.strip(), formato)
+                    # Si el año es menor a 50, asumimos que es 20XX, sino 19XX
+                    if fecha_convertida.year < 50:
+                        fecha_convertida = fecha_convertida.replace(year=fecha_convertida.year + 2000)
+                    elif fecha_convertida.year < 100:
+                        fecha_convertida = fecha_convertida.replace(year=fecha_convertida.year + 1900)
+                    return fecha_convertida
+                except ValueError:
+                    continue
+            
+            # Si no funciona ningún formato, intentar pandas
+            try:
+                return pd.to_datetime(excel_date, dayfirst=True, errors="coerce")
+            except:
+                return None
 
         # Si es número, convertir desde formato Excel
         if isinstance(excel_date, (int, float)):
             # Excel cuenta días desde 1900-01-01, pero tiene un bug del año bisiesto
             # Usar 1899-12-30 como origen para corregir
-            return pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
+            try:
+                return pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
+            except:
+                return None
 
         return None
-    except:
+    except Exception as e:
+        print(f"Error procesando fecha: {excel_date} - {str(e)}")
         return None
 
 
@@ -238,11 +269,17 @@ def process_casos_dataframe(df):
         )
         df_processed["vereda"] = df_processed["vereda"].apply(capitalize_names)
 
-    # Procesar fechas
+    # Procesar fechas con formato DD/MM/YYYY
     if "fecha_inicio_sintomas" in df_processed.columns:
+        print("Procesando fechas de casos...")
         df_processed["fecha_inicio_sintomas"] = df_processed[
             "fecha_inicio_sintomas"
         ].apply(excel_date_to_datetime)
+        
+        # Debug: mostrar algunas fechas procesadas
+        fechas_validas = df_processed["fecha_inicio_sintomas"].dropna()
+        if not fechas_validas.empty:
+            print(f"Fechas procesadas - Mínima: {fechas_validas.min()}, Máxima: {fechas_validas.max()}")
 
     # Crear grupos de edad
     if "edad" in df_processed.columns:
@@ -288,11 +325,17 @@ def process_epizootias_dataframe(df):
         )
         df_processed["vereda"] = df_processed["vereda"].apply(capitalize_names)
 
-    # Procesar fechas
+    # Procesar fechas con formato DD/MM/YYYY
     if "fecha_recoleccion" in df_processed.columns:
+        print("Procesando fechas de epizootias...")
         df_processed["fecha_recoleccion"] = df_processed["fecha_recoleccion"].apply(
             excel_date_to_datetime
         )
+        
+        # Debug: mostrar algunas fechas procesadas
+        fechas_validas = df_processed["fecha_recoleccion"].dropna()
+        if not fechas_validas.empty:
+            print(f"Fechas de epizootias - Mínima: {fechas_validas.min()}, Máxima: {fechas_validas.max()}")
 
     # Normalizar descripción
     if "descripcion" in df_processed.columns:
