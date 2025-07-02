@@ -123,39 +123,6 @@ def create_logo_placeholder():
         unsafe_allow_html=True,
     )
 
-
-def show_data_update_info():
-    """
-    Muestra información mínima sobre actualización de datos.
-    """
-    # Verificar fechas de modificación de archivos principales
-    files_to_check = [
-        (DATA_DIR / "BD_positivos.xlsx", "Casos"),
-        (ROOT_DIR / "BD_positivos.xlsx", "Casos"),
-        (DATA_DIR / "Información_Datos_FA.xlsx", "Epizootias"),
-        (ROOT_DIR / "Información_Datos_FA.xlsx", "Epizootias"),
-    ]
-
-    latest_update = None
-    for file_path, file_type in files_to_check:
-        if file_path.exists():
-            import os
-
-            modified_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-
-            if latest_update is None or modified_time > latest_update:
-                latest_update = modified_time
-            break
-
-    if latest_update:
-        st.sidebar.caption(f"📅 {latest_update.strftime('%d/%m/%Y')}")
-
-    # Botón de recarga minimalista
-    if st.sidebar.button("🔄", help="Actualizar datos"):
-        st.cache_data.clear()
-        st.rerun()
-
-
 def add_copyright():
     """
     Agrega copyright minimalista al final de la sidebar.
@@ -170,10 +137,10 @@ def add_copyright():
             padding: 0.5rem 0;
         ">
             <div style="margin-bottom: 4px;">
-                Dashboard Fiebre Amarilla
+                Desarrollado por: Ing. Jose Miguel Santos
             </div>
             <div style="opacity: 0.8;">
-                © 2025 Ing. Jose Miguel Santos
+                © 2025 Secretaria de salud del Tolima
             </div>
         </div>
         """,
@@ -232,5 +199,4 @@ def init_responsive_sidebar():
     """
     add_responsive_css()
     create_sidebar()
-    show_data_update_info()
     add_copyright()

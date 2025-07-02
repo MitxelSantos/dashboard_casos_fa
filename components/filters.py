@@ -165,25 +165,13 @@ def create_hierarchical_filters(data):
     # Aplicar CSS responsive
     create_responsive_filters_ui()
 
-    # FILTROS PRIMARIOS - JERARQUÍA ALTA
-    st.sidebar.markdown(
-        """
-        <div class="filter-primary">
-            <h3 style="color: #7D0F2B; margin: 0 0 1rem 0; font-size: 1.1rem;">
-                🏛️ FILTROS PRINCIPALES
-            </h3>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     # Filtro de municipio con mejor UX (PRIORIDAD 1)
     municipio_options = ["Todos"] + [
         data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
     ]
 
     municipio_selected = st.sidebar.selectbox(
-        "📍 **MUNICIPIO** (Principal):",
+        "📍 **MUNICIPIO**:",
         municipio_options,
         key="municipio_filter",
         help="Seleccione un municipio específico para filtrar los datos",
@@ -229,7 +217,7 @@ def create_hierarchical_filters(data):
         )
 
     vereda_selected = st.sidebar.selectbox(
-        "🏘️ **VEREDA** (Secundario):",
+        "🏘️ **VEREDA**:",
         vereda_options,
         key="vereda_filter",
         disabled=vereda_disabled,
@@ -274,16 +262,6 @@ def create_content_filters(data):
     """
     # Sección de filtros de contenido (jerarquía media)
     st.sidebar.markdown("---")
-    st.sidebar.markdown(
-        """
-        <div class="filter-secondary">
-            <h4 style="color: #5A4214; margin: 0 0 0.75rem 0; font-size: 1rem;">
-                📊 Filtros de Contenido
-            </h4>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # Filtro de tipo de datos con mejor descripción
     tipo_datos = st.sidebar.multiselect(
@@ -826,35 +804,6 @@ def create_filter_export_options(data_filtered):
                 )
 
 
-def show_filter_info():
-    """
-    Muestra información responsive sobre cómo usar los filtros - JERARQUÍA BAJA.
-    """
-    with st.sidebar.expander("ℹ️ Información sobre Filtros"):
-        st.markdown(
-            """
-            **🏛️ Filtros Principales:**
-            - **Municipio**: Filtro primario geográfico
-            - **Vereda**: Depende del municipio seleccionado
-            
-            **📊 Filtros de Contenido:**
-            - **Tipo de datos**: Casos, epizootias o ambos
-            - **Fechas**: Período temporal de análisis
-            
-            **🔧 Filtros Adicionales:**
-            - Análisis más específicos por características
-            - Se combinan con filtros principales
-            
-            **💡 Jerarquía de Filtros:**
-            1. **Municipio** (Prioridad máxima)
-            2. **Vereda** (Dependiente del municipio)
-            3. **Contenido** (Tipo de datos y fechas)
-            4. **Adicionales** (Características específicas)
-            """,
-            help="Información detallada sobre el uso de filtros",
-        )
-
-
 def create_complete_filter_system(data):
     """
     Crea el sistema completo de filtros responsive con JERARQUÍA CLARA.
@@ -919,10 +868,7 @@ def create_complete_filter_system(data):
 
     # Mostrar opciones de exportación (jerarquía baja)
     create_filter_export_options(data_filtered)
-
-    # Mostrar información sobre filtros (jerarquía baja)
-    show_filter_info()
-
+    
     # Combinar todos los filtros en un solo diccionario
     all_filters = {
         **filters_location,

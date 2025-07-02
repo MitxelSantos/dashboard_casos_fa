@@ -28,11 +28,10 @@ def show(data_filtered, filters, colors):
         <p>Esta sección está preparada para mostrar visualizaciones geográficas interactivas del departamento del Tolima.</p>
         <p><strong>Próximamente:</strong></p>
         <ul>
-            <li>📍 Mapa del departamento del Tolima con división municipal</li>
+            <li>📍 Mapa del departamento del Tolima con división municipal y veredal</li>
             <li>🦠 Distribución geográfica de casos confirmados</li>
             <li>🐒 Ubicación de epizootias reportadas</li>
             <li>🔥 Mapas de calor por densidad de eventos</li>
-            <li>📊 Análisis espacial interactivo</li>
         </ul>
     </div>
     """,
@@ -86,36 +85,8 @@ def show(data_filtered, filters, colors):
                 help="Número total de veredas con casos o epizootias",
             )
 
-        # Lista de municipios afectados
-        st.subheader("📋 Municipios Afectados")
-
-        municipios_todos = set()
-        if not casos.empty and "municipio" in casos.columns:
-            municipios_todos.update(casos["municipio"].dropna())
-        if not epizootias.empty and "municipio" in epizootias.columns:
-            municipios_todos.update(epizootias["municipio"].dropna())
-
-        if municipios_todos:
-            municipios_lista = sorted(list(municipios_todos))
-
-            # Mostrar en columnas para mejor organización
-            num_cols = 3
-            cols = st.columns(num_cols)
-
-            for i, municipio in enumerate(municipios_lista):
-                col_idx = i % num_cols
-                with cols[col_idx]:
-                    st.markdown(f"• **{municipio}**")
-        else:
-            st.info("No hay municipios con datos en los filtros actuales.")
-
-    else:
-        st.info(
-            "No hay datos disponibles con los filtros actuales para mostrar estadísticas geográficas."
-        )
-
     # Información técnica para desarrolladores
-    with st.expander("🔧 Información Técnica (Desarrollo)"):
+    with st.expander("🔧 Información Técnica (Para el desarrollo)"):
         st.markdown(
             """
             ### Especificaciones Técnicas Futuras
@@ -144,22 +115,3 @@ def show(data_filtered, filters, colors):
             - Metadatos geográficos adicionales
             """
         )
-
-    # Mensaje motivacional
-    st.markdown("---")
-    st.markdown(
-        f"""
-        <div style="
-            text-align: center; 
-            padding: 20px; 
-            background: linear-gradient(135deg, {colors['primary']} 0%, {colors['secondary']} 100%);
-            color: white;
-            border-radius: 10px;
-            margin-top: 20px;
-        ">
-            <h4 style="margin: 0;">🚀 ¡Próximamente Mapas Interactivos!</h4>
-            <p style="margin: 10px 0 0 0;">Visualizaciones geográficas avanzadas para mejor análisis epidemiológico.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
