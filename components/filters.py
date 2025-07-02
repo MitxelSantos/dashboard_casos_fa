@@ -2,6 +2,7 @@
 Componente de filtros del dashboard - Completamente responsive con FILTROS JERÁRQUICOS.
 Actualizado para casos confirmados y epizootias con mejor UX en móviles.
 CORREGIDO: Error en reset_all_filters().
+MODIFICADO: Eliminado filtro "Mostrar", consolidada información de filtros.
 """
 
 import streamlit as st
@@ -107,6 +108,24 @@ def create_responsive_filters_ui():
         .reset-filters-btn:hover {
             background-color: #c82333 !important;
             transform: translateY(-1px) !important;
+        }
+        
+        /* Consolidated filter info box */
+        .filter-info-box {
+            background-color: #e8f4fd;
+            color: #2c2c2c;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin: 0.5rem 0;
+            font-size: clamp(0.75rem, 2vw, 0.85rem);
+            line-height: 1.4;
+            border-left: 4px solid #4682B4;
+        }
+        
+        .filter-info-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #4682B4;
         }
         
         /* Active filters display */
@@ -252,7 +271,8 @@ def create_hierarchical_filters(data):
 
 def create_content_filters(data):
     """
-    Crea filtros de contenido responsive (tipo de datos, fechas, etc.) - JERARQUÍA MEDIA.
+    Crea filtros de contenido responsive (fechas) - JERARQUÍA MEDIA.
+    ELIMINADO: Filtro de tipo de datos (siempre se muestran ambos).
 
     Args:
         data (dict): Datos cargados
@@ -262,29 +282,6 @@ def create_content_filters(data):
     """
     # Sección de filtros de contenido (jerarquía media)
     st.sidebar.markdown("---")
-
-    # Filtro de tipo de datos con mejor descripción
-    tipo_datos = st.sidebar.multiselect(
-        "📋 Mostrar:",
-        ["Casos Confirmados", "Epizootias"],
-        default=["Casos Confirmados", "Epizootias"],
-        key="tipo_datos_filter",
-        help="Seleccione qué tipo de datos mostrar en las visualizaciones",
-    )
-
-    # Información sobre los tipos seleccionados
-    if len(tipo_datos) == 1:
-        st.sidebar.markdown(
-            f'<div class="filter-help">📋 Mostrando solo: <strong>{tipo_datos[0]}</strong></div>',
-            unsafe_allow_html=True,
-        )
-    elif len(tipo_datos) == 2:
-        st.sidebar.markdown(
-            '<div class="filter-help">📋 Mostrando: <strong>Ambos tipos de datos</strong></div>',
-            unsafe_allow_html=True,
-        )
-    elif len(tipo_datos) == 0:
-        st.sidebar.warning("⚠️ Seleccione al menos un tipo de datos")
 
     # Filtro de rango de fechas con información contextual
     fechas_disponibles = []
@@ -303,15 +300,12 @@ def create_content_filters(data):
         fechas_disponibles.extend(fechas_epi.tolist())
 
     fecha_rango = None
+    fecha_min = None
+    fecha_max = None
+    
     if fechas_disponibles:
         fecha_min = min(fechas_disponibles)
         fecha_max = max(fechas_disponibles)
-
-        # Mostrar información del rango disponible
-        st.sidebar.markdown(
-            f'<div class="filter-help">📅 Datos disponibles: {fecha_min.strftime("%Y-%m-%d")} a {fecha_max.strftime("%Y-%m-%d")}</div>',
-            unsafe_allow_html=True,
-        )
 
         fecha_rango = st.sidebar.date_input(
             "📅 Rango de Fechas:",
@@ -321,19 +315,15 @@ def create_content_filters(data):
             key="fecha_filter",
             help="Seleccione el período temporal de interés",
         )
-
-        # Validar rango seleccionado
-        if fecha_rango and len(fecha_rango) == 2:
-            fecha_inicio, fecha_fin = fecha_rango
-            dias_seleccionados = (fecha_fin - fecha_inicio).days + 1
-            st.sidebar.markdown(
-                f'<div class="filter-help">📊 Período seleccionado: <strong>{dias_seleccionados} días</strong></div>',
-                unsafe_allow_html=True,
-            )
     else:
         st.sidebar.warning("⚠️ No hay fechas disponibles en los datos")
 
-    return {"tipo_datos": tipo_datos, "fecha_rango": fecha_rango}
+    return {
+        "tipo_datos": ["Casos Confirmados", "Epizootias"],  # Siempre ambos
+        "fecha_rango": fecha_rango,
+        "fecha_min": fecha_min,
+        "fecha_max": fecha_max
+    }
 
 
 def create_advanced_filters(data):
@@ -481,6 +471,47 @@ def create_advanced_filters(data):
     }
 
 
+def create_consolidated_filter_info(filters_location, filters_content, filters_advanced):
+    """
+    Crea información consolidada de filtros en una sola caja compacta.
+
+    Args:
+        filters_location (dict): Filtros de ubicación
+        filters_content (dict): Filtros de contenido
+        filters_advanced (dict): Filtros avanzados
+    """
+    # Construir información consolidada
+    info_lines = []
+    
+    # Información sobre datos mostrados (siempre ambos)
+    info_lines.append("📋 <strong>Datos:</strong> Casos y Epizootias")
+    
+    # Información sobre fechas disponibles
+    if filters_content.get("fecha_min") and filters_content.get("fecha_max"):
+        fecha_min_str = filters_content["fecha_min"].strftime("%Y-%m-%d")
+        fecha_max_str = filters_content["fecha_max"].strftime("%Y-%m-%d")
+        info_lines.append(f"📅 <strong>Disponibles:</strong> {fecha_min_str} a {fecha_max_str}")
+    
+    # Información sobre período seleccionado
+    if filters_content.get("fecha_rango") and len(filters_content["fecha_rango"]) == 2:
+        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
+        dias_seleccionados = (fecha_fin - fecha_inicio).days + 1
+        info_lines.append(f"📊 <strong>Período:</strong> {dias_seleccionados} días")
+    
+    # Mostrar caja consolidada si hay información
+    if info_lines:
+        info_content = "<br>".join(info_lines)
+        st.sidebar.markdown(
+            f"""
+            <div class="filter-info-box">
+                <div class="filter-info-title">ℹ️ Información de Datos</div>
+                {info_content}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def create_filter_summary(filters_location, filters_content, filters_advanced):
     """
     Crea un resumen responsive de los filtros aplicados.
@@ -503,12 +534,6 @@ def create_filter_summary(filters_location, filters_content, filters_advanced):
         active_filters.append(f"🏘️ Vereda: {filters_location['vereda_display']}")
 
     # Filtros de contenido
-    if (
-        len(filters_content["tipo_datos"]) < 2
-        and len(filters_content["tipo_datos"]) > 0
-    ):
-        active_filters.append(f"📋 Datos: {', '.join(filters_content['tipo_datos'])}")
-
     if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
         fecha_inicio, fecha_fin = filters_content["fecha_rango"]
         active_filters.append(f"📅 Período: {fecha_inicio} - {fecha_fin}")
@@ -703,7 +728,6 @@ def reset_all_filters():
     filter_defaults = {
         "municipio_filter": "Todos",
         "vereda_filter": "Todas",
-        "tipo_datos_filter": ["Casos Confirmados", "Epizootias"],
         "fecha_filter": None,  # Se manejará especialmente
         "condicion_filter": "Todas",
         "sexo_filter": "Todos",
@@ -807,6 +831,7 @@ def create_filter_export_options(data_filtered):
 def create_complete_filter_system(data):
     """
     Crea el sistema completo de filtros responsive con JERARQUÍA CLARA.
+    MODIFICADO: Añadida información consolidada y copyright al final.
 
     Args:
         data (dict): Datos cargados
@@ -818,6 +843,9 @@ def create_complete_filter_system(data):
     filters_location = create_hierarchical_filters(data)  # PRIORIDAD MÁXIMA
     filters_content = create_content_filters(data)  # PRIORIDAD MEDIA
     filters_advanced = create_advanced_filters(data)  # PRIORIDAD BAJA
+
+    # Mostrar información consolidada de filtros
+    create_consolidated_filter_info(filters_location, filters_content, filters_advanced)
 
     # Crear resumen de filtros activos
     active_filters = create_filter_summary(
@@ -868,6 +896,10 @@ def create_complete_filter_system(data):
 
     # Mostrar opciones de exportación (jerarquía baja)
     create_filter_export_options(data_filtered)
+    
+    # AGREGAR COPYRIGHT AL FINAL
+    from components.sidebar import add_copyright
+    add_copyright()
     
     # Combinar todos los filtros en un solo diccionario
     all_filters = {
