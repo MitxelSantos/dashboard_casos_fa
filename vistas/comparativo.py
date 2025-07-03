@@ -1,6 +1,6 @@
 """
 Vista de seguimiento temporal del dashboard de Fiebre Amarilla.
-ACTUALIZADA: Solo epizootias positivas en toda la lógica de análisis temporal.
+ACTUALIZADA: Títulos simplificados - "Epizootias" en lugar de "Epizootias Positivas"
 """
 
 import streamlit as st
@@ -14,7 +14,7 @@ from plotly.subplots import make_subplots
 def show(data_filtered, filters, colors):
     """
     Muestra la vista de seguimiento temporal.
-    ACTUALIZADA: Solo epizootias positivas en toda la lógica.
+    ACTUALIZADA: Títulos simplificados para epizootias.
 
     Args:
         data_filtered (dict): Datos filtrados
@@ -30,12 +30,12 @@ def show(data_filtered, filters, colors):
         st.warning("No hay datos disponibles para el seguimiento temporal.")
         return
 
-    # ACTUALIZADA: Información sobre las epizootias positivas como sistema de alerta temprana
+    # ACTUALIZADA: Información sobre las epizootias como sistema de alerta temprana
     st.markdown(
         f"""
     <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid {colors['primary']}; margin-bottom: 20px;">
-        <h4 style="color: {colors['primary']}; margin-top: 0;">🔴 Epizootias Positivas como Sistema de Alerta Temprana</h4>
-        <p>Las epizootias <strong>positivas</strong> en primates no humanos funcionan como <strong>faros de advertencia directos</strong> 
+        <h4 style="color: {colors['primary']}; margin-top: 0;">🐒 Epizootias como Sistema de Alerta Temprana</h4>
+        <p>Las epizootias <strong>confirmadas positivas</strong> en primates no humanos funcionan como <strong>faros de advertencia directos</strong> 
         que indican circulación activa del virus antes de la aparición de casos humanos.</p>
         <p><strong>Importancia:</strong> Cada epizootia positiva confirma presencia viral en el ecosistema local.</p>
     </div>
@@ -43,28 +43,28 @@ def show(data_filtered, filters, colors):
         unsafe_allow_html=True,
     )
 
-    # Crear análisis temporal SOLO con epizootias positivas
-    temporal_data = create_temporal_analysis_positive_only(casos, epizootias)
+    # Crear análisis temporal
+    temporal_data = create_temporal_analysis_simplified(casos, epizootias)
 
     if temporal_data.empty:
         st.info("No hay suficientes datos temporales para el análisis.")
         return
 
     # Gráfico temporal principal
-    show_temporal_evolution_chart_positive_only(temporal_data, colors)
+    show_temporal_evolution_chart_simplified(temporal_data, colors)
 
     # Métricas temporales básicas
     st.markdown("---")
-    show_temporal_metrics_positive_only(temporal_data, casos, epizootias, colors)
+    show_temporal_metrics_simplified(temporal_data, casos, epizootias, colors)
 
     # Gráficos adicionales
     st.markdown("---")
-    show_additional_charts_positive_only(temporal_data, colors)
+    show_additional_charts_simplified(temporal_data, colors)
 
 
-def create_temporal_analysis_positive_only(casos, epizootias):
+def create_temporal_analysis_simplified(casos, epizootias):
     """
-    ACTUALIZADA: Análisis temporal considerando solo epizootias positivas.
+    ACTUALIZADA: Análisis temporal con títulos simplificados.
     """
     temporal_data = []
 
@@ -73,12 +73,12 @@ def create_temporal_analysis_positive_only(casos, epizootias):
     if not casos.empty and "fecha_inicio_sintomas" in casos.columns:
         fechas_casos = casos["fecha_inicio_sintomas"].dropna().tolist()
 
-    # CAMBIO: epizootias ya son solo positivas
-    fechas_epi_positivas = []
+    # Ya son todas epizootias positivas
+    fechas_epi = []
     if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
-        fechas_epi_positivas = epizootias["fecha_recoleccion"].dropna().tolist()
+        fechas_epi = epizootias["fecha_recoleccion"].dropna().tolist()
 
-    todas_fechas = fechas_casos + fechas_epi_positivas
+    todas_fechas = fechas_casos + fechas_epi
 
     if not todas_fechas:
         return pd.DataFrame()
@@ -106,14 +106,14 @@ def create_temporal_analysis_positive_only(casos, epizootias):
             if "condicion_final" in casos_mes.columns:
                 fallecidos_periodo = (casos_mes["condicion_final"] == "Fallecido").sum()
 
-        # CAMBIO: Solo epizootias positivas (ya filtradas)
-        positivas_periodo = 0
+        # CAMBIO: Ya son solo las epizootias que interesan
+        epizootias_periodo = 0
         if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
             epi_mes = epizootias[
                 (epizootias["fecha_recoleccion"] >= periodo)
                 & (epizootias["fecha_recoleccion"] <= fin_periodo)
             ]
-            positivas_periodo = len(epi_mes)  # Ya son solo positivas
+            epizootias_periodo = len(epi_mes)
 
         temporal_data.append(
             {
@@ -121,20 +121,20 @@ def create_temporal_analysis_positive_only(casos, epizootias):
                 "año_mes": periodo.strftime("%Y-%m"),
                 "casos": casos_periodo,
                 "fallecidos": fallecidos_periodo,
-                "epizootias_positivas": positivas_periodo,
-                "actividad_total": casos_periodo + positivas_periodo,
-                "riesgo_nivel": calculate_risk_level(casos_periodo, positivas_periodo),
+                "epizootias": epizootias_periodo,  # CAMBIO: Ya no "positivas"
+                "actividad_total": casos_periodo + epizootias_periodo,
+                "riesgo_nivel": calculate_risk_level(casos_periodo, epizootias_periodo),
             }
         )
 
     return pd.DataFrame(temporal_data)
 
 
-def calculate_risk_level(casos, epi_positivas):
+def calculate_risk_level(casos, epizootias):
     """
-    NUEVA: Calcula nivel de riesgo basado en casos y epizootias positivas.
+    Calcula nivel de riesgo basado en casos y epizootias.
     """
-    actividad_total = casos + epi_positivas
+    actividad_total = casos + epizootias
     
     if actividad_total == 0:
         return 0  # Sin riesgo
@@ -146,11 +146,11 @@ def calculate_risk_level(casos, epi_positivas):
         return 3  # Riesgo alto
 
 
-def show_temporal_evolution_chart_positive_only(temporal_data, colors):
+def show_temporal_evolution_chart_simplified(temporal_data, colors):
     """
-    ACTUALIZADA: Gráfico de evolución temporal considerando solo epizootias positivas.
+    ACTUALIZADA: Gráfico de evolución temporal con títulos simplificados.
     """
-    st.subheader("📊 Evolución Temporal: Casos vs Epizootias Positivas")
+    st.subheader("📊 Evolución Temporal: Casos vs Epizootias")
 
     # Crear gráfico con doble eje Y
     fig = make_subplots(
@@ -172,21 +172,21 @@ def show_temporal_evolution_chart_positive_only(temporal_data, colors):
         secondary_y=False,
     )
 
-    # Línea de epizootias positivas (eje secundario)
+    # Línea de epizootias (eje secundario) - CAMBIO: Título simplificado
     fig.add_trace(
         go.Scatter(
             x=temporal_data["periodo"],
-            y=temporal_data["epizootias_positivas"],
+            y=temporal_data["epizootias"],
             mode="lines+markers",
-            name="Epizootias Positivas",
+            name="Epizootias",
             line=dict(color=colors["warning"], width=4, dash="dot"),
             marker=dict(size=8, symbol="diamond"),
-            hovertemplate="<b>Epizootias Positivas</b><br>Fecha: %{x}<br>Positivas: %{y}<extra></extra>",
+            hovertemplate="<b>Epizootias</b><br>Fecha: %{x}<br>Epizootias: %{y}<extra></extra>",
         ),
         secondary_y=True,
     )
 
-    # NUEVA: Línea de actividad total combinada
+    # Línea de actividad total combinada
     fig.add_trace(
         go.Scatter(
             x=temporal_data["periodo"],
@@ -206,7 +206,7 @@ def show_temporal_evolution_chart_positive_only(temporal_data, colors):
         title_text="<b>Casos Humanos & Actividad Total</b>", secondary_y=False, color=colors["danger"]
     )
     fig.update_yaxes(
-        title_text="<b>Epizootias Positivas</b>",
+        title_text="<b>Epizootias</b>",  # CAMBIO: Título simplificado
         secondary_y=True,
         color=colors["warning"],
     )
@@ -218,7 +218,7 @@ def show_temporal_evolution_chart_positive_only(temporal_data, colors):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         plot_bgcolor="rgba(248,249,250,0.8)",
         title=dict(
-            text="Casos humanos vs Epizootias positivas confirmadas - Sistema de alerta temprana",
+            text="Casos humanos vs Epizootias confirmadas - Sistema de alerta temprana",
             x=0.5,
             font=dict(size=14),
         ),
@@ -227,9 +227,9 @@ def show_temporal_evolution_chart_positive_only(temporal_data, colors):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def show_temporal_metrics_positive_only(temporal_data, casos, epizootias, colors):
+def show_temporal_metrics_simplified(temporal_data, casos, epizootias, colors):
     """
-    ACTUALIZADA: Métricas temporales considerando solo epizootias positivas.
+    ACTUALIZADA: Métricas temporales con títulos simplificados.
     """
     st.subheader("📊 Métricas Temporales")
 
@@ -237,12 +237,12 @@ def show_temporal_metrics_positive_only(temporal_data, casos, epizootias, colors
 
     # Totales por período
     periodos_con_casos = (temporal_data["casos"] > 0).sum()
-    periodos_con_positivas = (temporal_data["epizootias_positivas"] > 0).sum()
+    periodos_con_epizootias = (temporal_data["epizootias"] > 0).sum()  # CAMBIO: Ya no "positivas"
     total_periodos = len(temporal_data)
 
     # Picos máximos
     max_casos_mes = temporal_data["casos"].max()
-    max_positivas_mes = temporal_data["epizootias_positivas"].max()
+    max_epizootias_mes = temporal_data["epizootias"].max()  # CAMBIO: Ya no "positivas"
 
     with col1:
         st.metric(
@@ -254,10 +254,10 @@ def show_temporal_metrics_positive_only(temporal_data, casos, epizootias, colors
 
     with col2:
         st.metric(
-            label="Períodos con Epi+",
-            value=f"{periodos_con_positivas}",
+            label="Períodos con Epizootias",  # CAMBIO: Título simplificado
+            value=f"{periodos_con_epizootias}",
             delta=f"de {total_periodos} meses",
-            help="Meses con al menos una epizootia positiva",
+            help="Meses con al menos una epizootia confirmada",
         )
 
     with col3:
@@ -269,23 +269,23 @@ def show_temporal_metrics_positive_only(temporal_data, casos, epizootias, colors
 
     with col4:
         st.metric(
-            label="Pico Máximo Epi+",
-            value=f"{max_positivas_mes}",
-            help="Mayor número de epizootias positivas en un mes",
+            label="Pico Máximo Epizootias",  # CAMBIO: Título simplificado
+            value=f"{max_epizootias_mes}",
+            help="Mayor número de epizootias en un mes",
         )
 
-    # NUEVA: Métricas adicionales de correlación
+    # Métricas adicionales de correlación
     st.markdown("---")
     col1, col2, col3 = st.columns(3)
     
     with col1:
         # Períodos con ambos eventos
-        periodos_ambos = ((temporal_data["casos"] > 0) & (temporal_data["epizootias_positivas"] > 0)).sum()
+        periodos_ambos = ((temporal_data["casos"] > 0) & (temporal_data["epizootias"] > 0)).sum()
         st.metric(
             label="Períodos con Ambos",
             value=f"{periodos_ambos}",
             delta=f"{(periodos_ambos/total_periodos*100):.1f}%" if total_periodos > 0 else "0%",
-            help="Meses con casos humanos Y epizootias positivas"
+            help="Meses con casos humanos Y epizootias"
         )
     
     with col2:
@@ -303,18 +303,18 @@ def show_temporal_metrics_positive_only(temporal_data, casos, epizootias, colors
         st.metric(
             label="Eficiencia Alerta",
             value=f"{alerta_efectiva:.1f}%",
-            help="% de casos precedidos por epizootias positivas"
+            help="% de casos precedidos por epizootias"
         )
 
 
 def calculate_alert_effectiveness(temporal_data):
     """
-    NUEVA: Calcula la efectividad del sistema de alerta temprana.
+    Calcula la efectividad del sistema de alerta temprana.
     """
     if temporal_data.empty:
         return 0
     
-    # Buscar casos precedidos por epizootias positivas en los últimos 3 meses
+    # Buscar casos precedidos por epizootias en los últimos 3 meses
     casos_con_alerta = 0
     total_casos_con_contexto = 0
     
@@ -322,9 +322,9 @@ def calculate_alert_effectiveness(temporal_data):
         if row["casos"] > 0:
             total_casos_con_contexto += row["casos"]
             
-            # Buscar epizootias positivas en los 3 meses anteriores
+            # Buscar epizootias en los 3 meses anteriores
             start_idx = max(0, i - 3)
-            epi_previas = temporal_data.iloc[start_idx:i]["epizootias_positivas"].sum()
+            epi_previas = temporal_data.iloc[start_idx:i]["epizootias"].sum()
             
             if epi_previas > 0:
                 casos_con_alerta += row["casos"]
@@ -335,9 +335,9 @@ def calculate_alert_effectiveness(temporal_data):
     return (casos_con_alerta / total_casos_con_contexto) * 100
 
 
-def show_additional_charts_positive_only(temporal_data, colors):
+def show_additional_charts_simplified(temporal_data, colors):
     """
-    ACTUALIZADA: Gráficos adicionales considerando solo epizootias positivas.
+    ACTUALIZADA: Gráficos adicionales con títulos simplificados.
     """
     st.subheader("📈 Análisis Temporal Adicional")
     
@@ -357,17 +357,17 @@ def show_additional_charts_positive_only(temporal_data, colors):
                 opacity=0.8
             ))
             
-            # Barras de epizootias positivas
+            # Barras de epizootias - CAMBIO: Título simplificado
             fig_bars.add_trace(go.Bar(
                 x=temporal_data["año_mes"],
-                y=temporal_data["epizootias_positivas"],
-                name="Epizootias Positivas",
+                y=temporal_data["epizootias"],
+                name="Epizootias",
                 marker_color=colors["warning"],
                 opacity=0.8
             ))
             
             fig_bars.update_layout(
-                title="Distribución Mensual - Solo Eventos Positivos",
+                title="Distribución Mensual - Eventos Confirmados",
                 xaxis_title="Mes",
                 yaxis_title="Número de Eventos",
                 height=400,
@@ -377,7 +377,7 @@ def show_additional_charts_positive_only(temporal_data, colors):
             st.plotly_chart(fig_bars, use_container_width=True)
     
     with col2:
-        # NUEVO: Gráfico de nivel de riesgo
+        # Gráfico de nivel de riesgo
         if not temporal_data.empty:
             # Crear mapeo de colores para niveles de riesgo
             risk_colors = {
@@ -419,9 +419,9 @@ def show_additional_charts_positive_only(temporal_data, colors):
     st.subheader("📋 Resumen Mensual")
     
     if not temporal_data.empty:
-        # Crear tabla resumen mejorada
-        resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias_positivas", "actividad_total", "risk_label"]].copy()
-        resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Epi Positivas", "Actividad Total", "Nivel de Riesgo"]
+        # Crear tabla resumen mejorada - CAMBIO: Columnas simplificadas
+        resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias", "actividad_total", "risk_label"]].copy()
+        resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Epizootias", "Actividad Total", "Nivel de Riesgo"]
         
         # Ordenar por mes descendente
         resumen_tabla = resumen_tabla.sort_values("Mes", ascending=False)
@@ -433,35 +433,35 @@ def show_additional_charts_positive_only(temporal_data, colors):
         st.download_button(
             label="📄 Descargar Análisis Temporal",
             data=csv_temporal,
-            file_name=f"analisis_temporal_positivas_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            file_name=f"analisis_temporal_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
         )
 
-    # ACTUALIZADA: Interpretación para epizootias positivas
+    # ACTUALIZADA: Interpretación simplificada
     st.markdown("---")
     st.markdown(
         f"""
     <div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 5px solid {colors['info']};">
         <h5 style="color: {colors['info']}; margin-top: 0;">💡 Interpretación para Vigilancia Epidemiológica</h5>
-        <p><strong>Función de las Epizootias Positivas:</strong> Cada epizootia positiva confirma circulación viral activa 
+        <p><strong>Función de las Epizootias:</strong> Cada epizootia confirmada positiva indica circulación viral activa 
         en el ecosistema local. Son indicadores directos de riesgo para población humana.</p>
-        <p><strong>Sistema de Alerta:</strong> La presencia de epizootias positivas debe activar inmediatamente:</p>
+        <p><strong>Sistema de Alerta:</strong> La presencia de epizootias debe activar inmediatamente:</p>
         <ul style="margin-left: 20px;">
             <li>🚨 Intensificación de vigilancia médica en la zona</li>
             <li>🦟 Control vectorial inmediato</li>
             <li>💉 Campañas de vacunación preventiva</li>
             <li>📢 Educación comunitaria sobre prevención</li>
         </ul>
-        <p><strong>Interpretación Temporal:</strong> Períodos con alta actividad de epizootias positivas 
+        <p><strong>Interpretación Temporal:</strong> Períodos con alta actividad de epizootias 
         requieren máximo estado de alerta epidemiológica.</p>
     </div>
     """,
         unsafe_allow_html=True,
     )
 
-    # NUEVA: Correlación entre eventos
+    # Correlación entre eventos
     if not temporal_data.empty and len(temporal_data) > 1:
-        correlacion = temporal_data["casos"].corr(temporal_data["epizootias_positivas"])
+        correlacion = temporal_data["casos"].corr(temporal_data["epizootias"])
         
         st.markdown("---")
         st.markdown("### 🔗 Análisis de Correlación")
@@ -470,9 +470,9 @@ def show_additional_charts_positive_only(temporal_data, colors):
         
         with col1:
             st.metric(
-                label="Correlación Casos-Epi+",
+                label="Correlación Casos-Epizootias",  # CAMBIO: Título simplificado
                 value=f"{correlacion:.3f}",
-                help="Correlación entre casos humanos y epizootias positivas (-1 a 1)"
+                help="Correlación entre casos humanos y epizootias (-1 a 1)"
             )
         
         with col2:

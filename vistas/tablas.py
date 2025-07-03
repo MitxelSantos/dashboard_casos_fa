@@ -1,6 +1,6 @@
 """
 Vista de información principal del dashboard de Fiebre Amarilla.
-ACTUALIZADA: Solo epizootias positivas en toda la lógica.
+ACTUALIZADA: Títulos simplificados - "Epizootias" en lugar de "Epizootias Positivas"
 """
 
 import streamlit as st
@@ -16,7 +16,7 @@ from utils.data_processor import prepare_dataframe_for_display
 def show(data_filtered, filters, colors):
     """
     Muestra la vista de información principal.
-    ACTUALIZADA: Solo epizootias positivas en toda la lógica.
+    ACTUALIZADA: Títulos simplificados para epizootias.
 
     Args:
         data_filtered (dict): Datos filtrados
@@ -26,30 +26,30 @@ def show(data_filtered, filters, colors):
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]  # Ya solo contiene positivas
 
-    # Métricas principales - SOLO EPIZOOTIAS POSITIVAS
-    create_main_metrics_positive_only(casos, epizootias, colors)
+    # Métricas principales - TÍTULOS SIMPLIFICADOS
+    create_main_metrics_simplified(casos, epizootias, colors)
 
     # Secciones informativas
     st.markdown("---")
-    show_all_charts_section_positive_only(casos, epizootias, colors, filters)
+    show_all_charts_section_simplified(casos, epizootias, colors, filters)
 
     st.markdown("---")
-    show_geographic_summary_positive_only(casos, epizootias, colors, filters)
+    show_geographic_summary_simplified(casos, epizootias, colors, filters)
     
     st.markdown("---")
-    show_filtered_data_tables_positive_only(casos, epizootias, colors)
+    show_filtered_data_tables_simplified(casos, epizootias, colors)
     
     st.markdown("---")
-    show_consolidated_export_section_positive_only(casos, epizootias)
+    show_consolidated_export_section_simplified(casos, epizootias)
 
 
-def create_main_metrics_positive_only(casos, epizootias, colors):
+def create_main_metrics_simplified(casos, epizootias, colors):
     """
-    ACTUALIZADA: Métricas principales considerando solo epizootias positivas.
+    ACTUALIZADA: Métricas principales con títulos simplificados.
     """
     # Calcular métricas básicas
     total_casos = len(casos)
-    total_epizootias_positivas = len(epizootias)  # Ya solo son positivas
+    total_epizootias = len(epizootias)  # CAMBIO: Ya no "positivas"
 
     # Métricas de casos
     fallecidos = 0
@@ -59,9 +59,6 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
         fallecidos = (casos["condicion_final"] == "Fallecido").sum()
         vivos = (casos["condicion_final"] == "Vivo").sum()
         letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
-
-    # CAMBIO: Solo epizootias positivas (ya filtradas)
-    epizootias_positivas = total_epizootias_positivas
 
     # Métricas geográficas
     municipios_afectados = set()
@@ -74,7 +71,7 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
     ultima_fecha_caso = None
     ultimo_caso_municipio = None
     ultimo_caso_vereda = None
-    ultima_fecha_epi_positiva = None
+    ultima_fecha_epi = None
     ultima_epi_municipio = None
     ultima_epi_vereda = None
 
@@ -88,14 +85,14 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
             ultimo_caso_municipio = ultimo_caso.get("municipio", "No especificado")
             ultimo_caso_vereda = ultimo_caso.get("vereda", "No especificada")
 
-    # CAMBIO: epizootias ya son solo positivas
+    # CAMBIO: epizootias ya son todas las que interesan
     if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
-        fechas_positivas = epizootias["fecha_recoleccion"].dropna()
-        if not fechas_positivas.empty:
-            idx_ultima = epizootias[epizootias["fecha_recoleccion"] == fechas_positivas.max()].index[-1]
+        fechas_epi = epizootias["fecha_recoleccion"].dropna()
+        if not fechas_epi.empty:
+            idx_ultima = epizootias[epizootias["fecha_recoleccion"] == fechas_epi.max()].index[-1]
             ultima_epi = epizootias.loc[idx_ultima]
             
-            ultima_fecha_epi_positiva = fechas_positivas.max()
+            ultima_fecha_epi = fechas_epi.max()
             ultima_epi_municipio = ultima_epi.get("municipio", "No especificado")
             ultima_epi_vereda = ultima_epi.get("vereda", "No especificada")
 
@@ -248,17 +245,17 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
             unsafe_allow_html=True,
         )
 
-    # Segunda fila - SOLO epizootias positivas
-    st.subheader("🔴 Epizootias Positivas")
+    # Segunda fila - CAMBIO VISUAL: Solo "Epizootias"
+    st.subheader("🐒 Epizootias")
     col1, col2, col3, col4 = st.columns(4)
 
     with col1:
         st.markdown(
             f"""
         <div class="metric-card">
-            <div class="card-icon">🔴</div>
-            <div class="card-title">Epizootias Positivas</div>
-            <div class="card-value">{epizootias_positivas}</div>
+            <div class="card-icon">🐒</div>
+            <div class="card-title">Epizootias</div>
+            <div class="card-value">{total_epizootias}</div>
             <div class="card-subtitle">Confirmadas FA</div>
         </div>
         """,
@@ -266,15 +263,15 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
         )
 
     with col2:
-        # Cálculo de actividad total (casos + epizootias positivas)
-        actividad_total = total_casos + epizootias_positivas
+        # Cálculo de actividad total (casos + epizootias)
+        actividad_total = total_casos + total_epizootias
         st.markdown(
             f"""
         <div class="metric-card">
             <div class="card-icon">⚠️</div>
             <div class="card-title">Actividad Total</div>
             <div class="card-value">{actividad_total}</div>
-            <div class="card-subtitle">Casos + Epi Positivas</div>
+            <div class="card-subtitle">Casos + Epizootias</div>
         </div>
         """,
             unsafe_allow_html=True,
@@ -296,9 +293,9 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
 
     with col4:
         dias_ultima_epi = "Sin datos"
-        if ultima_fecha_epi_positiva:
-            dias_ultima_epi = (datetime.now() - ultima_fecha_epi_positiva).days
-            fecha_display = ultima_fecha_epi_positiva.strftime("%d/%m/%Y")
+        if ultima_fecha_epi:
+            dias_ultima_epi = (datetime.now() - ultima_fecha_epi).days
+            fecha_display = ultima_fecha_epi.strftime("%d/%m/%Y")
             dias_display = f"Hace {dias_ultima_epi} días"
         else:
             fecha_display = "Sin datos"
@@ -312,7 +309,7 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
             f"""
         <div class="metric-card">
             <div class="card-icon">🔬</div>
-            <div class="card-title">Última Positiva</div>
+            <div class="card-title">Última Epizootia</div>
             <div class="card-value" style="font-size: 1.2rem;">{fecha_display}</div>
             <div class="card-subtitle">{dias_display}</div>
             <div class="card-location">{ubicacion_epi_text}</div>
@@ -322,9 +319,9 @@ def create_main_metrics_positive_only(casos, epizootias, colors):
         )
 
 
-def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
+def show_all_charts_section_simplified(casos, epizootias, colors, filters):
     """
-    ACTUALIZADA: Análisis epidemiológico considerando solo epizootias positivas.
+    ACTUALIZADA: Análisis epidemiológico con títulos simplificados.
     """
     st.subheader("📊 Análisis Epidemiológico")
     
@@ -481,13 +478,13 @@ def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
             else:
                 st.info("No hay datos de casos disponibles.")
 
-    # Sección 2: SOLO Epizootias Positivas
-    st.markdown("### 🔴 Epizootias Positivas")
+    # Sección 2: CAMBIO VISUAL: Solo "Epizootias"
+    st.markdown("### 🐒 Epizootias")
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("**Fuentes de Epizootias Positivas**")
+        st.markdown("**Fuentes de Epizootias**")  # CAMBIO: Ya no "Positivas"
         if not epizootias.empty and "proveniente" in epizootias.columns:
             fuente_dist = epizootias["proveniente"].value_counts()
 
@@ -513,12 +510,12 @@ def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
             else:
                 st.info("No hay datos de fuentes disponibles.")
         else:
-            st.info("No hay datos de epizootias positivas disponibles.")
+            st.info("No hay datos de epizootias disponibles.")
 
     with col2:
-        # RESPONSIVE: Epizootias positivas por ubicación según filtros
+        # RESPONSIVE: Epizootias por ubicación según filtros
         if municipio_filtrado:
-            st.markdown(f"**Epizootias Positivas por Vereda en {filters.get('municipio_display', 'Municipio')}**")
+            st.markdown(f"**Epizootias por Vereda en {filters.get('municipio_display', 'Municipio')}**")
             
             if not epizootias.empty and "vereda" in epizootias.columns:
                 vereda_dist = epizootias["vereda"].value_counts().head(10)
@@ -528,7 +525,7 @@ def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
                         y=vereda_dist.index,
                         orientation="h",
                         title="",
-                        labels={"x": "Número de Epizootias Positivas", "y": "Vereda"},
+                        labels={"x": "Número de Epizootias", "y": "Vereda"},
                         color=vereda_dist.values,
                         color_continuous_scale="Oranges",
                     )
@@ -537,9 +534,9 @@ def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
                 else:
                     st.info("No hay datos de veredas disponibles.")
             else:
-                st.info("No hay datos de epizootias positivas disponibles.")
+                st.info("No hay datos de epizootias disponibles.")
         else:
-            st.markdown("**Epizootias Positivas por Municipio**")
+            st.markdown("**Epizootias por Municipio**")
             
             if not epizootias.empty and "municipio" in epizootias.columns:
                 municipio_dist = epizootias["municipio"].value_counts().head(10)
@@ -549,7 +546,7 @@ def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
                         y=municipio_dist.index,
                         orientation="h",
                         title="",
-                        labels={"x": "Número de Epizootias Positivas", "y": "Municipio"},
+                        labels={"x": "Número de Epizootias", "y": "Municipio"},
                         color=municipio_dist.values,
                         color_continuous_scale="Oranges",
                     )
@@ -558,22 +555,22 @@ def show_all_charts_section_positive_only(casos, epizootias, colors, filters):
                 else:
                     st.info("No hay datos de municipios disponibles.")
             else:
-                st.info("No hay datos de epizootias positivas disponibles.")
+                st.info("No hay datos de epizootias disponibles.")
 
 
-def show_geographic_summary_positive_only(casos, epizootias, colors, filters):
+def show_geographic_summary_simplified(casos, epizootias, colors, filters):
     """
-    ACTUALIZADA: Distribución geográfica considerando solo epizootias positivas.
+    ACTUALIZADA: Distribución geográfica con títulos simplificados.
     """
     municipio_filtrado = filters.get("municipio_normalizado")
     
     if municipio_filtrado:
         st.subheader(f"🏘️ Distribución por Vereda en {filters.get('municipio_display', 'Municipio')}")
-        summary_data = create_vereda_geographic_summary_positive_only(casos, epizootias, municipio_filtrado)
+        summary_data = create_vereda_geographic_summary_simplified(casos, epizootias, municipio_filtrado)
         location_type = "Vereda"
     else:
         st.subheader("📍 Distribución por Municipio")
-        summary_data = create_municipio_geographic_summary_positive_only(casos, epizootias)
+        summary_data = create_municipio_geographic_summary_simplified(casos, epizootias)
         location_type = "Municipio"
 
     if summary_data.empty:
@@ -583,8 +580,8 @@ def show_geographic_summary_positive_only(casos, epizootias, colors, filters):
     # Mostrar TODOS los registros
     st.markdown(f"**Resumen de {len(summary_data)} {location_type}s con Actividad**")
 
-    # ACTUALIZADA: Solo epizootias positivas
-    # Vereda/Municipio | Casos | Fallecidos | Epi+ 
+    # ACTUALIZADA: Títulos simplificados
+    # Vereda/Municipio | Casos | Fallecidos | Epizootias 
     for i, (_, row) in enumerate(summary_data.iterrows()):
         if i % 2 == 0:
             bg_color = "#f8f9fa"
@@ -616,8 +613,8 @@ def show_geographic_summary_positive_only(casos, epizootias, colors, filters):
                         <div style="font-size: 0.75rem; color: #666;">Fallecidos</div>
                     </div>
                     <div>
-                        <div style="font-weight: bold; color: {colors['warning']};">{row['Epizootias_Positivas']}</div>
-                        <div style="font-size: 0.75rem; color: #666;">Epi +</div>
+                        <div style="font-weight: bold; color: {colors['warning']};">{row['Epizootias']}</div>
+                        <div style="font-size: 0.75rem; color: #666;">Epizootias</div>
                     </div>
                 </div>
             </div>
@@ -636,9 +633,9 @@ def show_geographic_summary_positive_only(casos, epizootias, colors, filters):
     )
 
 
-def show_filtered_data_tables_positive_only(casos, epizootias, colors):
+def show_filtered_data_tables_simplified(casos, epizootias, colors):
     """
-    ACTUALIZADA: Tablas de datos considerando solo epizootias positivas.
+    ACTUALIZADA: Tablas de datos con títulos simplificados.
     """
     st.subheader("📋 Datos Filtrados")
     
@@ -661,23 +658,23 @@ def show_filtered_data_tables_positive_only(casos, epizootias, colors):
             st.info("No hay casos que mostrar con los filtros aplicados.")
     
     with col2:
-        st.markdown("**🔴 Epizootias Positivas**")  # CAMBIO: Solo positivas
+        st.markdown("**🐒 Epizootias**")  # CAMBIO: Ya no "Positivas"
         if not epizootias_display.empty:
             st.dataframe(epizootias_display, use_container_width=True, height=400)
-            st.caption(f"Total: {len(epizootias_display)} epizootias positivas mostradas")
+            st.caption(f"Total: {len(epizootias_display)} epizootias mostradas")
         else:
-            st.info("No hay epizootias positivas que mostrar con los filtros aplicados.")
+            st.info("No hay epizootias que mostrar con los filtros aplicados.")
 
 
-def show_consolidated_export_section_positive_only(casos, epizootias):
+def show_consolidated_export_section_simplified(casos, epizootias):
     """
-    ACTUALIZADA: Exportación de datos considerando solo epizootias positivas.
+    ACTUALIZADA: Exportación de datos con títulos simplificados.
     """
     st.subheader("📥 Exportar Datos")
     
     # Información sobre los datos disponibles
     casos_count = len(casos)
-    epi_count = len(epizootias)  # Ya solo son positivas
+    epi_count = len(epizootias)
     
     st.markdown(
         f"""
@@ -690,7 +687,7 @@ def show_consolidated_export_section_positive_only(casos, epizootias):
         ">
             <h5 style="color: #4682B4; margin-top: 0;">📊 Datos Disponibles para Exportación</h5>
             <p><strong>• Casos confirmados:</strong> {casos_count} registros</p>
-            <p><strong>• Epizootias positivas:</strong> {epi_count} registros</p>
+            <p><strong>• Epizootias:</strong> {epi_count} registros (todas confirmadas positivas)</p>
             <p style="margin-bottom: 0;"><strong>• Filtros aplicados:</strong> Los datos exportados reflejan los filtros actualmente seleccionados</p>
         </div>
         """,
@@ -703,13 +700,13 @@ def show_consolidated_export_section_positive_only(casos, epizootias):
     with col1:
         st.markdown("**📊 Excel Completo**")
         if not casos.empty or not epizootias.empty:
-            excel_data = create_excel_with_multiple_sheets_positive_only(casos, epizootias)
+            excel_data = create_excel_with_multiple_sheets_simplified(casos, epizootias)
             st.download_button(
                 label="📊 Descargar Excel",
                 data=excel_data,
                 file_name=f"fiebre_amarilla_filtrado_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Excel con hojas separadas: Casos, Epizootias Positivas y Resumen",
+                help="Excel con hojas separadas: Casos, Epizootias y Resumen",
                 use_container_width=True
             )
         else:
@@ -732,24 +729,24 @@ def show_consolidated_export_section_positive_only(casos, epizootias):
             st.button("🦠 Casos CSV", disabled=True, help="No hay casos para exportar")
     
     with col3:
-        st.markdown("**🔴 Epizootias Positivas**")  # CAMBIO: Solo positivas
+        st.markdown("**🐒 Epizootias**")  # CAMBIO: Ya no "Positivas"
         if not epizootias.empty:
             epizootias_csv = epizootias.to_csv(index=False)
             st.download_button(
-                label="🔴 Epi+ CSV",
+                label="🐒 Epizootias CSV",
                 data=epizootias_csv,
-                file_name=f"epizootias_positivas_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                file_name=f"epizootias_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                 mime="text/csv",
-                help="Solo epizootias positivas en formato CSV",
+                help="Epizootias confirmadas en formato CSV",
                 use_container_width=True
             )
         else:
-            st.button("🔴 Epi+ CSV", disabled=True, help="No hay epizootias positivas para exportar")
+            st.button("🐒 Epizootias CSV", disabled=True, help="No hay epizootias para exportar")
 
 
-def create_municipio_geographic_summary_positive_only(casos, epizootias):
+def create_municipio_geographic_summary_simplified(casos, epizootias):
     """
-    ACTUALIZADA: Resumen por municipio considerando solo epizootias positivas.
+    ACTUALIZADA: Resumen por municipio con títulos simplificados.
     """
     municipio_data = []
 
@@ -778,14 +775,14 @@ def create_municipio_geographic_summary_positive_only(casos, epizootias):
                     casos_mpio["condicion_final"] == "Fallecido"
                 ).sum()
 
-        # CAMBIO: Solo epizootias positivas (ya filtradas)
-        epizootias_positivas = 0
+        # CAMBIO: Ya son todas las epizootias que interesan
+        epizootias_count = 0
         if not epizootias.empty and "municipio" in epizootias.columns:
             epi_mpio = epizootias[epizootias["municipio"] == municipio]
-            epizootias_positivas = len(epi_mpio)  # Ya son solo positivas
+            epizootias_count = len(epi_mpio)
 
         # Calcular total de eventos (para ordenar)
-        total_eventos = casos_municipio + epizootias_positivas
+        total_eventos = casos_municipio + epizootias_count
 
         # Solo incluir municipios con al menos algún evento
         if total_eventos > 0:
@@ -794,7 +791,7 @@ def create_municipio_geographic_summary_positive_only(casos, epizootias):
                     "Ubicacion": municipio,
                     "Casos": casos_municipio,
                     "Fallecidos": fallecidos_municipio,
-                    "Epizootias_Positivas": epizootias_positivas,
+                    "Epizootias": epizootias_count,  # CAMBIO: Ya no "Positivas"
                     "Total_Eventos": total_eventos,
                 }
             )
@@ -806,9 +803,9 @@ def create_municipio_geographic_summary_positive_only(casos, epizootias):
     return pd.DataFrame()
 
 
-def create_vereda_geographic_summary_positive_only(casos, epizootias, municipio_normalizado):
+def create_vereda_geographic_summary_simplified(casos, epizootias, municipio_normalizado):
     """
-    ACTUALIZADA: Resumen por vereda considerando solo epizootias positivas.
+    ACTUALIZADA: Resumen por vereda con títulos simplificados.
     """
     vereda_data = []
 
@@ -839,14 +836,14 @@ def create_vereda_geographic_summary_positive_only(casos, epizootias, municipio_
             if "condicion_final" in casos_ver.columns:
                 fallecidos_vereda = (casos_ver["condicion_final"] == "Fallecido").sum()
 
-        # CAMBIO: Solo epizootias positivas (ya filtradas)
-        epizootias_positivas = 0
+        # CAMBIO: Ya son todas las epizootias que interesan
+        epizootias_count = 0
         if not epizootias_municipio.empty and "vereda" in epizootias_municipio.columns:
             epi_ver = epizootias_municipio[epizootias_municipio["vereda"] == vereda]
-            epizootias_positivas = len(epi_ver)  # Ya son solo positivas
+            epizootias_count = len(epi_ver)
 
         # Calcular total de eventos (para ordenar)
-        total_eventos = casos_vereda + epizootias_positivas
+        total_eventos = casos_vereda + epizootias_count
 
         # Solo incluir veredas con al menos algún evento
         if total_eventos > 0:
@@ -855,7 +852,7 @@ def create_vereda_geographic_summary_positive_only(casos, epizootias, municipio_
                     "Ubicacion": vereda,
                     "Casos": casos_vereda,
                     "Fallecidos": fallecidos_vereda,
-                    "Epizootias_Positivas": epizootias_positivas,
+                    "Epizootias": epizootias_count,  # CAMBIO: Ya no "Positivas"
                     "Total_Eventos": total_eventos,
                 }
             )
@@ -867,9 +864,9 @@ def create_vereda_geographic_summary_positive_only(casos, epizootias, municipio_
     return pd.DataFrame()
 
 
-def create_excel_with_multiple_sheets_positive_only(casos, epizootias):
+def create_excel_with_multiple_sheets_simplified(casos, epizootias):
     """
-    ACTUALIZADA: Excel considerando solo epizootias positivas.
+    ACTUALIZADA: Excel con títulos simplificados.
     """
     buffer = io.BytesIO()
     
@@ -880,13 +877,13 @@ def create_excel_with_multiple_sheets_positive_only(casos, epizootias):
             casos_clean = prepare_dataframe_for_display(casos_filtered, ["fecha_inicio_sintomas"])
             casos_clean.to_excel(writer, sheet_name='Casos_Confirmados', index=False)
         
-        # Hoja de epizootias positivas
+        # Hoja de epizootias - CAMBIO: Ya no "Positivas"
         if not epizootias.empty:
             epizootias_clean = prepare_dataframe_for_display(epizootias, ["fecha_recoleccion"])
-            epizootias_clean.to_excel(writer, sheet_name='Epizootias_Positivas', index=False)
+            epizootias_clean.to_excel(writer, sheet_name='Epizootias', index=False)
         
         # Hoja de resumen
-        summary_data = create_summary_sheet_positive_only(casos, epizootias)
+        summary_data = create_summary_sheet_simplified(casos, epizootias)
         if not summary_data.empty:
             summary_data.to_excel(writer, sheet_name='Resumen', index=False)
     
@@ -894,9 +891,9 @@ def create_excel_with_multiple_sheets_positive_only(casos, epizootias):
     return buffer.getvalue()
 
 
-def create_summary_sheet_positive_only(casos, epizootias):
+def create_summary_sheet_simplified(casos, epizootias):
     """
-    ACTUALIZADA: Resumen considerando solo epizootias positivas.
+    ACTUALIZADA: Resumen con títulos simplificados.
     """
     summary_data = []
     
@@ -917,9 +914,9 @@ def create_summary_sheet_positive_only(casos, epizootias):
             "Observaciones": f"Letalidad: {letalidad:.1f}%"
         })
     
-    # CAMBIO: Solo epizootias positivas
+    # CAMBIO: Título simplificado
     summary_data.append({
-        "Indicador": "Epizootias Positivas",
+        "Indicador": "Epizootias",
         "Valor": len(epizootias),
         "Observaciones": "Epizootias confirmadas positivas para fiebre amarilla"
     })
@@ -929,7 +926,7 @@ def create_summary_sheet_positive_only(casos, epizootias):
     summary_data.append({
         "Indicador": "Actividad Total",
         "Valor": actividad_total,
-        "Observaciones": "Casos humanos + epizootias positivas"
+        "Observaciones": "Casos humanos + epizootias"
     })
     
     # Fecha de generación
