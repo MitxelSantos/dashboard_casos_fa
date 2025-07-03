@@ -20,6 +20,11 @@ Pillow>=10.0.0
 # Utilidades de red (para Google Drive opcional)
 requests>=2.31.0
 
+# NUEVAS DEPENDENCIAS PARA MAPAS
+geopandas>=0.14.0
+folium>=0.15.0
+streamlit-folium>=0.15.0
+
 # NOTA: matplotlib eliminado intencionalmente
 # Era causa del error: "background_gradient requires matplotlib"
 # El dashboard funciona completamente sin matplotlib usando solo Plotly
@@ -28,5 +33,3 @@ requests>=2.31.0
 # - matplotlib (causaba errores y no es necesario)
 # - scipy (análisis estadístico avanzado removido)
 # - seaborn (no usado en versión simplificada)
-# - folium (mapas pendientes para futuro)
-# - geopandas (mapas pendientes para futuro)
