@@ -79,7 +79,7 @@ for module_name in vista_modules:
 
 def load_new_datasets():
     """
-    Carga los nuevos datasets de casos confirmados y epizootias con normalización robusta.
+    ACTUALIZADA: Carga los datasets y filtra solo epizootias positivas desde el inicio.
     Busca primero en carpeta data/, luego en directorio raíz, y finalmente en Google Drive.
 
     Returns:
@@ -91,7 +91,6 @@ def load_new_datasets():
         status_text.text("🔄 Inicializando carga de datos...")
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
-        # Definir nombres de archivos
         casos_filename = "BD_positivos.xlsx"
         epizootias_filename = "Información_Datos_FA.xlsx"
 
@@ -111,7 +110,7 @@ def load_new_datasets():
         epizootias_df = None
         data_source = None
 
-        # Estrategia 1: Intentar cargar desde carpeta data/ (PRIORIDAD MÁXIMA)
+        # Estrategia 1: Intentar cargar desde carpeta data/
         if data_casos_path.exists() and data_epizootias_path.exists():
             try:
                 status_text.text("📂 Cargando desde carpeta data/...")
@@ -152,7 +151,6 @@ def load_new_datasets():
         # Estrategia 3: Intentar cargar desde Google Drive (FALLBACK)
         if casos_df is None:
             try:
-                # Importar utilidades de Google Drive
                 from gdrive_utils import (
                     get_file_from_drive,
                     check_google_drive_availability,
@@ -162,7 +160,6 @@ def load_new_datasets():
                     status_text.text("☁️ Intentando cargar desde Google Drive...")
                     progress_bar.progress(20)
 
-                    # Verificar si están configurados los IDs de Google Drive
                     if hasattr(st.secrets, "drive_files"):
                         drive_files = st.secrets.drive_files
 
@@ -254,9 +251,9 @@ def load_new_datasets():
             )
 
         progress_bar.progress(50)
-        status_text.text("🐒 Procesando datos de epizootias...")
+        status_text.text("🔴 Procesando epizootias y filtrando solo positivas...")
 
-        # ==================== PROCESAR EPIZOOTIAS ====================
+        # ==================== PROCESAR EPIZOOTIAS Y FILTRAR SOLO POSITIVAS ====================
         # Limpiar datos de epizootias
         epizootias_df = epizootias_df.dropna(how="all")
 
@@ -277,7 +274,20 @@ def load_new_datasets():
         }
         epizootias_df = epizootias_df.rename(columns=existing_epi_columns)
 
-        # Normalizar municipios y veredas en epizootias
+        # CAMBIO IMPORTANTE: Filtrar solo epizootias positivas desde el inicio
+        if "descripcion" in epizootias_df.columns:
+            # Normalizar descripciones primero
+            epizootias_df["descripcion"] = epizootias_df["descripcion"].str.upper().str.strip()
+            
+            # Filtrar solo las positivas
+            total_original = len(epizootias_df)
+            epizootias_df = epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"]
+            total_positivas = len(epizootias_df)
+            
+            logger.info(f"🔴 Filtro aplicado: {total_positivas} epizootias positivas de {total_original} totales")
+            status_text.text(f"🔴 Filtradas {total_positivas} epizootias positivas de {total_original} totales")
+
+        # Normalizar municipios y veredas en epizootias (solo las positivas)
         if "municipio" in epizootias_df.columns:
             epizootias_df["municipio_normalizado"] = epizootias_df["municipio"].apply(
                 normalize_text
@@ -343,7 +353,7 @@ def load_new_datasets():
                 .dropna()
                 .unique()
             )
-            # Obtener veredas de epizootias
+            # Obtener veredas de epizootias (solo positivas)
             veredas_epi = (
                 epizootias_df[epizootias_df["municipio_normalizado"] == municipio_norm][
                     "vereda_normalizada"
@@ -389,7 +399,7 @@ def load_new_datasets():
         progress_bar.progress(90)
         status_text.text("📊 Finalizando carga...")
 
-        # ==================== MAPEOS DE VALORES ====================
+        # ==================== MAPEOS DE VALORES ACTUALIZADOS ====================
 
         # Mapeo de condición final
         condicion_map = {
@@ -401,27 +411,13 @@ def load_new_datasets():
             "Vivo": {"color": COLORS["success"], "icon": "💚", "categoria": "Bueno"},
         }
 
-        # Mapeo de descripción de epizootias
+        # ACTUALIZADO: Mapeo de descripción (solo positivas ahora)
         descripcion_map = {
             "POSITIVO FA": {
                 "color": COLORS["danger"],
                 "icon": "🔴",
                 "categoria": "Positivo",
-            },
-            "NEGATIVO FA": {
-                "color": COLORS["success"],
-                "icon": "🟢",
-                "categoria": "Negativo",
-            },
-            "NO APTA": {
-                "color": COLORS["warning"],
-                "icon": "🟡",
-                "categoria": "No apta",
-            },
-            "EN ESTUDIO": {
-                "color": COLORS["info"],
-                "icon": "🔵",
-                "categoria": "En estudio",
+                "descripcion": "Confirma circulación viral activa"
             },
         }
 
@@ -429,20 +425,19 @@ def load_new_datasets():
 
         # Limpiar elementos de UI con delay para legibilidad
         import time
-
         time.sleep(1.5)
         status_text.empty()
         progress_bar.empty()
 
-        # Log final con estadísticas
+        # Log final con estadísticas ACTUALIZADAS
         logger.info(f"✅ Datos cargados exitosamente desde: {data_source}")
         logger.info(f"📊 Casos cargados: {len(casos_df)}")
-        logger.info(f"🐒 Epizootias cargadas: {len(epizootias_df)}")
+        logger.info(f"🔴 Epizootias POSITIVAS cargadas: {len(epizootias_df)}")
         logger.info(f"🗺️ Municipios únicos: {len(municipios_normalizados)}")
 
         return {
             "casos": casos_df,
-            "epizootias": epizootias_df,
+            "epizootias": epizootias_df,  # Ya solo contiene positivas
             "municipios_normalizados": municipios_normalizados,
             "municipio_display_map": municipio_display_map,
             "veredas_por_municipio": veredas_por_municipio,
@@ -471,17 +466,18 @@ def load_new_datasets():
 
 def create_filters_responsive_with_maps(data):
     """
-    Crea sistema de filtros completamente responsive usando el nuevo componente con mapas.
+    CORREGIDA: Crea sistema de filtros responsive usando el componente corregido.
     """
-    # Importar el sistema de filtros con mapas
+    # Importar el sistema de filtros corregido
     try:
         from components.filters import create_complete_filter_system_with_maps
 
-        # Usar el sistema completo de filtros responsive con mapas
+        # Usar el sistema completo de filtros responsive corregido
         filter_result = create_complete_filter_system_with_maps(data)
         return filter_result["filters"], filter_result["data_filtered"]
 
-    except ImportError:
+    except ImportError as e:
+        logger.error(f"Error importando filtros: {str(e)}")
         # Fallback al sistema básico si no está disponible
         st.sidebar.subheader("🔍 Filtros")
 
@@ -503,17 +499,17 @@ def create_filters_responsive_with_maps(data):
                     municipio_norm_selected = norm
                     break
 
-        # Filtro de tipo de datos
+        # Filtro de tipo de datos (ACTUALIZADO)
         tipo_datos = st.sidebar.multiselect(
             "📋 Mostrar:",
-            ["Casos Confirmados", "Epizootias"],
-            default=["Casos Confirmados", "Epizootias"],
+            ["Casos Confirmados", "Epizootias Positivas"],
+            default=["Casos Confirmados", "Epizootias Positivas"],
             key="tipo_datos_filter",
         )
 
         # Aplicar filtros básicos
         casos_filtrados = data["casos"].copy()
-        epizootias_filtradas = data["epizootias"].copy()
+        epizootias_filtradas = data["epizootias"].copy()  # Ya solo son positivas
 
         if municipio_norm_selected:
             casos_filtrados = casos_filtrados[
@@ -559,7 +555,7 @@ def configure_page_responsive():
         init_responsive_dashboard()
         init_responsive_utils()
 
-    # CSS responsive principal
+    # CSS responsive principal ACTUALIZADO
     st.markdown(
         f"""
         <style>
@@ -717,7 +713,7 @@ def configure_page_responsive():
 
 
 def main():
-    """Aplicación principal del dashboard con mapas interactivos."""
+    """ACTUALIZADA: Aplicación principal del dashboard con lógica solo epizootias positivas."""
     # Configurar página con responsividad máxima
     configure_page_responsive()
 
@@ -731,7 +727,7 @@ def main():
         with st.sidebar:
             st.title("Dashboard Tolima")
 
-    # Cargar datos con indicadores responsive
+    # Cargar datos con indicadores responsive (SOLO EPIZOOTIAS POSITIVAS)
     data = load_new_datasets()
 
     if data["casos"].empty and data["epizootias"].empty:
@@ -740,12 +736,17 @@ def main():
         st.info("Coloque los archivos de datos en la carpeta 'data/' y recargue la página.")
         return
 
-    # Crear filtros responsive con integración de mapas
+    # NUEVO: Mostrar información sobre el filtro de epizootias positivas
+    total_epizootias_positivas = len(data["epizootias"])
+    if total_epizootias_positivas > 0:
+        st.success(f"✅ Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias_positivas} epizootias positivas")
+
+    # Crear filtros responsive con integración de mapas CORREGIDOS
     filters, data_filtered = create_filters_responsive_with_maps(data)
 
-    # TÍTULO PRINCIPAL SIMPLIFICADO
+    # TÍTULO PRINCIPAL ACTUALIZADO
     st.markdown(
-        '<h1 class="main-title">Dashboard Fiebre Amarilla - Tolima</h1>',
+        '<h1 class="main-title">🔴 Dashboard Fiebre Amarilla - Tolima (Solo Epizootias Positivas)</h1>',
         unsafe_allow_html=True,
     )
 
@@ -754,14 +755,14 @@ def main():
         [
             "🗺️ Mapas Interactivos",
             "🏥 Información Principal", 
-            "📊 Seguimiento Temporal",
+            "📈 Seguimiento Temporal",
         ]
     )
 
     with tab1:
         if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
-                # Pasar data sin filtrar para que los mapas tengan acceso completo
+                # Pasar data filtrada para que los mapas trabajen solo con epizootias positivas
                 vistas_modules["mapas"].show(data_filtered, filters, COLORS)
             except Exception as e:
                 st.error(f"Error en módulo de mapas: {str(e)}")
