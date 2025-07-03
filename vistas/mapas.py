@@ -19,7 +19,7 @@ except ImportError:
     MAPS_AVAILABLE = False
 
 # Rutas de shapefiles procesados (ACTUALIZADA)
-PROCESSED_DIR = Path(r"C:\Users\Miguel Santos\Desktop\Tolima-Veredas\processed")
+PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
 
 
 def show(data_filtered, filters, colors):
@@ -519,7 +519,7 @@ def show_shapefiles_setup_instructions():
 python prepare_tolima_shapefiles.py
         </pre>
         <p>✅ Los shapefiles ya fueron procesados. Archivos esperados en:</p>
-        <code>C:\Users\Miguel Santos\Desktop\Tolima-Veredas\processed\</code>
+        <code>C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed/</code>
     </div>
     """,
         unsafe_allow_html=True,
