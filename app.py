@@ -30,7 +30,6 @@ IMAGES_DIR.mkdir(exist_ok=True)
 
 # Agregar rutas al path para importar módulos
 import sys
-
 sys.path.insert(0, str(ROOT_DIR))
 
 # Importar configuraciones y utilidades
@@ -41,7 +40,6 @@ from config.settings import DASHBOARD_CONFIG
 try:
     from config.responsive import init_responsive_dashboard
     from utils.responsive import init_responsive_utils, create_responsive_metric_cards
-
     RESPONSIVE_AVAILABLE = True
 except ImportError:
     RESPONSIVE_AVAILABLE = False
@@ -471,16 +469,16 @@ def load_new_datasets():
         }
 
 
-def create_filters_responsive(data):
+def create_filters_responsive_with_maps(data):
     """
-    Crea sistema de filtros completamente responsive usando el nuevo componente.
+    Crea sistema de filtros completamente responsive usando el nuevo componente con mapas.
     """
-    # Importar el sistema de filtros responsive
+    # Importar el sistema de filtros con mapas
     try:
-        from components.filters import create_complete_filter_system
+        from components.filters import create_complete_filter_system_with_maps
 
-        # Usar el sistema completo de filtros responsive
-        filter_result = create_complete_filter_system(data)
+        # Usar el sistema completo de filtros responsive con mapas
+        filter_result = create_complete_filter_system_with_maps(data)
         return filter_result["filters"], filter_result["data_filtered"]
 
     except ImportError:
@@ -719,7 +717,7 @@ def configure_page_responsive():
 
 
 def main():
-    """Aplicación principal del dashboard simplificado."""
+    """Aplicación principal del dashboard con mapas interactivos."""
     # Configurar página con responsividad máxima
     configure_page_responsive()
 
@@ -742,8 +740,8 @@ def main():
         st.info("Coloque los archivos de datos en la carpeta 'data/' y recargue la página.")
         return
 
-    # Crear filtros responsive
-    filters, data_filtered = create_filters_responsive(data)
+    # Crear filtros responsive con integración de mapas
+    filters, data_filtered = create_filters_responsive_with_maps(data)
 
     # TÍTULO PRINCIPAL SIMPLIFICADO
     st.markdown(
@@ -751,11 +749,11 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # PESTAÑAS PRINCIPALES
+    # PESTAÑAS PRINCIPALES ACTUALIZADAS
     tab1, tab2, tab3 = st.tabs(
         [
-            "🗺️ Mapas",
-            "🏥 Información Principal",
+            "🗺️ Mapas Interactivos",
+            "🏥 Información Principal", 
             "📊 Seguimiento Temporal",
         ]
     )
@@ -763,9 +761,11 @@ def main():
     with tab1:
         if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
+                # Pasar data sin filtrar para que los mapas tengan acceso completo
                 vistas_modules["mapas"].show(data_filtered, filters, COLORS)
             except Exception as e:
                 st.error(f"Error en módulo de mapas: {str(e)}")
+                st.exception(e)  # Mostrar traceback completo para debug
                 st.info("🗺️ Vista de mapas en desarrollo.")
         else:
             st.info("🗺️ Vista de mapas en desarrollo.")
