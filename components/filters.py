@@ -1,84 +1,158 @@
 """
-Componente de filtros del dashboard - Completamente responsive con FILTROS JERÁRQUICOS.
-Actualizado para casos confirmados y epizootias con mejor UX en móviles.
-CORREGIDO: Error en reset_all_filters().
-MODIFICADO: Eliminado filtro "Mostrar", consolidada información de filtros.
+Componente de filtros del dashboard - BIDIRECCIONAL con mapas interactivos.
+Sistema completamente integrado que sincroniza filtros con mapas.
+VERSIÓN MEJORADA con sincronización bidireccional.
 """
 
 import streamlit as st
 import pandas as pd
 from utils.data_processor import normalize_text
 
+# Importar utilidades de estado del mapa
+try:
+    from utils.map_state import map_state, sync_sidebar_with_map
+    MAP_STATE_AVAILABLE = True
+except ImportError:
+    MAP_STATE_AVAILABLE = False
+    map_state = None
+
 
 def create_responsive_filters_ui():
     """
-    Agrega CSS específico para filtros responsive.
+    Agrega CSS específico para filtros responsive con integración de mapas.
     """
     st.markdown(
         """
         <style>
-        /* Filtros responsive */
+        /* =============== FILTROS BIDIRECCIONALES CSS =============== */
+        
         .filter-section {
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            padding: clamp(0.75rem, 2vw, 1rem);
-            margin-bottom: clamp(0.5rem, 2vw, 1rem);
-            border-left: 4px solid #7D0F2B;
+            background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+            border-radius: 12px;
+            padding: clamp(1rem, 3vw, 1.5rem);
+            margin-bottom: clamp(0.75rem, 2vw, 1rem);
+            border-left: 5px solid #7D0F2B;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+        }
+        
+        .filter-section:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
         }
         
         .filter-header {
             color: #7D0F2B;
-            font-size: clamp(1rem, 3vw, 1.1rem);
-            font-weight: 600;
-            margin-bottom: 0.75rem;
+            font-size: clamp(1.1rem, 3vw, 1.2rem);
+            font-weight: 700;
+            margin-bottom: 1rem;
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         .filter-help {
-            font-size: clamp(0.75rem, 2vw, 0.85rem);
+            font-size: clamp(0.8rem, 2vw, 0.9rem);
             color: #666;
-            margin-top: 0.25rem;
-            line-height: 1.3;
+            margin-top: 0.5rem;
+            line-height: 1.4;
+            background: #f0f8ff;
+            padding: 0.75rem;
+            border-radius: 8px;
+            border-left: 3px solid #4682B4;
         }
         
-        /* Filtros primarios (jerarquía alta) */
+        /* Filtros primarios con iconos */
         .filter-primary {
-            background-color: #fff;
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
             border: 2px solid #7D0F2B;
-            border-radius: 8px;
-            padding: 1rem;
-            margin-bottom: 1rem;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin-bottom: 1.5rem;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .filter-primary:before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #7D0F2B, #F2A900);
         }
         
         .filter-primary .stSelectbox label {
-            font-size: 1rem !important;
-            font-weight: 700 !important;
+            font-size: 1.1rem !important;
+            font-weight: 800 !important;
             color: #7D0F2B !important;
+            text-transform: uppercase !important;
+            letter-spacing: 1px !important;
         }
         
-        /* Filtros secundarios (jerarquía media) */
+        /* Filtros secundarios */
         .filter-secondary {
-            background-color: #f8f9fa;
+            background: #f8f9fa;
             border: 1px solid #dee2e6;
-            border-radius: 6px;
-            padding: 0.75rem;
-            margin-bottom: 0.75rem;
+            border-radius: 10px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            transition: all 0.3s ease;
+        }
+        
+        .filter-secondary:hover {
+            background: #e9ecef;
+            border-color: #7D0F2B;
         }
         
         .filter-secondary .stSelectbox label,
         .filter-secondary .stMultiSelect label {
-            font-size: 0.9rem !important;
-            font-weight: 600 !important;
+            font-size: 1rem !important;
+            font-weight: 700 !important;
             color: #5A4214 !important;
         }
         
-        /* Responsive filter controls */
+        /* Sincronización con mapas */
+        .map-sync-indicator {
+            background: linear-gradient(135deg, #4682B4, #F2A900);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 0.5rem 0;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            animation: pulse 2s infinite;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.7; }
+            100% { opacity: 1; }
+        }
+        
+        .filter-sync-status {
+            background: #e8f5e8;
+            color: #2d5a2d;
+            padding: 0.75rem;
+            border-radius: 8px;
+            margin: 1rem 0;
+            border-left: 4px solid #509E2F;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        /* Responsive controls */
         .sidebar .stSelectbox > div > div,
         .sidebar .stMultiSelect > div > div,
         .sidebar .stDateInput > div > div {
-            font-size: clamp(0.8rem, 2vw, 0.9rem) !important;
+            font-size: clamp(0.85rem, 2vw, 0.95rem) !important;
+            min-height: 44px !important;
         }
         
         .sidebar .stSelectbox label,
@@ -86,84 +160,120 @@ def create_responsive_filters_ui():
         .sidebar .stDateInput label,
         .sidebar .stSlider label,
         .sidebar .stCheckbox label {
-            font-size: clamp(0.85rem, 2vw, 0.95rem) !important;
+            font-size: clamp(0.9rem, 2vw, 1rem) !important;
             font-weight: 600 !important;
             color: #2c2c2c !important;
         }
         
-        /* Reset button styling */
+        /* Reset button con estilo mejorado */
         .reset-filters-btn {
             width: 100% !important;
-            background-color: #dc3545 !important;
+            background: linear-gradient(135deg, #dc3545, #c82333) !important;
             color: white !important;
             border: none !important;
-            border-radius: 6px !important;
-            padding: 0.5rem 1rem !important;
-            font-size: clamp(0.8rem, 2vw, 0.9rem) !important;
-            font-weight: 600 !important;
-            margin: 1rem 0 !important;
+            border-radius: 25px !important;
+            padding: 0.75rem 1.5rem !important;
+            font-size: clamp(0.85rem, 2vw, 0.95rem) !important;
+            font-weight: 700 !important;
+            margin: 1.5rem 0 !important;
             transition: all 0.3s ease !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+            box-shadow: 0 4px 15px rgba(220, 53, 69, 0.3) !important;
         }
         
         .reset-filters-btn:hover {
-            background-color: #c82333 !important;
-            transform: translateY(-1px) !important;
+            background: linear-gradient(135deg, #c82333, #a71e2a) !important;
+            transform: translateY(-2px) !important;
+            box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
         }
         
-        /* Consolidated filter info box */
-        .filter-info-box {
-            background-color: #e8f4fd;
-            color: #2c2c2c;
-            padding: 0.75rem;
-            border-radius: 6px;
-            margin: 0.5rem 0;
-            font-size: clamp(0.75rem, 2vw, 0.85rem);
-            line-height: 1.4;
-            border-left: 4px solid #4682B4;
-        }
-        
-        .filter-info-title {
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            color: #4682B4;
-        }
-        
-        /* Active filters display */
+        /* Active filters display mejorado */
         .active-filters {
-            background-color: #7D0F2B;
+            background: linear-gradient(135deg, #7D0F2B, #5A4214);
             color: white;
-            padding: clamp(0.5rem, 2vw, 0.75rem);
-            border-radius: 6px;
-            margin: 0.5rem 0;
-            font-size: clamp(0.8rem, 2vw, 0.9rem);
-            line-height: 1.4;
+            padding: clamp(0.75rem, 2vw, 1rem);
+            border-radius: 12px;
+            margin: 1rem 0;
+            font-size: clamp(0.85rem, 2vw, 0.95rem);
+            line-height: 1.5;
+            box-shadow: 0 4px 15px rgba(125, 15, 43, 0.3);
         }
         
         .active-filters-title {
-            font-weight: 600;
-            margin-bottom: 0.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
         
         .active-filters-list {
             margin-left: 1rem;
         }
         
+        .active-filters-list li {
+            margin-bottom: 0.25rem;
+            position: relative;
+        }
+        
+        .active-filters-list li:before {
+            content: '▶';
+            position: absolute;
+            left: -1rem;
+            color: #F2A900;
+            font-weight: bold;
+        }
+        
         /* Mobile optimizations */
         @media (max-width: 768px) {
             .filter-section {
-                padding: 0.5rem;
+                padding: 0.75rem;
+                margin-bottom: 1rem;
+            }
+            
+            .filter-header {
+                font-size: 1rem;
                 margin-bottom: 0.75rem;
+            }
+            
+            .filter-primary {
+                padding: 1rem;
+                margin-bottom: 1rem;
             }
             
             .sidebar .stSelectbox > div > div,
             .sidebar .stMultiSelect > div > div {
-                min-height: 44px !important; /* Touch-friendly */
+                min-height: 48px !important; /* Más grande para touch */
             }
             
             .sidebar .stButton > button {
-                min-height: 44px !important;
+                min-height: 48px !important;
                 font-size: 0.9rem !important;
             }
+            
+            .map-sync-indicator {
+                font-size: 0.7rem;
+                padding: 0.4rem 0.8rem;
+            }
+        }
+        
+        /* Indicadores de estado */
+        .filter-connected {
+            border-left-color: #509E2F !important;
+        }
+        
+        .filter-disconnected {
+            border-left-color: #dc3545 !important;
+        }
+        
+        .sync-icon {
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
         </style>
         """,
@@ -171,20 +281,47 @@ def create_responsive_filters_ui():
     )
 
 
-def create_hierarchical_filters(data):
+def create_hierarchical_filters_with_map_sync(data):
     """
-    Crea filtros jerárquicos responsive para municipio y vereda (PRIORIDAD MÁXIMA).
+    Crea filtros jerárquicos con sincronización bidireccional con mapas.
 
     Args:
         data (dict): Datos cargados con mapeos
 
     Returns:
-        dict: Filtros seleccionados
+        dict: Filtros seleccionados con sincronización
     """
     # Aplicar CSS responsive
     create_responsive_filters_ui()
 
-    # Filtro de municipio con mejor UX (PRIORIDAD 1)
+    # Sincronizar con estado del mapa si está disponible
+    if MAP_STATE_AVAILABLE and map_state:
+        sync_sidebar_with_map(map_state)
+    
+    # Indicador de sincronización
+    if MAP_STATE_AVAILABLE:
+        st.sidebar.markdown(
+            """
+            <div class="map-sync-indicator">
+                <span class="sync-icon">🔄</span>
+                Sincronizado con mapas
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    
+    # Sección de filtros primarios
+    st.sidebar.markdown(
+        """
+        <div class="filter-section filter-primary">
+            <div class="filter-header">
+                🎯 Filtros Principales
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    # Filtro de municipio (PRIORIDAD MÁXIMA)
     municipio_options = ["Todos"] + [
         data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
     ]
@@ -193,13 +330,27 @@ def create_hierarchical_filters(data):
         "📍 **MUNICIPIO**:",
         municipio_options,
         key="municipio_filter",
-        help="Seleccione un municipio específico para filtrar los datos",
+        help="Seleccione un municipio. También puede hacer clic en el mapa.",
     )
 
-    # Mostrar información del municipio seleccionado
+    # Información del municipio seleccionado
     if municipio_selected != "Todos":
         st.sidebar.markdown(
-            f'<div class="filter-help">📊 <strong>{municipio_selected}</strong> seleccionado</div>',
+            f"""
+            <div class="filter-help">
+                🏛️ <strong>{municipio_selected}</strong> seleccionado
+                <br>💡 Haga clic en veredas del mapa para más detalles
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.sidebar.markdown(
+            """
+            <div class="filter-help">
+                💡 Seleccione un municipio aquí o haga clic en el mapa
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
@@ -211,7 +362,7 @@ def create_hierarchical_filters(data):
                 municipio_norm_selected = norm
                 break
 
-    # Filtro de vereda (jerárquico - depende del municipio) (PRIORIDAD 2)
+    # Filtro de vereda (jerárquico - depende del municipio)
     vereda_options = ["Todas"]
     if (
         municipio_norm_selected
@@ -231,7 +382,11 @@ def create_hierarchical_filters(data):
 
     if vereda_disabled:
         st.sidebar.markdown(
-            '<div class="filter-help">💡 Seleccione un municipio para ver sus veredas</div>',
+            """
+            <div class="filter-help">
+                💡 Primero seleccione un municipio para ver sus veredas
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
@@ -240,13 +395,18 @@ def create_hierarchical_filters(data):
         vereda_options,
         key="vereda_filter",
         disabled=vereda_disabled,
-        help="Las veredas se actualizan automáticamente según el municipio seleccionado",
+        help="Las veredas se actualizan según el municipio. También puede hacer clic en el mapa.",
     )
 
-    # Mostrar información de la vereda seleccionada
+    # Información de la vereda seleccionada
     if vereda_selected != "Todas" and not vereda_disabled:
         st.sidebar.markdown(
-            f'<div class="filter-help">🏘️ <strong>{vereda_selected}</strong> seleccionada</div>',
+            f"""
+            <div class="filter-help">
+                📍 <strong>{vereda_selected}</strong> seleccionada
+                <br>🔍 Vista detallada en el mapa
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
@@ -261,6 +421,15 @@ def create_hierarchical_filters(data):
                     vereda_norm_selected = norm
                     break
 
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
+
+    # Actualizar estado del mapa si hay cambios
+    if MAP_STATE_AVAILABLE and map_state:
+        update_map_state_from_filters(
+            municipio_selected, municipio_norm_selected,
+            vereda_selected, vereda_norm_selected
+        )
+
     return {
         "municipio_display": municipio_selected,
         "municipio_normalizado": municipio_norm_selected,
@@ -269,10 +438,46 @@ def create_hierarchical_filters(data):
     }
 
 
+def update_map_state_from_filters(municipio_display, municipio_norm, vereda_display, vereda_norm):
+    """Actualiza el estado del mapa basado en cambios en filtros."""
+    
+    # Evitar loops infinitos
+    if st.session_state.get('map_filter_changed', False):
+        return
+    
+    current_level = map_state.get_current_level()
+    current_municipio = map_state.get_selected_municipio()
+    current_vereda = map_state.get_selected_vereda()
+    
+    # Determinar si hay cambios que requieren actualización del mapa
+    needs_update = False
+    
+    if vereda_display != "Todas":
+        # Usuario seleccionó vereda específica
+        if (not current_vereda or 
+            current_vereda['display'] != vereda_display or
+            current_level != 'vereda'):
+            map_state.set_vereda_view(vereda_display, vereda_norm or vereda_display)
+            needs_update = True
+    
+    elif municipio_display != "Todos":
+        # Usuario seleccionó municipio específico
+        if (not current_municipio or 
+            current_municipio['display'] != municipio_display or
+            current_level != 'municipio'):
+            map_state.set_municipio_view(municipio_display, municipio_norm or municipio_display)
+            needs_update = True
+    
+    else:
+        # Usuario deseleccionó todo - vista departamental
+        if current_level != 'departamento':
+            map_state.set_departamento_view()
+            needs_update = True
+
+
 def create_content_filters(data):
     """
-    Crea filtros de contenido responsive (fechas) - JERARQUÍA MEDIA.
-    ELIMINADO: Filtro de tipo de datos (siempre se muestran ambos).
+    Crea filtros de contenido responsive (fechas).
 
     Args:
         data (dict): Datos cargados
@@ -280,8 +485,18 @@ def create_content_filters(data):
     Returns:
         dict: Filtros de contenido seleccionados
     """
-    # Sección de filtros de contenido (jerarquía media)
+    # Sección de filtros de contenido
     st.sidebar.markdown("---")
+    
+    st.sidebar.markdown(
+        """
+        <div class="filter-section filter-secondary">
+            <div class="filter-header">
+                📅 Filtros Temporales
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     # Filtro de rango de fechas con información contextual
     fechas_disponibles = []
@@ -315,8 +530,21 @@ def create_content_filters(data):
             key="fecha_filter",
             help="Seleccione el período temporal de interés",
         )
+        
+        # Información contextual de fechas
+        st.sidebar.markdown(
+            f"""
+            <div class="filter-help">
+                📊 Rango disponible: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}
+                <br>⏱️ Total: {(fecha_max - fecha_min).days} días de datos
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         st.sidebar.warning("⚠️ No hay fechas disponibles en los datos")
+
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
     return {
         "tipo_datos": ["Casos Confirmados", "Epizootias"],  # Siempre ambos
@@ -328,7 +556,7 @@ def create_content_filters(data):
 
 def create_advanced_filters(data):
     """
-    Crea filtros avanzados responsive - JERARQUÍA BAJA (menor relevancia visual).
+    Crea filtros avanzados responsive con mejor organización.
 
     Args:
         data (dict): Datos cargados
@@ -336,60 +564,55 @@ def create_advanced_filters(data):
     Returns:
         dict: Filtros avanzados seleccionados
     """
-    # Sección de filtros avanzados (jerarquía baja)
+    # Sección de filtros avanzados
     st.sidebar.markdown("---")
 
-    # Expandir sección de filtros avanzados con menor énfasis
-    with st.sidebar.expander("🔧 Filtros Adicionales", expanded=False):
+    # Expandir sección de filtros avanzados
+    with st.sidebar.expander("🔧 Filtros Avanzados", expanded=False):
         st.markdown(
             """
-            <div style="font-size: 0.85rem; color: #666; margin-bottom: 0.75rem;">
-                Filtros complementarios para análisis específicos
+            <div class="filter-sync-status">
+                🎛️ <strong>Filtros complementarios</strong><br>
+                Para análisis específicos y detallados
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-        # Filtros para casos
-        st.subheader("🦠 Casos")
+        # Filtros para casos en dos columnas
+        st.markdown("### 🦠 Casos Humanos")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Filtro por condición final
+            condicion_filter = "Todas"
+            if not data["casos"].empty and "condicion_final" in data["casos"].columns:
+                condiciones_disponibles = ["Todas"] + list(
+                    data["casos"]["condicion_final"].dropna().unique()
+                )
+                condicion_filter = st.selectbox(
+                    "⚰️ Condición:",
+                    condiciones_disponibles,
+                    key="condicion_filter",
+                    help="Estado final del paciente",
+                )
 
-        # Filtro por condición final
-        condicion_filter = "Todas"
-        if not data["casos"].empty and "condicion_final" in data["casos"].columns:
-            condiciones_disponibles = ["Todas"] + list(
-                data["casos"]["condicion_final"].dropna().unique()
-            )
-            condicion_filter = st.selectbox(
-                "Condición Final:",
-                condiciones_disponibles,
-                key="condicion_filter",
-                help="Estado final del paciente",
-            )
+        with col2:
+            # Filtro por sexo
+            sexo_filter = "Todos"
+            if not data["casos"].empty and "sexo" in data["casos"].columns:
+                sexos_disponibles = ["Todos"] + list(
+                    data["casos"]["sexo"].dropna().unique()
+                )
+                sexo_filter = st.selectbox(
+                    "👤 Sexo:",
+                    sexos_disponibles,
+                    key="sexo_filter",
+                    help="Género del paciente",
+                )
 
-            # Información sobre la condición seleccionada
-            if condicion_filter != "Todas":
-                count = (data["casos"]["condicion_final"] == condicion_filter).sum()
-                st.caption(f"📊 {count} casos con condición: {condicion_filter}")
-
-        # Filtro por sexo
-        sexo_filter = "Todos"
-        if not data["casos"].empty and "sexo" in data["casos"].columns:
-            sexos_disponibles = ["Todos"] + list(
-                data["casos"]["sexo"].dropna().unique()
-            )
-            sexo_filter = st.selectbox(
-                "Sexo:",
-                sexos_disponibles,
-                key="sexo_filter",
-                help="Género del paciente",
-            )
-
-            # Información sobre el sexo seleccionado
-            if sexo_filter != "Todos":
-                count = (data["casos"]["sexo"] == sexo_filter).sum()
-                st.caption(f"📊 {count} casos de sexo: {sexo_filter}")
-
-        # Filtro por rango de edad
+        # Filtro por rango de edad (ancho completo)
         edad_rango = None
         if not data["casos"].empty and "edad" in data["casos"].columns:
             edad_min = (
@@ -405,7 +628,7 @@ def create_advanced_filters(data):
 
             if edad_min < edad_max:
                 edad_rango = st.slider(
-                    "Rango de Edad:",
+                    "🎂 Rango de Edad:",
                     min_value=edad_min,
                     max_value=edad_max,
                     value=(edad_min, edad_max),
@@ -413,54 +636,38 @@ def create_advanced_filters(data):
                     help="Seleccione el rango de edad de interés",
                 )
 
-                # Información sobre el rango seleccionado
-                if edad_rango:
-                    casos_en_rango = data["casos"][
-                        (data["casos"]["edad"] >= edad_rango[0])
-                        & (data["casos"]["edad"] <= edad_rango[1])
-                    ].shape[0]
-                    st.caption(
-                        f"📊 {casos_en_rango} casos en rango {edad_rango[0]}-{edad_rango[1]} años"
-                    )
-
         # Filtros para epizootias
-        st.subheader("🐒 Epizootias")
+        st.markdown("### 🐒 Epizootias")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Filtro por resultado de epizootia
+            resultado_filter = "Todos"
+            if not data["epizootias"].empty and "descripcion" in data["epizootias"].columns:
+                resultados_disponibles = ["Todos"] + list(
+                    data["epizootias"]["descripcion"].dropna().unique()
+                )
+                resultado_filter = st.selectbox(
+                    "🔬 Resultado:",
+                    resultados_disponibles,
+                    key="resultado_filter",
+                    help="Resultado del análisis",
+                )
 
-        # Filtro por resultado de epizootia
-        resultado_filter = "Todos"
-        if not data["epizootias"].empty and "descripcion" in data["epizootias"].columns:
-            resultados_disponibles = ["Todos"] + list(
-                data["epizootias"]["descripcion"].dropna().unique()
-            )
-            resultado_filter = st.selectbox(
-                "Resultado:",
-                resultados_disponibles,
-                key="resultado_filter",
-                help="Resultado del análisis de la muestra",
-            )
-
-            # Información sobre el resultado seleccionado
-            if resultado_filter != "Todos":
-                count = (data["epizootias"]["descripcion"] == resultado_filter).sum()
-                st.caption(f"📊 {count} epizootias con resultado: {resultado_filter}")
-
-        # Filtro por fuente de epizootia
-        fuente_filter = "Todas"
-        if not data["epizootias"].empty and "proveniente" in data["epizootias"].columns:
-            fuentes_disponibles = ["Todas"] + list(
-                data["epizootias"]["proveniente"].dropna().unique()
-            )
-            fuente_filter = st.selectbox(
-                "Fuente:",
-                fuentes_disponibles,
-                key="fuente_filter",
-                help="Origen o fuente de la muestra",
-            )
-
-            # Información sobre la fuente seleccionada
-            if fuente_filter != "Todas":
-                count = (data["epizootias"]["proveniente"] == fuente_filter).sum()
-                st.caption(f"📊 {count} epizootias de fuente: {fuente_filter[:30]}...")
+        with col2:
+            # Filtro por fuente de epizootia
+            fuente_filter = "Todas"
+            if not data["epizootias"].empty and "proveniente" in data["epizootias"].columns:
+                fuentes_disponibles = ["Todas"] + list(
+                    data["epizootias"]["proveniente"].dropna().unique()
+                )
+                fuente_filter = st.selectbox(
+                    "📋 Fuente:",
+                    fuentes_disponibles,
+                    key="fuente_filter",
+                    help="Origen de la muestra",
+                )
 
     return {
         "condicion_final": condicion_filter,
@@ -471,13 +678,9 @@ def create_advanced_filters(data):
     }
 
 
-# ELIMINADA: Función de información consolidada según solicitud
-
-
-def create_filter_summary(filters_location, filters_content, filters_advanced, data):
+def create_filter_summary_with_map_info(filters_location, filters_content, filters_advanced, data):
     """
-    Crea un resumen responsive de los filtros aplicados.
-    ACTUALIZADA: Solo muestra período y edad cuando son diferentes del rango completo.
+    Crea un resumen de filtros con información de sincronización con mapas.
 
     Args:
         filters_location (dict): Filtros de ubicación
@@ -490,12 +693,22 @@ def create_filter_summary(filters_location, filters_content, filters_advanced, d
     """
     active_filters = []
 
-    # Filtros de ubicación (prioridad alta en el resumen)
+    # Filtros de ubicación (prioridad alta con iconos de mapa)
     if filters_location["municipio_display"] != "Todos":
-        active_filters.append(f"📍 Municipio: {filters_location['municipio_display']}")
+        active_filters.append(f"🗺️ Municipio: {filters_location['municipio_display']}")
 
     if filters_location["vereda_display"] != "Todas":
-        active_filters.append(f"🏘️ Vereda: {filters_location['vereda_display']}")
+        active_filters.append(f"📍 Vereda: {filters_location['vereda_display']}")
+
+    # Agregar información de sincronización con mapa si está disponible
+    if MAP_STATE_AVAILABLE and map_state:
+        current_level = map_state.get_current_level()
+        level_icons = {
+            'departamento': '🏛️',
+            'municipio': '🏘️', 
+            'vereda': '📍'
+        }
+        active_filters.append(f"{level_icons[current_level]} Mapa: Vista {current_level}")
 
     # Filtros de contenido - SOLO si son diferentes del rango completo
     if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
@@ -510,7 +723,7 @@ def create_filter_summary(filters_location, filters_content, filters_advanced, d
             (fecha_inicio != fecha_min_original.date() or fecha_fin != fecha_max_original.date())):
             active_filters.append(f"📅 Período: {fecha_inicio} - {fecha_fin}")
 
-    # Filtros avanzados (menor prioridad en el resumen)
+    # Filtros avanzados (menor prioridad)
     if filters_advanced["condicion_final"] != "Todas":
         active_filters.append(f"⚰️ Condición: {filters_advanced['condicion_final']}")
 
@@ -552,9 +765,9 @@ def create_filter_summary(filters_location, filters_content, filters_advanced, d
     return active_filters
 
 
-def show_active_filters_sidebar(active_filters):
+def show_active_filters_sidebar_with_map_sync(active_filters):
     """
-    Muestra los filtros activos en la barra lateral de manera responsive.
+    Muestra los filtros activos con información de sincronización con mapas.
 
     Args:
         active_filters (list): Lista de filtros activos
@@ -564,31 +777,33 @@ def show_active_filters_sidebar(active_filters):
 
     st.sidebar.markdown("---")
 
-    # Título con contador
+    # Título con contador y estado de sincronización
     filter_count = len(active_filters)
+    sync_status = "🔗 Sincronizado" if MAP_STATE_AVAILABLE else "⚠️ Sin mapas"
+    
     st.sidebar.markdown(
         f"""
         <div class="active-filters">
             <div class="active-filters-title">
-                🔍 Filtros Activos ({filter_count})
+                🎯 Filtros Activos ({filter_count}) | {sync_status}
             </div>
-            <div class="active-filters-list">
+            <ul class="active-filters-list">
         """,
         unsafe_allow_html=True,
     )
 
-    # Mostrar filtros de manera compacta (priorizar los primeros)
-    for filter_desc in active_filters[:6]:  # Máximo 6 filtros visibles
-        st.sidebar.markdown(f"• {filter_desc}")
+    # Mostrar filtros con prioridad (mapas primero)
+    for filter_desc in active_filters[:8]:  # Máximo 8 filtros visibles
+        st.sidebar.markdown(f"<li>{filter_desc}</li>", unsafe_allow_html=True)
 
     # Si hay más filtros, mostrar indicador
-    if len(active_filters) > 6:
-        remaining = len(active_filters) - 6
-        st.sidebar.markdown(f"... y {remaining} filtro(s) más")
+    if len(active_filters) > 8:
+        remaining = len(active_filters) - 8
+        st.sidebar.markdown(f"<li>... y {remaining} filtro(s) más</li>", unsafe_allow_html=True)
 
     st.sidebar.markdown(
         """
-            </div>
+            </ul>
         </div>
         """,
         unsafe_allow_html=True,
@@ -598,6 +813,7 @@ def show_active_filters_sidebar(active_filters):
 def apply_all_filters(data, filters_location, filters_content, filters_advanced):
     """
     Aplica todos los filtros a los datos de manera eficiente.
+    Versión optimizada para trabajar con mapas.
 
     Args:
         data (dict): Datos originales
@@ -705,8 +921,7 @@ def apply_all_filters(data, filters_location, filters_content, filters_advanced)
 
 def reset_all_filters():
     """
-    Resetea todos los filtros a sus valores por defecto.
-    CORREGIDO: Manejo seguro de session_state sin errores.
+    Resetea todos los filtros y el estado del mapa.
     """
     # Lista de todas las claves de filtros
     filter_keys = [
@@ -727,83 +942,15 @@ def reset_all_filters():
                 del st.session_state[key]
             except Exception:
                 continue
+    
+    # Resetear estado del mapa si está disponible
+    if MAP_STATE_AVAILABLE and map_state:
+        map_state.set_departamento_view()
 
 
-def create_filter_export_options(data_filtered):
+def create_complete_filter_system_with_maps(data):
     """
-    Crea opciones responsive para exportar datos filtrados - JERARQUÍA BAJA.
-
-    Args:
-        data_filtered (dict): Datos filtrados
-    """
-    # Usar expander para menor jerarquía visual
-    with st.sidebar.expander("📥 Exportar Datos", expanded=False):
-        st.markdown(
-            """
-            <div style="font-size: 0.85rem; color: #666; margin-bottom: 0.75rem;">
-                Descargar datos con filtros aplicados
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Información sobre los datos filtrados
-        casos_count = len(data_filtered["casos"])
-        epi_count = len(data_filtered["epizootias"])
-
-        st.markdown(
-            f"""
-            <div class="filter-help">
-                📊 Datos filtrados:<br>
-                • Casos: {casos_count}<br>
-                • Epizootias: {epi_count}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        # Crear columnas responsive para botones
-        col1, col2 = st.columns(2)
-
-        with col1:
-            # Botón para descargar casos filtrados
-            if not data_filtered["casos"].empty:
-                casos_csv = data_filtered["casos"].to_csv(index=False)
-                st.download_button(
-                    label="🦠 Casos",
-                    data=casos_csv,
-                    file_name=f"casos_filtrados_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    key="download_casos_filtered",
-                    help="Descargar casos filtrados como CSV",
-                )
-            else:
-                st.button("🦠 Casos", disabled=True, help="No hay casos para exportar")
-
-        with col2:
-            # Botón para descargar epizootias filtradas
-            if not data_filtered["epizootias"].empty:
-                epi_csv = data_filtered["epizootias"].to_csv(index=False)
-                st.download_button(
-                    label="🐒 Epizootias",
-                    data=epi_csv,
-                    file_name=f"epizootias_filtradas_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    key="download_epi_filtered",
-                    help="Descargar epizootias filtradas como CSV",
-                )
-            else:
-                st.button(
-                    "🐒 Epizootias",
-                    disabled=True,
-                    help="No hay epizootias para exportar",
-                )
-
-
-def create_complete_filter_system(data):
-    """
-    Crea el sistema completo de filtros responsive con JERARQUÍA CLARA.
-    MODIFICADO: Eliminada información consolidada, copyright al final.
+    Crea el sistema completo de filtros con integración bidireccional de mapas.
 
     Args:
         data (dict): Datos cargados
@@ -812,45 +959,46 @@ def create_complete_filter_system(data):
         dict: Todos los filtros aplicados y datos filtrados
     """
     # Crear diferentes tipos de filtros con jerarquía clara
-    filters_location = create_hierarchical_filters(data)  # PRIORIDAD MÁXIMA
+    filters_location = create_hierarchical_filters_with_map_sync(data)  # PRIORIDAD MÁXIMA con mapas
     filters_content = create_content_filters(data)  # PRIORIDAD MEDIA
     filters_advanced = create_advanced_filters(data)  # PRIORIDAD BAJA
 
-    # Crear resumen de filtros activos (pasando data para comparar rangos)
-    active_filters = create_filter_summary(
+    # Crear resumen de filtros activos con información de mapas
+    active_filters = create_filter_summary_with_map_info(
         filters_location, filters_content, filters_advanced, data
     )
 
-    # Mostrar filtros activos en sidebar
-    show_active_filters_sidebar(active_filters)
+    # Mostrar filtros activos en sidebar con sincronización
+    show_active_filters_sidebar_with_map_sync(active_filters)
 
-    # Botón para resetear filtros con estilo responsive
+    # Botón para resetear filtros con estilo responsive mejorado
     st.sidebar.markdown("---")
-    col1, col2 = st.sidebar.columns([2, 1])
+    col1, col2 = st.sidebar.columns([3, 1])
 
     with col1:
         if st.button(
-            "🔄 Restablecer Filtros",
+            "🔄 Restablecer Todo",
             key="reset_all_filters_btn",
-            help="Limpiar todos los filtros aplicados",
+            help="Limpiar todos los filtros y resetear mapa",
         ):
             reset_all_filters()
             st.rerun()
 
     with col2:
-        # Contador de filtros activos
+        # Contador de filtros activos con mejor estilo
         filter_count = len(active_filters)
         if filter_count > 0:
             st.markdown(
                 f"""
                 <div style="
-                    background-color: #7D0F2B; 
+                    background: linear-gradient(135deg, #7D0F2B, #F2A900); 
                     color: white; 
-                    padding: 0.25rem 0.5rem; 
-                    border-radius: 12px; 
+                    padding: 0.4rem 0.8rem; 
+                    border-radius: 20px; 
                     text-align: center; 
                     font-size: 0.8rem; 
-                    font-weight: 600;
+                    font-weight: 700;
+                    box-shadow: 0 3px 10px rgba(0,0,0,0.3);
                 ">
                     {filter_count}
                 </div>
@@ -862,11 +1010,8 @@ def create_complete_filter_system(data):
     data_filtered = apply_all_filters(
         data, filters_location, filters_content, filters_advanced
     )
-
-    # Mostrar opciones de exportación (jerarquía baja) - ELIMINADO para consolidar
-    # create_filter_export_options(data_filtered)
     
-    # AGREGAR COPYRIGHT AL FINAL
+    # Agregar copyright al final
     from components.sidebar import add_copyright
     add_copyright()
     
@@ -879,3 +1024,9 @@ def create_complete_filter_system(data):
     }
 
     return {"filters": all_filters, "data_filtered": data_filtered}
+
+
+# Función principal exportada para compatibilidad
+def create_complete_filter_system(data):
+    """Función de compatibilidad que llama al sistema completo con mapas."""
+    return create_complete_filter_system_with_maps(data)
