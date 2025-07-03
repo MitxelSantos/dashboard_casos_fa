@@ -1,7 +1,7 @@
 """
 Vista de mapas INTERACTIVOS del dashboard de Fiebre Amarilla.
 Mapas como filtros integrados con zoom dinámico y métricas responsive.
-VERSIÓN CORREGIDA: Solo epizootias positivas + filtros funcionando + doble clic
+VERSIÓN CORREGIDA: Estilo unificado + solo "Epizootias" + error Folium corregido
 """
 
 import streamlit as st
@@ -30,7 +30,7 @@ PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
 def show(data_filtered, filters, colors):
     """
     Muestra la vista de mapas interactivos completa con integración de filtros.
-    CORREGIDO: Solo epizootias positivas + filtros funcionando
+    CORREGIDO: Estilo unificado + solo "Epizootias" + error Folium corregido
     """
     # CSS para la vista completa
     apply_maps_css(colors)
@@ -59,8 +59,8 @@ def show(data_filtered, filters, colors):
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]
 
-    # CORREGIDO: Métricas responsive (solo epizootias positivas)
-    create_interactive_metrics_fixed(casos, epizootias, filters, colors)
+    # CORREGIDO: Métricas con estilo unificado + "Epizootias" simplificado
+    create_unified_metrics_cards(casos, epizootias, filters, colors)
     
     st.markdown("---")
 
@@ -68,16 +68,16 @@ def show(data_filtered, filters, colors):
     create_interactive_map_system_fixed(casos, epizootias, geo_data, filters, colors, data_filtered)
 
 
-def create_interactive_metrics_fixed(casos, epizootias, filters, colors):
+def create_unified_metrics_cards(casos, epizootias, filters, colors):
     """
-    CORREGIDO: Métricas que se renderizan correctamente + solo epizootias positivas
+    NUEVO: Métricas unificadas con el estilo de información principal + solo "Epizootias"
     """
     
     # Calcular métricas según filtros actuales
     total_casos = len(casos)
     
-    # CAMBIO: Solo epizootias positivas
-    epizootias_positivas = len(epizootias[epizootias["descripcion"] == "POSITIVO FA"]) if not epizootias.empty and "descripcion" in epizootias.columns else 0
+    # CAMBIO VISUAL: Solo "Epizootias" (ya son todas positivas)
+    total_epizootias = len(epizootias)
 
     # Métricas de casos
     fallecidos = 0
@@ -105,57 +105,154 @@ def create_interactive_metrics_fixed(casos, epizootias, filters, colors):
         st.markdown(filters_html, unsafe_allow_html=True)
         st.markdown("---")
 
-    # CORREGIDO: Usar columnas de Streamlit en lugar de HTML complejo
+    # CORREGIDO: CSS unificado para tarjetas estéticas
+    st.markdown(
+        f"""
+        <style>
+        .unified-metric-card {{
+            background: linear-gradient(135deg, white 0%, #f8f9fa 100%);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+            margin-bottom: 20px;
+            border-top: 4px solid {colors['primary']};
+            min-height: 150px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }}
+        
+        .unified-metric-card:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }}
+        
+        .unified-card-icon {{
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }}
+        
+        .unified-card-title {{
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: {colors['dark']};
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        .unified-card-value {{
+            font-size: 2rem;
+            font-weight: 700;
+            color: {colors['primary']};
+            margin-bottom: 8px;
+            line-height: 1;
+        }}
+        
+        .unified-card-subtitle {{
+            font-size: 0.85rem;
+            color: #666;
+            margin: 0;
+            line-height: 1.2;
+        }}
+        
+        .unified-card-location {{
+            font-size: 0.75rem;
+            color: #888;
+            margin-top: 4px;
+            line-height: 1.1;
+        }}
+        
+        @media (max-width: 768px) {{
+            .unified-metric-card {{
+                min-height: 120px;
+                padding: 15px;
+            }}
+            
+            .unified-card-icon {{
+                font-size: 1.5rem;
+            }}
+            
+            .unified-card-value {{
+                font-size: 1.5rem;
+            }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # CORREGIDO: Usar HTML para mantener estilo unificado
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric(
-            label="🦠 Casos Confirmados",
-            value=total_casos,
-            help="Casos humanos confirmados de Fiebre Amarilla"
+        st.markdown(
+            f"""
+            <div class="unified-metric-card">
+                <div class="unified-card-icon">🦠</div>
+                <div class="unified-card-title">Casos Confirmados</div>
+                <div class="unified-card-value">{total_casos}</div>
+                <div class="unified-card-subtitle">Casos humanos</div>
+                {f'<div class="unified-card-location">📍 {ubicacion_actual}</div>' if ubicacion_actual else ''}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        if ubicacion_actual:
-            st.caption(f"📍 {ubicacion_actual}")
     
     with col2:
         letalidad_delta = "Alto riesgo" if letalidad > 50 else "Bajo control" if letalidad < 20 else "Moderado"
-        st.metric(
-            label="⚰️ Letalidad", 
-            value=f"{letalidad:.1f}%",
-            delta=f"{fallecidos} fallecidos",
-            help="Tasa de letalidad de casos confirmados"
+        st.markdown(
+            f"""
+            <div class="unified-metric-card">
+                <div class="unified-card-icon">⚰️</div>
+                <div class="unified-card-title">Letalidad</div>
+                <div class="unified-card-value">{letalidad:.1f}%</div>
+                <div class="unified-card-subtitle">{fallecidos} fallecidos</div>
+                {f'<div class="unified-card-location">📍 {ubicacion_actual}</div>' if ubicacion_actual else ''}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        if ubicacion_actual:
-            st.caption(f"📍 {ubicacion_actual}")
     
     with col3:
-        # CAMBIO: Solo epizootias positivas
-        st.metric(
-            label="🔴 Epizootias Positivas",
-            value=epizootias_positivas,
-            help="Epizootias que dieron positivo para Fiebre Amarilla"
+        # CAMBIO VISUAL: Solo "Epizootias" (ya no "Positivas")
+        st.markdown(
+            f"""
+            <div class="unified-metric-card">
+                <div class="unified-card-icon">🐒</div>
+                <div class="unified-card-title">Epizootias</div>
+                <div class="unified-card-value">{total_epizootias}</div>
+                <div class="unified-card-subtitle">Confirmadas FA</div>
+                {f'<div class="unified-card-location">📍 {ubicacion_actual}</div>' if ubicacion_actual else ''}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        if ubicacion_actual:
-            st.caption(f"📍 {ubicacion_actual}")
     
     with col4:
-        # Cálculo de riesgo basado en casos + epizootias positivas
-        actividad_total = total_casos + epizootias_positivas
+        # Cálculo de riesgo basado en casos + epizootias
+        actividad_total = total_casos + total_epizootias
         riesgo = "Alto" if actividad_total > 20 else "Medio" if actividad_total > 5 else "Bajo"
         
-        st.metric(
-            label="⚠️ Nivel de Riesgo",
-            value=riesgo,
-            delta=f"{actividad_total} eventos totales",
-            help="Nivel de riesgo basado en casos humanos y epizootias positivas"
+        st.markdown(
+            f"""
+            <div class="unified-metric-card">
+                <div class="unified-card-icon">⚠️</div>
+                <div class="unified-card-title">Nivel de Riesgo</div>
+                <div class="unified-card-value">{riesgo}</div>
+                <div class="unified-card-subtitle">{actividad_total} eventos totales</div>
+                {f'<div class="unified-card-location">📍 {ubicacion_actual}</div>' if ubicacion_actual else ''}
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        if ubicacion_actual:
-            st.caption(f"📍 {ubicacion_actual}")
 
 
 def create_interactive_map_system_fixed(casos, epizootias, geo_data, filters, colors, data_filtered):
     """
-    CORREGIDO: Sistema completo de mapas con filtros funcionando + doble clic
+    CORREGIDO: Sistema completo de mapas con filtros funcionando + error Folium corregido
     """
     
     # Determinar nivel de zoom actual
@@ -223,7 +320,7 @@ def create_map_controls_fixed(current_level, filters, colors):
 
 def create_departmental_map_fixed(casos, epizootias, geo_data, colors, data_filtered):
     """
-    CORREGIDO: Mapa departamental con doble clic para filtrar + solo epizootias positivas
+    CORREGIDO: Mapa departamental con error Folium corregido + títulos simplificados
     """
     
     if 'municipios' not in geo_data:
@@ -232,7 +329,7 @@ def create_departmental_map_fixed(casos, epizootias, geo_data, colors, data_filt
     
     municipios = geo_data['municipios'].copy()
     
-    # CORREGIDO: Preparar datos solo con epizootias positivas
+    # CORREGIDO: Preparar datos 
     municipios_data = prepare_municipal_data_fixed(casos, epizootias, municipios)
     
     # Crear mapa centrado en Tolima
@@ -247,33 +344,33 @@ def create_departmental_map_fixed(casos, epizootias, geo_data, colors, data_filt
     
     # Agregar municipios con datos
     max_casos = municipios_data['casos'].max() if municipios_data['casos'].max() > 0 else 1
-    max_epi_pos = municipios_data['epizootias_positivas'].max() if municipios_data['epizootias_positivas'].max() > 0 else 1
+    max_epi = municipios_data['epizootias'].max() if municipios_data['epizootias'].max() > 0 else 1
     
     for idx, row in municipios_data.iterrows():
         municipio_name = row['MpNombre']
         casos_count = row['casos']
         fallecidos_count = row['fallecidos']
-        epi_positivas = row['epizootias_positivas']
+        epizootias_count = row['epizootias']  # CAMBIO: Ya no "positivas"
         
         # Determinar color y opacidad según datos
-        if casos_count > 0 or epi_positivas > 0:
+        if casos_count > 0 or epizootias_count > 0:
             # Intensidad de color según casos
             intensity = min(casos_count / max_casos, 1.0) if max_casos > 0 else 0
             if casos_count > 0:
                 fill_color = f"rgba(229, 25, 55, {0.3 + intensity * 0.6})"  # Rojo para casos
                 border_color = colors['danger']
             else:
-                epi_intensity = min(epi_positivas / max_epi_pos, 1.0) if max_epi_pos > 0 else 0
+                epi_intensity = min(epizootias_count / max_epi, 1.0) if max_epi > 0 else 0
                 fill_color = f"rgba(247, 148, 29, {0.3 + epi_intensity * 0.6})"  # Naranja para epizootias
                 border_color = colors['warning']
         else:
             fill_color = "rgba(200, 200, 200, 0.3)"
             border_color = "#cccccc"
         
-        # CORREGIDO: Popup con solo epizootias positivas
-        popup_html = create_municipal_popup_fixed(municipio_name, casos_count, fallecidos_count, epi_positivas)
+        # CORREGIDO: Popup con títulos simplificados
+        popup_html = create_municipal_popup_fixed(municipio_name, casos_count, fallecidos_count, epizootias_count)
         
-        # Agregar polígono del municipio con eventos de clic
+        # CORREGIDO: Agregar polígono sin JavaScriptLink
         geojson = folium.GeoJson(
             row['geometry'],
             style_function=lambda x, color=fill_color, border=border_color: {
@@ -284,12 +381,10 @@ def create_departmental_map_fixed(casos, epizootias, geo_data, colors, data_filt
                 'opacity': 1
             },
             popup=folium.Popup(popup_html, max_width=300),
-            tooltip=f"<b>{municipio_name}</b><br>📊 Casos: {casos_count} | 🔴 Epi+: {epi_positivas}"
+            tooltip=f"<b>{municipio_name}</b><br>📊 Casos: {casos_count} | 🐒 Epizootias: {epizootias_count}"
         )
         
-        # NUEVO: Agregar identificador para doble clic
-        geojson.add_child(folium.JavaScriptLink("https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"))
-        
+        # REMOVIDO: línea problemática con JavaScriptLink
         geojson.add_to(m)
     
     # Agregar límite departamental si existe
@@ -320,7 +415,7 @@ def create_departmental_map_fixed(casos, epizootias, geo_data, colors, data_filt
 
 def prepare_municipal_data_fixed(casos, epizootias, municipios):
     """
-    CORREGIDO: Prepara datos agregados por municipio - SOLO epizootias positivas
+    CORREGIDO: Prepara datos agregados por municipio - títulos simplificados
     """
     
     # Contar casos por municipio
@@ -335,28 +430,27 @@ def prepare_municipal_data_fixed(casos, epizootias, municipios):
             fallecidos_counts = casos[casos['condicion_final'] == 'Fallecido'].groupby('municipio_normalizado').size()
             fallecidos_por_municipio = fallecidos_counts.to_dict()
     
-    # CAMBIO: Solo epizootias positivas
-    epi_positivas_por_municipio = {}
+    # CAMBIO: Solo "epizootias" (ya no "positivas")
+    epizootias_por_municipio = {}
     
     if not epizootias.empty and 'municipio_normalizado' in epizootias.columns:
-        epi_positivas = epizootias[epizootias['descripcion'] == 'POSITIVO FA']
-        if not epi_positivas.empty:
-            epi_pos_counts = epi_positivas.groupby('municipio_normalizado').size()
-            epi_positivas_por_municipio = epi_pos_counts.to_dict()
+        # Ya son solo las positivas, no necesitamos filtrar más
+        epi_counts = epizootias.groupby('municipio_normalizado').size()
+        epizootias_por_municipio = epi_counts.to_dict()
     
     # Combinar datos con shapefile
     municipios_data = municipios.copy()
     
     municipios_data['casos'] = municipios_data['municipi_1'].map(casos_por_municipio).fillna(0).astype(int)
     municipios_data['fallecidos'] = municipios_data['municipi_1'].map(fallecidos_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias_positivas'] = municipios_data['municipi_1'].map(epi_positivas_por_municipio).fillna(0).astype(int)
+    municipios_data['epizootias'] = municipios_data['municipi_1'].map(epizootias_por_municipio).fillna(0).astype(int)
     
     return municipios_data
 
 
-def create_municipal_popup_fixed(municipio, casos, fallecidos, epi_positivas):
+def create_municipal_popup_fixed(municipio, casos, fallecidos, epizootias):
     """
-    CORREGIDO: Popup HTML para municipios - solo epizootias positivas
+    CORREGIDO: Popup HTML para municipios - títulos simplificados
     """
     letalidad = (fallecidos / casos * 100) if casos > 0 else 0
     
@@ -372,8 +466,8 @@ def create_municipal_popup_fixed(municipio, casos, fallecidos, epi_positivas):
                 <div style="font-size: 0.8em; color: #666;">Casos</div>
             </div>
             <div style="background: #fff3e0; padding: 8px; border-radius: 6px; text-align: center;">
-                <div style="font-size: 1.5em; font-weight: bold; color: #F7941D;">🔴 {epi_positivas}</div>
-                <div style="font-size: 0.8em; color: #666;">Epi Positivas</div>
+                <div style="font-size: 1.5em; font-weight: bold; color: #F7941D;">🐒 {epizootias}</div>
+                <div style="font-size: 0.8em; color: #666;">Epizootias</div>
             </div>
         </div>
         
@@ -438,7 +532,7 @@ def reset_vereda_filter():
 
 def create_municipal_map_fixed(casos, epizootias, geo_data, filters, colors, data_filtered):
     """
-    CORREGIDO: Mapa municipal con veredas - solo epizootias positivas
+    CORREGIDO: Mapa municipal con veredas - títulos simplificados
     """
     
     if 'veredas' not in geo_data:
@@ -463,7 +557,7 @@ def create_municipal_map_fixed(casos, epizootias, geo_data, filters, colors, dat
         st.warning(f"No se encontraron veredas para {filters['municipio_display']}")
         return
     
-    # CORREGIDO: Preparar datos de veredas solo con epizootias positivas
+    # CORREGIDO: Preparar datos de veredas
     veredas_data = prepare_veredas_data_fixed(casos, epizootias, veredas_municipio, municipio_norm)
     
     # Crear mapa centrado en el municipio
@@ -482,21 +576,21 @@ def create_municipal_map_fixed(casos, epizootias, geo_data, filters, colors, dat
     for idx, row in veredas_data.iterrows():
         vereda_name = row['NOMBRE_VER']
         casos_count = row['casos']
-        epi_positivas = row['epizootias_positivas']
+        epizootias_count = row['epizootias']  # CAMBIO: Ya no "positivas"
         
         # Color según presencia de datos
         if casos_count > 0:
             fill_color = colors['danger']
             opacity = 0.4 + (casos_count / max_casos_vereda) * 0.4
-        elif epi_positivas > 0:
+        elif epizootias_count > 0:
             fill_color = colors['warning']
-            opacity = 0.3 + (epi_positivas / max_casos_vereda) * 0.3
+            opacity = 0.3 + (epizootias_count / max_casos_vereda) * 0.3
         else:
             fill_color = colors['info']
             opacity = 0.2
         
         # CORREGIDO: Popup para vereda
-        popup_html = create_vereda_popup_fixed(vereda_name, casos_count, epi_positivas)
+        popup_html = create_vereda_popup_fixed(vereda_name, casos_count, epizootias_count)
         
         folium.GeoJson(
             row['geometry'],
@@ -508,7 +602,7 @@ def create_municipal_map_fixed(casos, epizootias, geo_data, filters, colors, dat
                 'opacity': 1
             },
             popup=folium.Popup(popup_html, max_width=250),
-            tooltip=f"<b>{vereda_name}</b><br>📊 Casos: {casos_count} | 🔴 Epi+: {epi_positivas}"
+            tooltip=f"<b>{vereda_name}</b><br>📊 Casos: {casos_count} | 🐒 Epizootias: {epizootias_count}"
         ).add_to(m)
     
     # Mostrar mapa y capturar interacciones
@@ -527,46 +621,45 @@ def create_municipal_map_fixed(casos, epizootias, geo_data, filters, colors, dat
 
 def prepare_veredas_data_fixed(casos, epizootias, veredas_municipio, municipio_norm):
     """
-    CORREGIDO: Prepara datos de veredas - solo epizootias positivas
+    CORREGIDO: Prepara datos de veredas - títulos simplificados
     """
     
     # Filtrar datos por municipio
     casos_mpio = casos[casos['municipio_normalizado'] == municipio_norm] if 'municipio_normalizado' in casos.columns else pd.DataFrame()
     epi_mpio = epizootias[epizootias['municipio_normalizado'] == municipio_norm] if 'municipio_normalizado' in epizootias.columns else pd.DataFrame()
     
-    # Solo epizootias positivas
-    epi_positivas_mpio = epi_mpio[epi_mpio['descripcion'] == 'POSITIVO FA'] if not epi_mpio.empty and 'descripcion' in epi_mpio.columns else pd.DataFrame()
+    # CAMBIO: Ya son solo las epizootias que interesan (todas son positivas)
     
     # Contar por vereda
     casos_por_vereda = {}
-    epi_positivas_por_vereda = {}
+    epizootias_por_vereda = {}
     
     if not casos_mpio.empty and 'vereda_normalizada' in casos_mpio.columns:
         casos_counts = casos_mpio.groupby('vereda_normalizada').size()
         casos_por_vereda = casos_counts.to_dict()
     
-    if not epi_positivas_mpio.empty and 'vereda_normalizada' in epi_positivas_mpio.columns:
-        epi_counts = epi_positivas_mpio.groupby('vereda_normalizada').size()
-        epi_positivas_por_vereda = epi_counts.to_dict()
+    if not epi_mpio.empty and 'vereda_normalizada' in epi_mpio.columns:
+        epi_counts = epi_mpio.groupby('vereda_normalizada').size()
+        epizootias_por_vereda = epi_counts.to_dict()
     
     # Combinar con veredas
     veredas_data = veredas_municipio.copy()
     
     if 'vereda_nor' in veredas_data.columns:
         veredas_data['casos'] = veredas_data['vereda_nor'].map(casos_por_vereda).fillna(0).astype(int)
-        veredas_data['epizootias_positivas'] = veredas_data['vereda_nor'].map(epi_positivas_por_vereda).fillna(0).astype(int)
+        veredas_data['epizootias'] = veredas_data['vereda_nor'].map(epizootias_por_vereda).fillna(0).astype(int)
     else:
         # Fallback usando normalización en tiempo real
         veredas_data['vereda_norm_temp'] = veredas_data['NOMBRE_VER'].apply(normalize_text)
         veredas_data['casos'] = veredas_data['vereda_norm_temp'].map(casos_por_vereda).fillna(0).astype(int)
-        veredas_data['epizootias_positivas'] = veredas_data['vereda_norm_temp'].map(epi_positivas_por_vereda).fillna(0).astype(int)
+        veredas_data['epizootias'] = veredas_data['vereda_norm_temp'].map(epizootias_por_vereda).fillna(0).astype(int)
     
     return veredas_data
 
 
-def create_vereda_popup_fixed(vereda, casos, epi_positivas):
+def create_vereda_popup_fixed(vereda, casos, epizootias):
     """
-    CORREGIDO: Popup HTML para veredas - solo epizootias positivas
+    CORREGIDO: Popup HTML para veredas - títulos simplificados
     """
     return f"""
     <div style="font-family: Arial, sans-serif; width: 240px;">
@@ -580,8 +673,8 @@ def create_vereda_popup_fixed(vereda, casos, epi_positivas):
                 <div style="font-size: 0.7em; color: #666;">Casos</div>
             </div>
             <div style="background: #fff3e0; padding: 6px; border-radius: 4px; flex: 1; text-align: center;">
-                <div style="font-weight: bold; color: #F7941D;">🔴 {epi_positivas}</div>
-                <div style="font-size: 0.7em; color: #666;">Epi +</div>
+                <div style="font-weight: bold; color: #F7941D;">🐒 {epizootias}</div>
+                <div style="font-size: 0.7em; color: #666;">Epizootias</div>
             </div>
         </div>
         
@@ -622,7 +715,7 @@ def handle_vereda_click_fixed(clicked_data, veredas_data, filters):
 
 def create_vereda_detailed_view_fixed(casos, epizootias, geo_data, filters, colors):
     """
-    CORREGIDO: Vista detallada de vereda - solo epizootias positivas
+    CORREGIDO: Vista detallada de vereda - títulos simplificados
     """
     
     vereda_display = filters.get("vereda_display", "Vereda")
@@ -642,15 +735,12 @@ def create_vereda_detailed_view_fixed(casos, epizootias, geo_data, filters, colo
             st.info("No hay casos registrados en esta vereda")
     
     with col2:
-        st.markdown("#### 🔴 Epizootias Positivas en esta Vereda")
-        # Solo epizootias positivas
-        epi_positivas = epizootias[epizootias["descripcion"] == "POSITIVO FA"] if not epizootias.empty and "descripcion" in epizootias.columns else pd.DataFrame()
-        
-        if not epi_positivas.empty:
-            epi_info = create_epizootias_detail_info_fixed(epi_positivas)
+        st.markdown("#### 🐒 Epizootias en esta Vereda")  # CAMBIO: Ya no "Positivas"
+        if not epizootias.empty:
+            epi_info = create_epizootias_detail_info_fixed(epizootias)
             st.markdown(epi_info, unsafe_allow_html=True)
         else:
-            st.info("No hay epizootias positivas registradas en esta vereda")
+            st.info("No hay epizootias registradas en esta vereda")
 
 
 def create_casos_detail_info_fixed(casos):
@@ -692,19 +782,19 @@ def create_casos_detail_info_fixed(casos):
     """
 
 
-def create_epizootias_detail_info_fixed(epizootias_positivas):
+def create_epizootias_detail_info_fixed(epizootias):
     """
-    CORREGIDO: Información detallada de epizootias POSITIVAS para vista de vereda
+    CORREGIDO: Información detallada de epizootias para vista de vereda - títulos simplificados
     """
-    if epizootias_positivas.empty:
-        return "<p>No hay epizootias positivas en esta vereda</p>"
+    if epizootias.empty:
+        return "<p>No hay epizootias en esta vereda</p>"
     
-    total = len(epizootias_positivas)
+    total = len(epizootias)
     
     # Información por fuente
     fuente_info = ""
-    if "proveniente" in epizootias_positivas.columns:
-        fuente_dist = epizootias_positivas["proveniente"].value_counts()
+    if "proveniente" in epizootias.columns:
+        fuente_dist = epizootias["proveniente"].value_counts()
         fuente_items = []
         for fuente, count in fuente_dist.items():
             if "VIGILANCIA COMUNITARIA" in str(fuente):
@@ -718,11 +808,11 @@ def create_epizootias_detail_info_fixed(epizootias_positivas):
     return f"""
     <div style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border-left: 4px solid #F7941D;">
         <div style="font-size: 1.2em; font-weight: bold; color: #F7941D; margin-bottom: 0.5rem;">
-            Total: {total} epizootias positivas
+            Total: {total} epizootias
         </div>
         {f'<div style="margin-bottom: 0.5rem; font-size: 0.9em;">{fuente_info}</div>' if fuente_info else ''}
         <div style="font-size: 0.8em; color: #666; margin-top: 0.5rem;">
-            ⚠️ Indican circulación activa del virus en fauna silvestre
+            ⚠️ Todas confirmadas positivas para fiebre amarilla
         </div>
     </div>
     """
