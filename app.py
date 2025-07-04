@@ -1,9 +1,9 @@
 """
-Aplicación principal CORREGIDA del Dashboard de Fiebre Amarilla v3.1
-CORRECCIONES:
-- Espaciado del encabezado principal reducido
-- Sin análisis de riesgo en mensajes
-- Interacciones de mapa mejoradas
+Aplicación principal ACTUALIZADA del Dashboard de Fiebre Amarilla v3.2
+MEJORAS:
+- Carga epizootias POSITIVAS + EN ESTUDIO
+- Sistema inteligente de mapeo de veredas
+- Manejo mejorado de municipios sin datos
 """
 
 import os
@@ -20,7 +20,7 @@ import re
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("FiebreAmarilla-Dashboard-v3.1")
+logger = logging.getLogger("FiebreAmarilla-Dashboard-v3.2")
 
 # Deshabilitar detección automática de páginas de Streamlit
 os.environ["STREAMLIT_PAGES_ENABLED"] = "false"
@@ -57,6 +57,7 @@ from utils.data_processor import (
     normalize_text,
     excel_date_to_datetime,
     capitalize_names,
+    create_intelligent_vereda_mapping,  # NUEVO
 )
 
 # Importar utilidades de interacciones de mapa
@@ -98,14 +99,14 @@ for module_name in vista_modules:
     vistas_modules[module_name] = import_vista_module(module_name)
 
 
-def load_new_datasets():
+def load_enhanced_datasets():
     """
-    Carga los datasets y filtra solo epizootias positivas desde el inicio.
+    ACTUALIZADO: Carga datasets con epizootias positivas + en estudio y mapeo inteligente de veredas.
     """
     try:
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("🔄 Inicializando carga de datos v3.1...")
+        status_text.text("🔄 Inicializando carga de datos v3.2...")
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
         casos_filename = "BD_positivos.xlsx"
@@ -258,9 +259,9 @@ def load_new_datasets():
             )
 
         progress_bar.progress(50)
-        status_text.text("🔴 Procesando epizootias y filtrando solo positivas...")
+        status_text.text("🔵 Procesando epizootias: positivas + en estudio...")
 
-        # ==================== PROCESAR EPIZOOTIAS Y FILTRAR SOLO POSITIVAS ====================
+        # ==================== NUEVO: PROCESAR EPIZOOTIAS (POSITIVAS + EN ESTUDIO) ====================
         # Limpiar datos de epizootias
         epizootias_df = epizootias_df.dropna(how="all")
 
@@ -281,20 +282,23 @@ def load_new_datasets():
         }
         epizootias_df = epizootias_df.rename(columns=existing_epi_columns)
 
-        # CAMBIO IMPORTANTE: Filtrar solo epizootias positivas desde el inicio
+        # CAMBIO IMPORTANTE: Filtrar POSITIVAS + EN ESTUDIO
         if "descripcion" in epizootias_df.columns:
             # Normalizar descripciones primero
             epizootias_df["descripcion"] = epizootias_df["descripcion"].str.upper().str.strip()
             
-            # Filtrar solo las positivas
+            # Filtrar solo las positivas Y en estudio
             total_original = len(epizootias_df)
-            epizootias_df = epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"]
-            total_positivas = len(epizootias_df)
+            epizootias_df = epizootias_df[epizootias_df["descripcion"].isin(["POSITIVO FA", "EN ESTUDIO"])]
+            total_filtradas = len(epizootias_df)
             
-            logger.info(f"🔴 Filtro aplicado: {total_positivas} epizootias positivas de {total_original} totales")
-            status_text.text(f"🔴 Filtradas {total_positivas} epizootias positivas de {total_original} totales")
+            positivas_count = len(epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"])
+            en_estudio_count = len(epizootias_df[epizootias_df["descripcion"] == "EN ESTUDIO"])
+            
+            logger.info(f"🔵 Filtro aplicado: {total_filtradas} epizootias ({positivas_count} positivas + {en_estudio_count} en estudio) de {total_original} totales")
+            status_text.text(f"🔵 Filtradas {total_filtradas} epizootias: {positivas_count} positivas + {en_estudio_count} en estudio")
 
-        # Normalizar municipios y veredas en epizootias (solo las positivas)
+        # Normalizar municipios y veredas en epizootias (solo las filtradas)
         if "municipio" in epizootias_df.columns:
             epizootias_df["municipio_normalizado"] = epizootias_df["municipio"].apply(
                 normalize_text
@@ -315,14 +319,42 @@ def load_new_datasets():
             ].apply(excel_date_to_datetime)
 
         progress_bar.progress(70)
-        status_text.text("🗺️ Creando mapeos maestros para mapas interactivos...")
+        status_text.text("🗺️ Creando mapeos maestros con sistema inteligente...")
 
-        # ==================== CREAR MAPEOS MAESTROS MEJORADOS ====================
+        # ==================== NUEVO: SISTEMA INTELIGENTE DE MAPEO DE VEREDAS ====================
+        # Crear mapeo inteligente de veredas
+        try:
+            vereda_mapping = create_intelligent_vereda_mapping(casos_df, epizootias_df)
+            logger.info(f"✅ Sistema de mapeo inteligente creado: {len(vereda_mapping)} mapeos")
+        except Exception as e:
+            logger.warning(f"⚠️ Error en mapeo inteligente: {str(e)}")
+            vereda_mapping = {}
 
         # Obtener todos los municipios únicos (normalizados)
-        municipios_casos = set(casos_df["municipio_normalizado"].dropna())
-        municipios_epizootias = set(epizootias_df["municipio_normalizado"].dropna())
+        municipios_casos = set(casos_df["municipio_normalizado"].dropna()) if not casos_df.empty else set()
+        municipios_epizootias = set(epizootias_df["municipio_normalizado"].dropna()) if not epizootias_df.empty else set()
         municipios_normalizados = sorted(municipios_casos.union(municipios_epizootias))
+
+        # NUEVO: Crear lista completa de municipios del Tolima para manejar clics en grises
+        municipios_tolima_completos = [
+            "IBAGUE", "ALPUJARRA", "ALVARADO", "AMBALEMA", "ANZOATEGUI",
+            "ARMERO", "ATACO", "CAJAMARCA", "CARMEN DE APICALA", "CASABIANCA",
+            "CHAPARRAL", "COELLO", "COYAIMA", "CUNDAY", "DOLORES",
+            "ESPINAL", "FALAN", "FLANDES", "FRESNO", "GUAMO",
+            "HERVEO", "HONDA", "ICONONZO", "LERIDA", "LIBANO",
+            "MARIQUITA", "MELGAR", "MURILLO", "NATAGAIMA", "ORTEGA",
+            "PALOCABILDO", "PIEDRAS", "PLANADAS", "PRADO", "PURIFICACION",
+            "RIOBLANCO", "RONCESVALLES", "ROVIRA", "SALDAÑA", "SAN ANTONIO",
+            "SAN LUIS", "SANTA ISABEL", "SUAREZ", "VALLE DE SAN JUAN",
+            "VENADILLO", "VILLAHERMOSA", "VILLARRICA"
+        ]
+
+        # Agregar municipios sin datos a la lista (para manejar clics en grises)
+        for municipio_tolima in municipios_tolima_completos:
+            if municipio_tolima not in municipios_normalizados:
+                municipios_normalizados.append(municipio_tolima)
+
+        municipios_normalizados = sorted(municipios_normalizados)
 
         # Crear mapeo de municipios (normalizado -> original más común)
         municipio_display_map = {}
@@ -334,20 +366,21 @@ def load_new_datasets():
                 ]
                 .dropna()
                 .unique()
-            )
+            ) if not casos_df.empty else []
             opciones_epi = (
                 epizootias_df[epizootias_df["municipio_normalizado"] == municipio_norm][
                     "municipio"
                 ]
                 .dropna()
                 .unique()
-            )
+            ) if not epizootias_df.empty else []
 
             todas_opciones = list(opciones_casos) + list(opciones_epi)
             if todas_opciones:
                 municipio_display_map[municipio_norm] = todas_opciones[0]
             else:
-                municipio_display_map[municipio_norm] = municipio_norm
+                # Para municipios sin datos, usar versión capitalizada
+                municipio_display_map[municipio_norm] = capitalize_names(municipio_norm)
 
         # Crear diccionario de veredas por municipio (normalizado)
         veredas_por_municipio = {}
@@ -359,15 +392,15 @@ def load_new_datasets():
                 ]
                 .dropna()
                 .unique()
-            )
-            # Obtener veredas de epizootias (solo positivas)
+            ) if not casos_df.empty else []
+            # Obtener veredas de epizootias (positivas + en estudio)
             veredas_epi = (
                 epizootias_df[epizootias_df["municipio_normalizado"] == municipio_norm][
                     "vereda_normalizada"
                 ]
                 .dropna()
                 .unique()
-            )
+            ) if not epizootias_df.empty else []
 
             # Combinar y ordenar
             todas_veredas = sorted(set(list(veredas_casos) + list(veredas_epi)))
@@ -386,7 +419,7 @@ def load_new_datasets():
                     ]["vereda"]
                     .dropna()
                     .unique()
-                )
+                ) if not casos_df.empty else []
 
                 opciones_epi = (
                     epizootias_df[
@@ -395,7 +428,7 @@ def load_new_datasets():
                     ]["vereda"]
                     .dropna()
                     .unique()
-                )
+                ) if not epizootias_df.empty else []
 
                 todas_opciones = list(opciones_casos) + list(opciones_epi)
                 if todas_opciones:
@@ -418,13 +451,19 @@ def load_new_datasets():
             "Vivo": {"color": COLORS["success"], "icon": "💚", "categoria": "Vivo"},
         }
 
-        # Mapeo de descripción (solo positivas ahora)
+        # NUEVO: Mapeo de descripción (positivas + en estudio)
         descripcion_map = {
             "POSITIVO FA": {
                 "color": COLORS["danger"],
                 "icon": "🔴",
                 "categoria": "Positivo",
                 "descripcion": "Confirma circulación viral activa"
+            },
+            "EN ESTUDIO": {
+                "color": COLORS["info"],
+                "icon": "🔵",
+                "categoria": "En Estudio",
+                "descripcion": "Muestra en proceso de análisis laboratorial"
             },
         }
 
@@ -445,18 +484,23 @@ def load_new_datasets():
         # Log final con estadísticas ACTUALIZADAS
         logger.info(f"✅ Datos cargados exitosamente desde: {data_source}")
         logger.info(f"📊 Casos cargados: {len(casos_df)}")
-        logger.info(f"🔴 Epizootias POSITIVAS cargadas: {len(epizootias_df)}")
-        logger.info(f"🗺️ Municipios únicos: {len(municipios_normalizados)}")
+        
+        # Estadísticas detalladas de epizootias
+        positivas_count = len(epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"]) if not epizootias_df.empty else 0
+        en_estudio_count = len(epizootias_df[epizootias_df["descripcion"] == "EN ESTUDIO"]) if not epizootias_df.empty else 0
+        logger.info(f"🔵 Epizootias cargadas: {len(epizootias_df)} total ({positivas_count} positivas + {en_estudio_count} en estudio)")
+        logger.info(f"🗺️ Municipios únicos: {len(municipios_normalizados)} (incluyendo {len(municipios_tolima_completos)} del Tolima)")
 
         return {
             "casos": casos_df,
-            "epizootias": epizootias_df,  # Ya solo contiene positivas
+            "epizootias": epizootias_df,  # Ahora contiene positivas + en estudio
             "municipios_normalizados": municipios_normalizados,
             "municipio_display_map": municipio_display_map,
             "veredas_por_municipio": veredas_por_municipio,
             "vereda_display_map": vereda_display_map,
             "condicion_map": condicion_map,
             "descripcion_map": descripcion_map,
+            "vereda_mapping": vereda_mapping,  # NUEVO
             "data_source": data_source,
         }
 
@@ -477,6 +521,7 @@ def create_empty_data_structure():
         "vereda_display_map": {},
         "condicion_map": {},
         "descripcion_map": {},
+        "vereda_mapping": {},  # NUEVO
         "data_source": "error",
     }
 
@@ -501,7 +546,7 @@ def create_basic_fallback_filters(data):
     """Sistema de filtros básico como fallback."""
     st.sidebar.subheader("🔍 Filtros (Básico)")
 
-    # Filtro de municipio básico
+    # Filtro de municipio básico - INCLUYENDO MUNICIPIOS SIN DATOS
     municipio_options = ["Todos"] + [
         data["municipio_display_map"][norm]
         for norm in data["municipios_normalizados"]
@@ -521,7 +566,7 @@ def create_basic_fallback_filters(data):
 
     # Aplicar filtros básicos
     casos_filtrados = data["casos"].copy()
-    epizootias_filtradas = data["epizootias"].copy()  # Ya solo son positivas
+    epizootias_filtradas = data["epizootias"].copy()  # Ahora contiene positivas + en estudio
 
     if municipio_norm_selected:
         casos_filtrados = casos_filtrados[
@@ -585,7 +630,7 @@ def configure_page_responsive():
         
         /* CORREGIDO: Espaciado principal reducido */
         .block-container {{
-            padding-top: 0.5rem !important;  /* REDUCIDO de 1rem */
+            padding-top: 0.5rem !important;
             padding-bottom: clamp(1rem, 3vw, 2rem) !important;
             padding-left: clamp(0.5rem, 2vw, 1.5rem) !important;
             padding-right: clamp(0.5rem, 2vw, 1.5rem) !important;
@@ -595,161 +640,16 @@ def configure_page_responsive():
         /* CORREGIDO: Título principal sin espacio excesivo */
         .main-title {{
             color: var(--primary-color);
-            font-size: clamp(1.6rem, 5vw, 2.2rem);  /* REDUCIDO */
+            font-size: clamp(1.6rem, 5vw, 2.2rem);
             font-weight: 700;
-            margin-bottom: 0.75rem !important;  /* REDUCIDO de 2rem */
+            margin-bottom: 0.75rem !important;
             text-align: center;
-            padding: 0.75rem 1rem !important;  /* REDUCIDO */
+            padding: 0.75rem 1rem !important;
             border-bottom: 3px solid var(--secondary-color);
-            line-height: 1.1;  /* REDUCIDO */
+            line-height: 1.1;
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 8px;  /* REDUCIDO */
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);  /* REDUCIDO */
-        }}
-        
-        /* Métricas responsive mejoradas */
-        [data-testid="metric-container"] {{
-            background: linear-gradient(135deg, white 0%, #f8f9fa 100%) !important;
-            border-radius: 12px !important;
-            padding: clamp(1rem, 3vw, 1.5rem) !important;
-            text-align: center !important;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
-            border-top: 4px solid var(--primary-color) !important;
-            transition: all 0.3s ease !important;
-            margin-bottom: clamp(0.5rem, 2vw, 1rem) !important;
-            min-height: 120px !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: center !important;
-        }}
-        
-        [data-testid="metric-container"]:hover {{
-            transform: translateY(-3px) !important;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
-        }}
-        
-        [data-testid="metric-container"] [data-testid="metric-value"] {{
-            font-size: clamp(1.5rem, 5vw, 2.2rem) !important;
-            font-weight: 700 !important;
-            color: var(--primary-color) !important;
-        }}
-        
-        [data-testid="metric-container"] [data-testid="metric-label"] {{
-            font-size: clamp(0.8rem, 2vw, 0.95rem) !important;
-            font-weight: 600 !important;
-            color: #666 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-        }}
-        
-        /* Pestañas responsive mejoradas */
-        .stTabs [data-baseweb="tab-list"] {{
-            gap: clamp(0.25rem, 1vw, 0.75rem) !important;
-            overflow-x: auto !important;
-            overflow-y: hidden !important;
-            white-space: nowrap !important;
-            padding: 0 0 0.5rem 0 !important;  /* REDUCIDO */
-            margin: 0 0 1rem 0 !important;  /* REDUCIDO */
-            -webkit-overflow-scrolling: touch !important;
-            scrollbar-width: thin !important;
-        }}
-        
-        .stTabs [data-baseweb="tab"] {{
-            font-size: clamp(0.8rem, 2vw, 0.95rem) !important;
-            padding: clamp(0.5rem, 2vw, 0.7rem) clamp(0.8rem, 3vw, 1rem) !important;  /* REDUCIDO */
-            border-radius: 8px 8px 0 0 !important;
-            white-space: nowrap !important;
-            min-width: max-content !important;
-            transition: all 0.3s ease !important;
-            border: 2px solid #dee2e6 !important;
-            border-bottom: none !important;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
-            font-weight: 600 !important;
-        }}
-        
-        .stTabs [data-baseweb="tab"][aria-selected="true"] {{
-            background: linear-gradient(135deg, var(--primary-color) 0%, var(--accent-color) 100%) !important;
-            color: white !important;
-            border-color: var(--primary-color) !important;
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(125, 15, 43, 0.3) !important;
-        }}
-        
-        .stTabs [data-baseweb="tab"]:hover:not([aria-selected="true"]) {{
-            background: linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%) !important;
-            transform: translateY(-1px) !important;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
-        }}
-        
-        /* Columnas responsive mejoradas */
-        .css-1r6slb0 {{
-            flex: 1 1 auto !important;
-            min-width: 200px !important;
-            margin-bottom: clamp(0.5rem, 2vw, 0.75rem) !important;  /* REDUCIDO */
-        }}
-        
-        /* Mobile optimizations */
-        @media (max-width: 768px) {{
-            .block-container {{
-                padding-top: 0.25rem !important;  /* AÚN MÁS REDUCIDO en móvil */
-            }}
-            
-            .main-title {{
-                font-size: 1.4rem !important;
-                margin-bottom: 0.5rem !important;
-                padding: 0.5rem !important;
-            }}
-            
-            .css-1r6slb0 {{
-                flex: 1 1 100% !important;
-                min-width: 100% !important;
-                margin-bottom: 0.75rem !important;
-            }}
-            
-            .stTabs [data-baseweb="tab"] {{
-                font-size: 0.75rem !important;
-                padding: 0.4rem 0.6rem !important;
-            }}
-            
-            [data-testid="metric-container"] {{
-                margin-bottom: 0.5rem !important;
-                min-height: 100px !important;
-            }}
-        }}
-        
-        /* Tablet adjustments */
-        @media (min-width: 769px) and (max-width: 1024px) {{
-            .css-1r6slb0 {{
-                flex: 1 1 45% !important;
-                min-width: 300px !important;
-            }}
-        }}
-        
-        /* Desktop optimizations */
-        @media (min-width: 1025px) {{
-            .css-1r6slb0 {{
-                flex: 1 1 auto !important;
-                min-width: 250px !important;
-            }}
-        }}
-        
-        /* Indicadores de sincronización */
-        .sync-indicator {{
-            background: linear-gradient(45deg, var(--success-color), var(--info-color));
-            color: white;
-            padding: 0.4rem 0.8rem;  /* REDUCIDO */
-            border-radius: 15px;  /* REDUCIDO */
-            font-size: 0.75rem;  /* REDUCIDO */
-            font-weight: 600;
-            margin: 0.3rem 0;  /* REDUCIDO */
-            text-align: center;
-            animation: pulse-sync 2s infinite;
-        }}
-        
-        @keyframes pulse-sync {{
-            0% {{ opacity: 1; transform: scale(1); }}
-            50% {{ opacity: 0.8; transform: scale(1.02); }}
-            100% {{ opacity: 1; transform: scale(1); }}
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }}
         </style>
         """,
@@ -786,7 +686,7 @@ def handle_map_interactions(data_filtered, filters, colors):
 
 def main():
     """
-    Aplicación principal del dashboard v3.1 CORREGIDA.
+    Aplicación principal del dashboard v3.2 ACTUALIZADA.
     """
     # Configurar página con espaciado corregido
     configure_page_responsive()
@@ -799,10 +699,10 @@ def main():
     except ImportError:
         # Fallback básico
         with st.sidebar:
-            st.title("Dashboard Tolima v3.1")
+            st.title("Dashboard Tolima v3.2")
 
-    # Cargar datos con indicadores responsive (SOLO EPIZOOTIAS POSITIVAS)
-    data = load_new_datasets()
+    # Cargar datos con indicadores responsive (POSITIVAS + EN ESTUDIO)
+    data = load_enhanced_datasets()
 
     if data["casos"].empty and data["epizootias"].empty:
         # Error responsive con instrucciones claras
@@ -810,10 +710,12 @@ def main():
         st.info("Coloque los archivos de datos en la carpeta 'data/' y recargue la página.")
         return
 
-    # Mostrar información sobre el filtro de epizootias positivas
-    total_epizootias_positivas = len(data["epizootias"])
-    if total_epizootias_positivas > 0:
-        st.success(f"✅ Dashboard v3.1 - Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias_positivas} epizootias positivas")
+    # Mostrar información sobre el filtro de epizootias actualizado
+    total_epizootias = len(data["epizootias"])
+    if total_epizootias > 0:
+        positivas_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "POSITIVO FA"]) if not data["epizootias"].empty else 0
+        en_estudio_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "EN ESTUDIO"]) if not data["epizootias"].empty else 0
+        st.success(f"✅ Dashboard v3.2 - Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias} epizootias ({positivas_count} positivas + {en_estudio_count} en estudio)")
 
     # Crear filtros responsive con integración de mapas MEJORADOS
     filters, data_filtered = create_filters_responsive_with_maps_enhanced(data)
@@ -823,7 +725,7 @@ def main():
 
     # **TÍTULO PRINCIPAL CORREGIDO** - Sin espaciado excesivo
     st.markdown(
-        '<h1 class="main-title">🗺️ Dashboard Fiebre Amarilla v3.1</h1>',
+        '<h1 class="main-title">🗺️ Dashboard Fiebre Amarilla v3.2</h1>',
         unsafe_allow_html=True,
     )
 
@@ -839,20 +741,20 @@ def main():
             unsafe_allow_html=True,
         )
 
-    # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.1
+    # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.2
     tab1, tab2, tab3 = st.tabs(
         [
-            "🗺️ Mapas Interactivos",      # Mapas CON todas las tarjetas
-            "📊 Análisis Epidemiológico", # Solo gráficos y tablas
+            "🗺️ Mapas Interactivos",      # Mapas CON todas las tarjetas mejoradas
+            "📊 Análisis Epidemiológico", # Tablas detalladas e interactivas
             "📈 Seguimiento Temporal",
         ]
     )
 
     with tab1:
-        # Vista de mapas CON todas las tarjetas informativas
+        # Vista de mapas CON todas las tarjetas informativas MEJORADAS
         if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
-                # Pasar data filtrada para que los mapas trabajen solo con epizootias positivas
+                # Pasar data filtrada para que los mapas trabajen con positivas + en estudio
                 vistas_modules["mapas"].show(data_filtered, filters, COLORS)
             except Exception as e:
                 st.error(f"Error en módulo de mapas: {str(e)}")
@@ -862,7 +764,7 @@ def main():
             st.info("🗺️ Vista de mapas en desarrollo.")
 
     with tab2:
-        # Solo análisis epidemiológico (sin tarjetas métricas)
+        # NUEVO: Análisis epidemiológico con tablas detalladas e interactivas
         if "tablas" in vistas_modules and vistas_modules["tablas"]:
             try:
                 vistas_modules["tablas"].show(data_filtered, filters, COLORS)
@@ -873,7 +775,7 @@ def main():
             st.info("🔧 Módulo de análisis epidemiológico en desarrollo.")
 
     with tab3:
-        # Seguimiento temporal (sin cambios)
+        # Seguimiento temporal (actualizado para manejar positivas + en estudio)
         if "comparativo" in vistas_modules and vistas_modules["comparativo"]:
             try:
                 vistas_modules["comparativo"].show(data_filtered, filters, COLORS)
@@ -888,7 +790,7 @@ def main():
     st.markdown(
         f"""
         <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0; margin-top: 0.5rem;">
-            Dashboard Fiebre Amarilla v3.1 - Mapas Interactivos<br>
+            Dashboard Fiebre Amarilla v3.2 - Sistema Inteligente de Mapeo<br>
             Desarrollado para la Secretaría de Salud del Tolima • © 2025
         </div>
         """,

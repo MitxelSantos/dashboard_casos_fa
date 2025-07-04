@@ -1,7 +1,6 @@
 """
 Procesamiento y filtrado de datos del dashboard de Fiebre Amarilla.
-Actualizado para manejar casos confirmados y epizootias con normalización robusta.
-CORREGIDO: Función de fechas para formato DD/MM/YYYY.
+ACTUALIZADO: Sistema inteligente de mapeo de veredas con fuzzy matching
 """
 
 import pandas as pd
@@ -10,6 +9,13 @@ import unicodedata
 import re
 from datetime import datetime
 from config.settings import GRUPOS_EDAD, CONDICION_FINAL_MAP, DESCRIPCION_EPIZOOTIAS_MAP
+
+# Importación opcional para fuzzy matching
+try:
+    from fuzzywuzzy import fuzz, process
+    FUZZY_AVAILABLE = True
+except ImportError:
+    FUZZY_AVAILABLE = False
 
 
 def normalize_text(text):
@@ -48,6 +54,163 @@ def normalize_text(text):
             break
 
     return text
+
+
+def normalize_vereda_name(vereda_name):
+    """
+    NUEVO: Normalización específica para nombres de veredas.
+    
+    Args:
+        vereda_name (str): Nombre de vereda a normalizar
+    
+    Returns:
+        str: Nombre normalizado
+    """
+    if pd.isna(vereda_name) or not isinstance(vereda_name, str):
+        return ""
+    
+    # Aplicar normalización básica
+    normalized = normalize_text(vereda_name)
+    
+    # Patrones comunes de normalización para veredas
+    patterns = [
+        # Remover prefijos comunes
+        (r'^VEREDA\s+', ''),
+        (r'^VDA\s+', ''),
+        (r'^VER\s+', ''),
+        
+        # Normalizar conectores
+        (r'\s+DE\s+LA\s+', ' '),
+        (r'\s+DE\s+LOS\s+', ' '),
+        (r'\s+DE\s+LAS\s+', ' '),
+        (r'\s+DEL\s+', ' '),
+        (r'\s+LA\s+', ' '),
+        (r'\s+EL\s+', ' '),
+        (r'\s+LOS\s+', ' '),
+        (r'\s+LAS\s+', ' '),
+        
+        # Normalizar números
+        (r'\s+NUMERO\s+', ' '),
+        (r'\s+NO\s+', ' '),
+        (r'\s+#\s+', ' '),
+        
+        # Limpiar espacios múltiples
+        (r'\s+', ' '),
+    ]
+    
+    for pattern, replacement in patterns:
+        normalized = re.sub(pattern, replacement, normalized)
+    
+    return normalized.strip()
+
+
+def create_intelligent_vereda_mapping(casos_df, epizootias_df):
+    """
+    NUEVO: Crea un mapeo inteligente entre nombres de veredas usando fuzzy matching.
+    
+    Args:
+        casos_df (pd.DataFrame): DataFrame de casos
+        epizootias_df (pd.DataFrame): DataFrame de epizootias
+    
+    Returns:
+        dict: Mapeo de veredas normalizadas
+    """
+    mapping = {}
+    
+    if not FUZZY_AVAILABLE:
+        print("⚠️ FuzzyWuzzy no disponible. Usando mapeo básico.")
+        return mapping
+    
+    # Obtener todas las veredas únicas de ambos datasets
+    veredas_casos = set()
+    veredas_epizootias = set()
+    
+    if not casos_df.empty and "vereda" in casos_df.columns:
+        veredas_casos = set(casos_df["vereda"].dropna().unique())
+    
+    if not epizootias_df.empty and "vereda" in epizootias_df.columns:
+        veredas_epizootias = set(epizootias_df["vereda"].dropna().unique())
+    
+    todas_veredas = list(veredas_casos.union(veredas_epizootias))
+    
+    # Normalizar todas las veredas
+    veredas_normalizadas = {}
+    for vereda in todas_veredas:
+        normalized = normalize_vereda_name(vereda)
+        if normalized:
+            if normalized not in veredas_normalizadas:
+                veredas_normalizadas[normalized] = []
+            veredas_normalizadas[normalized].append(vereda)
+    
+    # Encontrar variaciones similares usando fuzzy matching
+    processed_veredas = set()
+    
+    for vereda_norm, variaciones in veredas_normalizadas.items():
+        if vereda_norm in processed_veredas:
+            continue
+        
+        # Buscar veredas similares
+        similares = []
+        for otra_vereda_norm in veredas_normalizadas:
+            if otra_vereda_norm != vereda_norm and otra_vereda_norm not in processed_veredas:
+                # Calcular similitud
+                ratio = fuzz.ratio(vereda_norm, otra_vereda_norm)
+                token_ratio = fuzz.token_sort_ratio(vereda_norm, otra_vereda_norm)
+                
+                # Si la similitud es alta, considerarlas equivalentes
+                if ratio >= 85 or token_ratio >= 90:
+                    similares.append(otra_vereda_norm)
+        
+        # Crear mapeo para esta vereda y sus similares
+        todas_variaciones = variaciones.copy()
+        for similar in similares:
+            todas_variaciones.extend(veredas_normalizadas[similar])
+            processed_veredas.add(similar)
+        
+        # Usar la variación más común como canónica
+        vereda_canonica = max(set(todas_variaciones), key=todas_variaciones.count)
+        
+        # Mapear todas las variaciones a la canónica
+        for variacion in todas_variaciones:
+            mapping[variacion] = vereda_canonica
+        
+        processed_veredas.add(vereda_norm)
+    
+    print(f"✅ Sistema de mapeo inteligente: {len(mapping)} mapeos creados")
+    
+    # Mostrar algunos ejemplos de mapeo para verificación
+    if mapping:
+        print("📋 Ejemplos de mapeo:")
+        count = 0
+        for original, mapeada in mapping.items():
+            if original != mapeada and count < 5:  # Mostrar solo diferencias
+                print(f"   '{original}' → '{mapeada}'")
+                count += 1
+    
+    return mapping
+
+
+def apply_vereda_mapping(df, vereda_column, mapping):
+    """
+    NUEVO: Aplica el mapeo inteligente de veredas a un DataFrame.
+    
+    Args:
+        df (pd.DataFrame): DataFrame a procesar
+        vereda_column (str): Nombre de la columna de vereda
+        mapping (dict): Diccionario de mapeo
+    
+    Returns:
+        pd.DataFrame: DataFrame con veredas mapeadas
+    """
+    if df.empty or vereda_column not in df.columns or not mapping:
+        return df
+    
+    df_copy = df.copy()
+    
+    # Aplicar mapeo
+    df_copy[vereda_column] = df_copy[vereda_column].map(mapping).fillna(df_copy[vereda_column])
+    
+    return df_copy
 
 
 def capitalize_names(text):
@@ -187,6 +350,124 @@ def format_date_display(date_value):
         return ""
 
 
+def calculate_days_since(date_value):
+    """
+    NUEVO: Calcula los días transcurridos desde una fecha hasta hoy.
+    
+    Args:
+        date_value: Fecha a comparar
+    
+    Returns:
+        int: Días transcurridos, None si fecha inválida
+    """
+    if pd.isna(date_value):
+        return None
+    
+    try:
+        if isinstance(date_value, (pd.Timestamp, datetime)):
+            fecha = date_value
+        else:
+            fecha = excel_date_to_datetime(date_value)
+        
+        if fecha:
+            hoy = datetime.now()
+            delta = hoy - fecha
+            return delta.days
+        
+        return None
+    except:
+        return None
+
+
+def format_time_elapsed(days):
+    """
+    NUEVO: Formatea tiempo transcurrido en formato legible.
+    
+    Args:
+        days (int): Días transcurridos
+    
+    Returns:
+        str: Tiempo formateado (ej: "3 días", "2 semanas", "1 año")
+    """
+    if days is None or days < 0:
+        return "Fecha inválida"
+    
+    if days == 0:
+        return "Hoy"
+    elif days == 1:
+        return "Ayer"
+    elif days < 7:
+        return f"{days} días"
+    elif days < 30:
+        semanas = days // 7
+        return f"{semanas} semana{'s' if semanas > 1 else ''}"
+    elif days < 365:
+        meses = days // 30
+        return f"{meses} mes{'es' if meses > 1 else ''}"
+    else:
+        años = days // 365
+        return f"{años} año{'s' if años > 1 else ''}"
+
+
+def get_latest_case_info(df, date_column, location_columns=None):
+    """
+    NUEVO: Obtiene información del caso más reciente.
+    
+    Args:
+        df (pd.DataFrame): DataFrame a analizar
+        date_column (str): Columna de fecha
+        location_columns (list): Columnas de ubicación a incluir
+    
+    Returns:
+        dict: Información del caso más reciente
+    """
+    if df.empty or date_column not in df.columns:
+        return {
+            "existe": False,
+            "fecha": None,
+            "ubicacion": "Sin datos",
+            "dias_transcurridos": None,
+            "tiempo_transcurrido": "Sin datos"
+        }
+    
+    # Filtrar solo registros con fecha válida
+    df_with_dates = df.dropna(subset=[date_column])
+    
+    if df_with_dates.empty:
+        return {
+            "existe": False,
+            "fecha": None,
+            "ubicacion": "Sin fechas válidas",
+            "dias_transcurridos": None,
+            "tiempo_transcurrido": "Sin fechas válidas"
+        }
+    
+    # Obtener el registro más reciente
+    latest_idx = df_with_dates[date_column].idxmax()
+    latest_record = df_with_dates.loc[latest_idx]
+    
+    fecha = latest_record[date_column]
+    dias = calculate_days_since(fecha)
+    tiempo_transcurrido = format_time_elapsed(dias)
+    
+    # Construir información de ubicación
+    ubicacion_parts = []
+    if location_columns:
+        for col in location_columns:
+            if col in latest_record and pd.notna(latest_record[col]):
+                ubicacion_parts.append(str(latest_record[col]))
+    
+    ubicacion = " - ".join(ubicacion_parts) if ubicacion_parts else "Ubicación no especificada"
+    
+    return {
+        "existe": True,
+        "fecha": fecha,
+        "ubicacion": ubicacion,
+        "dias_transcurridos": dias,
+        "tiempo_transcurrido": tiempo_transcurrido
+    }
+
+
 def create_age_groups(ages):
     """
     Crea grupos de edad a partir de una serie de edades usando configuración predefinida.
@@ -303,6 +584,7 @@ def process_casos_dataframe(df):
 def process_epizootias_dataframe(df):
     """
     Procesa el dataframe de epizootias con limpieza específica.
+    ACTUALIZADO: Maneja positivas + en estudio
 
     Args:
         df (pd.DataFrame): DataFrame de epizootias
@@ -351,7 +633,7 @@ def process_epizootias_dataframe(df):
     if "fecha_recoleccion" in df_processed.columns:
         df_processed["año_recoleccion"] = df_processed["fecha_recoleccion"].dt.year
 
-    # Categorizar resultados
+    # ACTUALIZADO: Categorizar resultados (incluyendo en estudio)
     if "descripcion" in df_processed.columns:
         df_processed["categoria_resultado"] = (
             df_processed["descripcion"]
@@ -360,7 +642,7 @@ def process_epizootias_dataframe(df):
                     "POSITIVO FA": "Positivo",
                     "NEGATIVO FA": "Negativo",
                     "NO APTA": "No apta",
-                    "EN ESTUDIO": "En estudio",
+                    "EN ESTUDIO": "En Estudio",
                 }
             )
             .fillna("Otro")
@@ -430,6 +712,7 @@ def apply_filters_to_data(casos_df, epizootias_df, filters):
 def calculate_basic_metrics(casos_df, epizootias_df):
     """
     Calcula métricas básicas de los datos.
+    ACTUALIZADO: Incluye métricas para positivas + en estudio
 
     Args:
         casos_df (pd.DataFrame): DataFrame de casos
@@ -445,8 +728,9 @@ def calculate_basic_metrics(casos_df, epizootias_df):
 
     if "condicion_final" in casos_df.columns:
         fallecidos = (casos_df["condicion_final"] == "Fallecido").sum()
+        vivos = (casos_df["condicion_final"] == "Vivo").sum()
         metrics["fallecidos"] = fallecidos
-        metrics["vivos"] = (casos_df["condicion_final"] == "Vivo").sum()
+        metrics["vivos"] = vivos
         metrics["letalidad"] = (
             (fallecidos / len(casos_df) * 100) if len(casos_df) > 0 else 0
         )
@@ -455,18 +739,45 @@ def calculate_basic_metrics(casos_df, epizootias_df):
         metrics["vivos"] = 0
         metrics["letalidad"] = 0
 
-    # Métricas de epizootias
+    # NUEVO: Información del último caso
+    if not casos_df.empty:
+        ultimo_caso = get_latest_case_info(
+            casos_df, 
+            "fecha_inicio_sintomas", 
+            ["vereda", "municipio"]
+        )
+        metrics["ultimo_caso"] = ultimo_caso
+    else:
+        metrics["ultimo_caso"] = {"existe": False}
+
+    # ACTUALIZADO: Métricas de epizootias (positivas + en estudio)
     metrics["total_epizootias"] = len(epizootias_df)
 
     if "descripcion" in epizootias_df.columns:
         positivos = (epizootias_df["descripcion"] == "POSITIVO FA").sum()
+        en_estudio = (epizootias_df["descripcion"] == "EN ESTUDIO").sum()
+        
         metrics["epizootias_positivas"] = positivos
+        metrics["epizootias_en_estudio"] = en_estudio
         metrics["positividad"] = (
             (positivos / len(epizootias_df) * 100) if len(epizootias_df) > 0 else 0
         )
     else:
         metrics["epizootias_positivas"] = 0
+        metrics["epizootias_en_estudio"] = 0
         metrics["positividad"] = 0
+
+    # NUEVO: Información de la última epizootia positiva
+    if not epizootias_df.empty:
+        epizootias_positivas = epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"]
+        ultima_epizootia = get_latest_case_info(
+            epizootias_positivas,
+            "fecha_recoleccion",
+            ["vereda", "municipio"]
+        )
+        metrics["ultima_epizootia_positiva"] = ultima_epizootia
+    else:
+        metrics["ultima_epizootia_positiva"] = {"existe": False}
 
     # Métricas geográficas
     if "municipio_normalizado" in casos_df.columns:
@@ -585,12 +896,18 @@ def validate_data_consistency(casos_df, epizootias_df):
                     "No hay fechas válidas en epizootias"
                 )
 
+        # ACTUALIZADO: Verificar distribución de descripciones
+        if "descripcion" in epizootias_df.columns:
+            desc_counts = epizootias_df["descripcion"].value_counts()
+            validation_report["epizootias"]["distribuciones"] = desc_counts.to_dict()
+
     return validation_report
 
 
 def create_summary_by_location(casos_df, epizootias_df):
     """
     Crea resumen de datos por ubicación.
+    ACTUALIZADO: Incluye estadísticas de positivas + en estudio
 
     Args:
         casos_df (pd.DataFrame): DataFrame de casos
@@ -626,11 +943,13 @@ def create_summary_by_location(casos_df, epizootias_df):
             fallecidos = (casos_municipio["condicion_final"] == "Fallecido").sum()
 
         positivos = 0
+        en_estudio = 0
         if (
             not epizootias_municipio.empty
             and "descripcion" in epizootias_municipio.columns
         ):
             positivos = (epizootias_municipio["descripcion"] == "POSITIVO FA").sum()
+            en_estudio = (epizootias_municipio["descripcion"] == "EN ESTUDIO").sum()
 
         summary_data.append(
             {
@@ -640,6 +959,7 @@ def create_summary_by_location(casos_df, epizootias_df):
                 "letalidad": (fallecidos / total_casos * 100) if total_casos > 0 else 0,
                 "total_epizootias": total_epizootias,
                 "epizootias_positivas": positivos,
+                "epizootias_en_estudio": en_estudio,
                 "positividad": (
                     (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
                 ),
