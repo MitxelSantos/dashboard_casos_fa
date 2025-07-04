@@ -1,3 +1,13 @@
+"""
+Aplicación principal ACTUALIZADA del Dashboard de Fiebre Amarilla v3.1
+NUEVAS FUNCIONALIDADES:
+- Vista de mapas con TODAS las tarjetas informativas trasladadas
+- Mapas fijos sin zoom/panning, limitados al Tolima
+- Interacciones: 1 clic = popup, 2 clics = filtrar automáticamente
+- Sincronización bidireccional entre mapas y filtros
+- Vista de información principal simplificada (solo gráficos y tablas)
+"""
+
 import os
 import logging
 from datetime import datetime
@@ -12,7 +22,7 @@ import re
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("FiebreAmarilla-Dashboard")
+logger = logging.getLogger("FiebreAmarilla-Dashboard-v3.1")
 
 # Deshabilitar detección automática de páginas de Streamlit
 os.environ["STREAMLIT_PAGES_ENABLED"] = "false"
@@ -51,6 +61,19 @@ from utils.data_processor import (
     capitalize_names,
 )
 
+# NUEVA: Importar utilidades de interacciones de mapa
+try:
+    from utils.map_interactions import (
+        process_map_interaction_complete,
+        create_interaction_feedback_ui,
+        get_interaction_manager,
+        get_bounds_manager
+    )
+    MAP_INTERACTIONS_AVAILABLE = True
+except ImportError:
+    MAP_INTERACTIONS_AVAILABLE = False
+    logger.warning("Utilidades de interacciones de mapa no disponibles")
+
 # Lista de vistas a importar
 vista_modules = ["mapas", "tablas", "comparativo"]
 vistas_modules = {}
@@ -80,15 +103,12 @@ for module_name in vista_modules:
 def load_new_datasets():
     """
     ACTUALIZADA: Carga los datasets y filtra solo epizootias positivas desde el inicio.
-    Busca primero en carpeta data/, luego en directorio raíz, y finalmente en Google Drive.
-
-    Returns:
-        dict: Diccionario con los dataframes cargados.
+    NUEVA: Inicialización mejorada para soporte de mapas interactivos.
     """
     try:
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("🔄 Inicializando carga de datos...")
+        status_text.text("🔄 Inicializando carga de datos v3.1...")
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
         casos_filename = "BD_positivos.xlsx"
@@ -198,22 +218,12 @@ def load_new_datasets():
         # ==================== VALIDACIÓN Y MENSAJE DE ERROR ====================
         if casos_df is None or epizootias_df is None:
             st.error("❌ No se pudieron cargar los archivos de datos")
-            return {
-                "casos": pd.DataFrame(),
-                "epizootias": pd.DataFrame(),
-                "municipios_normalizados": [],
-                "municipio_display_map": {},
-                "veredas_por_municipio": {},
-                "vereda_display_map": {},
-                "condicion_map": {},
-                "descripcion_map": {},
-                "data_source": "none",
-            }
+            return create_empty_data_structure()
 
         progress_bar.progress(30)
-        status_text.text("🔧 Procesando datos...")
+        status_text.text("🔧 Procesando datos para mapas interactivos...")
 
-        # ==================== PROCESAMIENTO DE DATOS ====================
+        # ==================== PROCESAMIENTO DE DATOS MEJORADO ====================
         # Limpiar datos de casos
         casos_df = casos_df.dropna(how="all")
 
@@ -308,9 +318,9 @@ def load_new_datasets():
             ].apply(excel_date_to_datetime)
 
         progress_bar.progress(70)
-        status_text.text("🗺️ Creando mapeos maestros...")
+        status_text.text("🗺️ Creando mapeos maestros para mapas interactivos...")
 
-        # ==================== CREAR MAPEOS MAESTROS ====================
+        # ==================== CREAR MAPEOS MAESTROS MEJORADOS ====================
 
         # Obtener todos los municipios únicos (normalizados)
         municipios_casos = set(casos_df["municipio_normalizado"].dropna())
@@ -397,7 +407,7 @@ def load_new_datasets():
                     vereda_display_map[municipio_norm][vereda_norm] = vereda_norm
 
         progress_bar.progress(90)
-        status_text.text("📊 Finalizando carga...")
+        status_text.text("📊 Finalizando carga con mapeos de interacción...")
 
         # ==================== MAPEOS DE VALORES ACTUALIZADOS ====================
 
@@ -429,6 +439,12 @@ def load_new_datasets():
         status_text.empty()
         progress_bar.empty()
 
+        # NUEVA: Inicializar sistema de interacciones de mapa si está disponible
+        if MAP_INTERACTIONS_AVAILABLE:
+            interaction_manager = get_interaction_manager()
+            bounds_manager = get_bounds_manager()
+            logger.info("✅ Sistema de interacciones de mapa inicializado")
+
         # Log final con estadísticas ACTUALIZADAS
         logger.info(f"✅ Datos cargados exitosamente desde: {data_source}")
         logger.info(f"📊 Casos cargados: {len(casos_df)}")
@@ -450,98 +466,104 @@ def load_new_datasets():
     except Exception as e:
         logger.error(f"💥 Error crítico al cargar los datos: {str(e)}")
         st.error(f"❌ Error crítico al cargar los datos: {str(e)}")
-
-        return {
-            "casos": pd.DataFrame(),
-            "epizootias": pd.DataFrame(),
-            "municipios_normalizados": [],
-            "municipio_display_map": {},
-            "veredas_por_municipio": {},
-            "vereda_display_map": {},
-            "condicion_map": {},
-            "descripcion_map": {},
-            "data_source": "error",
-        }
+        return create_empty_data_structure()
 
 
-def create_filters_responsive_with_maps(data):
+def create_empty_data_structure():
     """
-    CORREGIDA: Crea sistema de filtros responsive usando el componente corregido.
+    NUEVA: Crea estructura de datos vacía para casos de error.
     """
-    # Importar el sistema de filtros corregido
+    return {
+        "casos": pd.DataFrame(),
+        "epizootias": pd.DataFrame(),
+        "municipios_normalizados": [],
+        "municipio_display_map": {},
+        "veredas_por_municipio": {},
+        "vereda_display_map": {},
+        "condicion_map": {},
+        "descripcion_map": {},
+        "data_source": "error",
+    }
+
+
+def create_filters_responsive_with_maps_enhanced(data):
+    """
+    NUEVA: Crea sistema de filtros MEJORADO con sincronización bidireccional completa.
+    """
+    # Importar el sistema de filtros mejorado
     try:
         from components.filters import create_complete_filter_system_with_maps
 
-        # Usar el sistema completo de filtros responsive corregido
+        # Usar el sistema completo de filtros mejorado con sincronización
         filter_result = create_complete_filter_system_with_maps(data)
         return filter_result["filters"], filter_result["data_filtered"]
 
     except ImportError as e:
-        logger.error(f"Error importando filtros: {str(e)}")
+        logger.error(f"Error importando filtros mejorados: {str(e)}")
         # Fallback al sistema básico si no está disponible
-        st.sidebar.subheader("🔍 Filtros")
+        return create_basic_fallback_filters(data)
 
-        # Filtro de municipio básico
-        municipio_options = ["Todos"] + [
-            data["municipio_display_map"][norm]
-            for norm in data["municipios_normalizados"]
+
+def create_basic_fallback_filters(data):
+    """
+    NUEVA: Sistema de filtros básico como fallback.
+    """
+    st.sidebar.subheader("🔍 Filtros (Básico)")
+
+    # Filtro de municipio básico
+    municipio_options = ["Todos"] + [
+        data["municipio_display_map"][norm]
+        for norm in data["municipios_normalizados"]
+    ]
+
+    municipio_selected = st.sidebar.selectbox(
+        "📍 Municipio:", municipio_options, key="municipio_filter"
+    )
+
+    # Determinar municipio normalizado seleccionado
+    municipio_norm_selected = None
+    if municipio_selected != "Todos":
+        for norm, display in data["municipio_display_map"].items():
+            if display == municipio_selected:
+                municipio_norm_selected = norm
+                break
+
+    # Aplicar filtros básicos
+    casos_filtrados = data["casos"].copy()
+    epizootias_filtradas = data["epizootias"].copy()  # Ya solo son positivas
+
+    if municipio_norm_selected:
+        casos_filtrados = casos_filtrados[
+            casos_filtrados["municipio_normalizado"] == municipio_norm_selected
+        ]
+        epizootias_filtradas = epizootias_filtradas[
+            epizootias_filtradas["municipio_normalizado"] == municipio_norm_selected
         ]
 
-        municipio_selected = st.sidebar.selectbox(
-            "📍 Municipio:", municipio_options, key="municipio_filter"
-        )
+    data_filtered = {
+        "casos": casos_filtrados,
+        "epizootias": epizootias_filtradas,
+        **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
+    }
 
-        # Determinar municipio normalizado seleccionado
-        municipio_norm_selected = None
-        if municipio_selected != "Todos":
-            for norm, display in data["municipio_display_map"].items():
-                if display == municipio_selected:
-                    municipio_norm_selected = norm
-                    break
+    filters = {
+        "municipio_display": municipio_selected,
+        "municipio_normalizado": municipio_norm_selected,
+        "vereda_display": "Todas",
+        "vereda_normalizada": None,
+        "active_filters": (
+            [f"Municipio: {municipio_selected}"]
+            if municipio_selected != "Todos"
+            else []
+        ),
+    }
 
-        # Filtro de tipo de datos (ACTUALIZADO)
-        tipo_datos = st.sidebar.multiselect(
-            "📋 Mostrar:",
-            ["Casos Confirmados", "Epizootias Positivas"],
-            default=["Casos Confirmados", "Epizootias Positivas"],
-            key="tipo_datos_filter",
-        )
-
-        # Aplicar filtros básicos
-        casos_filtrados = data["casos"].copy()
-        epizootias_filtradas = data["epizootias"].copy()  # Ya solo son positivas
-
-        if municipio_norm_selected:
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["municipio_normalizado"] == municipio_norm_selected
-            ]
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["municipio_normalizado"] == municipio_norm_selected
-            ]
-
-        data_filtered = {
-            "casos": casos_filtrados,
-            "epizootias": epizootias_filtradas,
-            **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
-        }
-
-        filters = {
-            "municipio_display": municipio_selected,
-            "municipio_normalizado": municipio_norm_selected,
-            "tipo_datos": tipo_datos,
-            "active_filters": (
-                [f"Municipio: {municipio_selected}"]
-                if municipio_selected != "Todos"
-                else []
-            ),
-        }
-
-        return filters, data_filtered
+    return filters, data_filtered
 
 
 def configure_page_responsive():
     """
-    Configura la página de Streamlit con máxima responsividad.
+    ACTUALIZADA: Configura la página de Streamlit con máxima responsividad y soporte para mapas.
     """
     st.set_page_config(
         page_title=DASHBOARD_CONFIG["page_title"],
@@ -555,7 +577,7 @@ def configure_page_responsive():
         init_responsive_dashboard()
         init_responsive_utils()
 
-    # CSS responsive principal ACTUALIZADO
+    # CSS responsive principal ACTUALIZADO para v3.1
     st.markdown(
         f"""
         <style>
@@ -570,7 +592,7 @@ def configure_page_responsive():
             --info-color: {COLORS['info']};
         }}
         
-        /* Títulos responsive principales */
+        /* NUEVO: Títulos principales v3.1 */
         .main-title {{
             color: var(--primary-color);
             font-size: clamp(1.8rem, 6vw, 2.8rem);
@@ -580,9 +602,13 @@ def configure_page_responsive():
             padding-bottom: clamp(0.5rem, 2vw, 1rem);
             border-bottom: 3px solid var(--secondary-color);
             line-height: 1.2;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 1.5rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
         }}
         
-        /* Contenedor principal responsive */
+        /* NUEVO: Contenedor principal responsive para mapas */
         .block-container {{
             padding-top: clamp(1rem, 3vw, 2rem) !important;
             padding-bottom: clamp(1rem, 3vw, 2rem) !important;
@@ -591,7 +617,7 @@ def configure_page_responsive():
             max-width: 100% !important;
         }}
         
-        /* Métricas responsive mejoradas */
+        /* MEJORADO: Métricas responsive con soporte para mapas */
         [data-testid="metric-container"] {{
             background: linear-gradient(135deg, white 0%, #f8f9fa 100%) !important;
             border-radius: 12px !important;
@@ -601,6 +627,10 @@ def configure_page_responsive():
             border-top: 4px solid var(--primary-color) !important;
             transition: all 0.3s ease !important;
             margin-bottom: clamp(0.5rem, 2vw, 1rem) !important;
+            min-height: 120px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: center !important;
         }}
         
         [data-testid="metric-container"]:hover {{
@@ -622,7 +652,7 @@ def configure_page_responsive():
             letter-spacing: 0.5px !important;
         }}
         
-        /* Pestañas responsive mejoradas */
+        /* NUEVO: Pestañas responsive mejoradas para v3.1 */
         .stTabs [data-baseweb="tab-list"] {{
             gap: clamp(0.25rem, 1vw, 0.75rem) !important;
             overflow-x: auto !important;
@@ -661,37 +691,36 @@ def configure_page_responsive():
             box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
         }}
         
-        /* Columnas responsive */
+        /* NUEVO: Columnas responsive mejoradas para layout de mapas */
         .css-1r6slb0 {{
             flex: 1 1 auto !important;
             min-width: 200px !important;
             margin-bottom: clamp(0.75rem, 2vw, 1rem) !important;
         }}
         
-        /* Optimizaciones móviles específicas */
+        /* NUEVO: Optimizaciones específicas para vista de mapas */
         @media (max-width: 768px) {{
-            .main-title {{
-                font-size: 1.8rem !important;
-                margin-bottom: 1rem !important;
-            }}
-            
+            /* En móviles, apilar columnas verticalmente */
             .css-1r6slb0 {{
                 flex: 1 1 100% !important;
                 min-width: 100% !important;
                 margin-bottom: 1rem !important;
             }}
             
+            /* Ajustar pestañas para móvil */
             .stTabs [data-baseweb="tab"] {{
                 font-size: 0.75rem !important;
                 padding: 0.5rem 0.8rem !important;
             }}
             
+            /* Métricas más compactas en móvil */
             [data-testid="metric-container"] {{
                 margin-bottom: 0.75rem !important;
+                min-height: 100px !important;
             }}
         }}
         
-        /* Tablet adjustments */
+        /* NUEVO: Tablet adjustments para mapas */
         @media (min-width: 769px) and (max-width: 1024px) {{
             .css-1r6slb0 {{
                 flex: 1 1 45% !important;
@@ -699,12 +728,31 @@ def configure_page_responsive():
             }}
         }}
         
-        /* Desktop optimizations */
+        /* NUEVO: Desktop optimizations para mapas */
         @media (min-width: 1025px) {{
             .css-1r6slb0 {{
-                flex: 1 1 22% !important;
-                min-width: 200px !important;
+                flex: 1 1 auto !important;
+                min-width: 250px !important;
             }}
+        }}
+        
+        /* NUEVO: Estilos para indicadores de sincronización */
+        .sync-indicator {{
+            background: linear-gradient(45deg, var(--success-color), var(--info-color));
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 0.5rem 0;
+            text-align: center;
+            animation: pulse-sync 2s infinite;
+        }}
+        
+        @keyframes pulse-sync {{
+            0% {{ opacity: 1; transform: scale(1); }}
+            50% {{ opacity: 0.8; transform: scale(1.02); }}
+            100% {{ opacity: 1; transform: scale(1); }}
         }}
         </style>
         """,
@@ -712,9 +760,40 @@ def configure_page_responsive():
     )
 
 
+def handle_map_interactions(data_filtered, filters, colors):
+    """
+    NUEVA: Maneja las interacciones del mapa si están disponibles.
+    """
+    if not MAP_INTERACTIONS_AVAILABLE:
+        return
+    
+    # Verificar si hay datos de interacción del mapa en session_state
+    if 'map_interaction_data' in st.session_state:
+        map_data = st.session_state['map_interaction_data']
+        
+        # Procesar la interacción
+        interaction_result = process_map_interaction_complete(
+            map_data, data_filtered, colors
+        )
+        
+        # Mostrar feedback de la interacción
+        create_interaction_feedback_ui(interaction_result, colors)
+        
+        # Si requiere rerun, limpiar datos y reejecutar
+        if interaction_result.get('requires_rerun', False):
+            del st.session_state['map_interaction_data']
+            st.rerun()
+        
+        # Limpiar datos de interacción después de procesar
+        if 'map_interaction_data' in st.session_state:
+            del st.session_state['map_interaction_data']
+
+
 def main():
-    """ACTUALIZADA: Aplicación principal del dashboard con lógica solo epizootias positivas."""
-    # Configurar página con responsividad máxima
+    """
+    ACTUALIZADA: Aplicación principal del dashboard v3.1 con mapas interactivos y sincronización bidireccional.
+    """
+    # Configurar página con responsividad máxima y soporte para mapas
     configure_page_responsive()
 
     # Barra lateral responsive
@@ -725,7 +804,7 @@ def main():
     except ImportError:
         # Fallback básico
         with st.sidebar:
-            st.title("Dashboard Tolima")
+            st.title("Dashboard Tolima v3.1")
 
     # Cargar datos con indicadores responsive (SOLO EPIZOOTIAS POSITIVAS)
     data = load_new_datasets()
@@ -736,30 +815,46 @@ def main():
         st.info("Coloque los archivos de datos en la carpeta 'data/' y recargue la página.")
         return
 
-    # NUEVO: Mostrar información sobre el filtro de epizootias positivas
+    # NUEVA: Mostrar información sobre el filtro de epizootias positivas con indicador de versión
     total_epizootias_positivas = len(data["epizootias"])
     if total_epizootias_positivas > 0:
-        st.success(f"✅ Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias_positivas} epizootias positivas")
+        st.success(f"✅ Dashboard v3.1 - Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias_positivas} epizootias positivas")
 
-    # Crear filtros responsive con integración de mapas CORREGIDOS
-    filters, data_filtered = create_filters_responsive_with_maps(data)
+    # Crear filtros responsive con integración de mapas MEJORADOS
+    filters, data_filtered = create_filters_responsive_with_maps_enhanced(data)
 
-    # TÍTULO PRINCIPAL ACTUALIZADO
+    # NUEVA: Manejar interacciones del mapa
+    handle_map_interactions(data_filtered, filters, COLORS)
+
+    # TÍTULO PRINCIPAL ACTUALIZADO v3.1
     st.markdown(
-        '<h1 class="main-title">🔴 Dashboard Fiebre Amarilla - Tolima (Solo Epizootias Positivas)</h1>',
+        '<h1 class="main-title">🗺️ Dashboard Fiebre Amarilla v3.1 - Mapas Interactivos</h1>',
         unsafe_allow_html=True,
     )
 
-    # PESTAÑAS PRINCIPALES ACTUALIZADAS
+    # NUEVA: Mostrar indicador de sincronización si está activa
+    if filters.get("active_filters"):
+        filter_count = len(filters["active_filters"])
+        st.markdown(
+            f"""
+            <div class="sync-indicator">
+                🔄 Sincronización activa: {filter_count} filtro(s) aplicado(s)
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.1
     tab1, tab2, tab3 = st.tabs(
         [
-            "🗺️ Mapas Interactivos",
-            "🏥 Información Principal", 
+            "🗺️ Mapas + Métricas",      # NUEVA: Mapas CON todas las tarjetas
+            "📊 Análisis Epidemiológico", # ACTUALIZADA: Solo gráficos y tablas
             "📈 Seguimiento Temporal",
         ]
     )
 
     with tab1:
+        # NUEVA: Vista de mapas CON todas las tarjetas informativas
         if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
                 # Pasar data filtrada para que los mapas trabajen solo con epizootias positivas
@@ -772,16 +867,18 @@ def main():
             st.info("🗺️ Vista de mapas en desarrollo.")
 
     with tab2:
+        # ACTUALIZADA: Solo análisis epidemiológico (sin tarjetas métricas)
         if "tablas" in vistas_modules and vistas_modules["tablas"]:
             try:
                 vistas_modules["tablas"].show(data_filtered, filters, COLORS)
             except Exception as e:
-                st.error(f"Error en módulo de información principal: {str(e)}")
-                st.info("🔧 Vista de información principal en desarrollo.")
+                st.error(f"Error en módulo de análisis epidemiológico: {str(e)}")
+                st.info("🔧 Vista de análisis epidemiológico en desarrollo.")
         else:
-            st.info("🔧 Módulo de información principal en desarrollo.")
+            st.info("🔧 Módulo de análisis epidemiológico en desarrollo.")
 
     with tab3:
+        # Seguimiento temporal (sin cambios)
         if "comparativo" in vistas_modules and vistas_modules["comparativo"]:
             try:
                 vistas_modules["comparativo"].show(data_filtered, filters, COLORS)
@@ -790,6 +887,18 @@ def main():
                 st.info("🔧 Vista de seguimiento temporal en desarrollo.")
         else:
             st.info("🔧 Módulo de seguimiento temporal en desarrollo.")
+
+    # NUEVA: Footer con información de versión
+    st.markdown("---")
+    st.markdown(
+        f"""
+        <div style="text-align: center; color: #666; font-size: 0.8rem; padding: 1rem 0;">
+            Dashboard Fiebre Amarilla v3.1 - Mapas Interactivos con Sincronización Bidireccional<br>
+            Desarrollado para la Secretaría de Salud del Tolima • © 2025
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
