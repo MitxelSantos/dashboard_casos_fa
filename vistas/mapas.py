@@ -1,10 +1,8 @@
 """
-Vista de mapas MEJORADA del dashboard de Fiebre Amarilla.
-MEJORAS v3.2:
-- Tarjetas estéticas mejoradas con información completa
-- Hover para tooltip, click para filtrar (sin popup)
-- Manejo de municipios grises (sin datos)
-- Información de último caso/epizootia con tiempo transcurrido
+Vista de mapas CORREGIDA del dashboard de Fiebre Amarilla.
+CORRECCIÓN PRINCIPAL:
+- Fix en determine_map_level() para cambiar correctamente al mapa municipal al hacer click
+- Limpieza de funciones obsoletas
 """
 
 import streamlit as st
@@ -94,6 +92,19 @@ def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, dat
         create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors)
     elif current_level == "vereda":
         create_vereda_detail_view(casos, epizootias, filters, colors)
+
+
+def determine_map_level(filters):
+    """
+    CORREGIDO: Determina el nivel de zoom del mapa según filtros activos.
+    FIX: Corregidas las claves de los filtros para que funcione correctamente.
+    """
+    if filters.get("vereda_normalizada"):
+        return "vereda"
+    elif filters.get("municipio_normalizado"):  # ✅ CORREGIDO: era "municipio_normalizada"
+        return "municipio"
+    else:
+        return "departamento"
 
 
 def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
@@ -312,8 +323,6 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         
         geojson.add_to(m)
     
-    st.info("💡 **Interacciones:** Pase el cursor sobre una vereda para ver información • Haga clic para filtrar y ver detalles →")
-    
     # Renderizar mapa
     map_data = st_folium(
         m, 
@@ -325,6 +334,236 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     
     # Procesar clicks en veredas
     handle_vereda_click_enhanced(map_data, veredas_data, filters)
+
+
+def handle_enhanced_click_interactions(map_data, municipios_data):
+    """
+    MEJORADO: Maneja clicks incluyendo municipios sin datos (grises).
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        # Verificar si es un click válido
+        if isinstance(clicked_object, dict):
+            # Buscar el municipio clicado en los datos
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar el municipio más cercano al punto clicado
+                min_distance = float('inf')
+                municipio_clicked = None
+                
+                for idx, row in municipios_data.iterrows():
+                    # Calcular el centroide del municipio
+                    centroid = row['geometry'].centroid
+                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                    
+                    if distance < min_distance:
+                        min_distance = distance
+                        municipio_clicked = row['MpNombre']
+                        
+                
+                if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
+                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
+                    st.session_state['municipio_filter'] = municipio_clicked
+                    
+                    # NUEVO: Resetear vereda cuando se cambia municipio
+                    st.session_state['vereda_filter'] = 'Todas'
+                    
+                    # **MENSAJE MEJORADO** según tenga datos o no
+                    row_data = municipios_data[municipios_data['MpNombre'] == municipio_clicked].iloc[0]
+                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
+                    
+                    if tiene_datos:
+                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
+                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
+                    else:
+                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
+                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
+                    
+                    # **ACTUALIZAR INMEDIATAMENTE**
+                    st.rerun()
+                    
+    except Exception as e:
+        st.warning(f"Error procesando clic en mapa: {str(e)}")
+
+
+def handle_vereda_click_enhanced(map_data, veredas_data, filters):
+    """
+    MEJORADO: Maneja clicks en veredas.
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar la vereda más cercana
+                min_distance = float('inf')
+                vereda_clicked = None
+                vereda_data = None
+                
+                for idx, row in veredas_data.iterrows():
+                    centroid = row['geometry'].centroid
+                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                    
+                    if distance < min_distance:
+                        min_distance = distance
+                        vereda_clicked = row.get('NOMBRE_VER', row.get('vereda', f'Vereda_{idx}'))
+                        vereda_data = row
+                
+                if vereda_clicked and min_distance < 0.05:  # Umbral más pequeño para veredas
+                    # **FILTRAR POR VEREDA**
+                    st.session_state['vereda_filter'] = vereda_clicked
+                    
+                    # **MENSAJE CON INFORMACIÓN**
+                    casos_count = vereda_data['casos']
+                    epi_count = vereda_data['epizootias']
+                    
+                    if casos_count > 0 or epi_count > 0:
+                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
+                    else:
+                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
+                    
+                    # **ACTUALIZAR**
+                    st.rerun()
+                    
+    except Exception as e:
+        st.warning(f"Error procesando clic en vereda: {str(e)}")
+
+
+def create_navigation_controls(current_level, filters, colors):
+    """Controles de navegación simplificados."""
+    level_info = {
+        "departamento": "🏛️ Vista Departamental - Tolima",
+        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
+        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
+    }
+    
+    current_info = level_info[current_level]
+    
+    # Botones de navegación
+    cols = st.columns([1, 1])
+    
+    with cols[0]:
+        if current_level != "departamento":
+            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced", use_container_width=True):
+                reset_all_location_filters()
+                st.rerun()
+    
+    with cols[1]:
+        if current_level == "vereda":
+            municipio_name = filters.get('municipio_display', 'Municipio')
+            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced", use_container_width=True):
+                reset_vereda_filter_only()
+                st.rerun()
+
+
+def show_filter_indicator(filters, colors):
+    """Indicador de filtrado activo simplificado."""
+    active_filters = filters.get("active_filters", [])
+    
+    if active_filters:
+        filters_text = " • ".join(active_filters[:2])  # Máximo 2 filtros
+        
+        if len(active_filters) > 2:
+            filters_text += f" • +{len(active_filters) - 2} más"
+        
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(45deg, {colors['info']}, {colors['warning']});
+                color: white;
+                padding: 8px 15px;
+                border-radius: 20px;
+                margin-bottom: 10px;
+                text-align: center;
+                font-size: 0.85rem;
+                font-weight: 600;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            ">
+                🎯 FILTROS: {filters_text}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def create_vereda_detail_view(casos, epizootias, filters, colors):
+    """Vista detallada de vereda específica."""
+    vereda_display = filters.get('vereda_display', 'Vereda')
+    municipio_display = filters.get('municipio_display', 'Municipio')
+    
+    # Información de la vereda
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        ">
+            <h3 style="margin: 0; font-size: 1.4rem;">📍 Vista Detallada</h3>
+            <p style="margin: 10px 0 0 0; font-size: 1rem; opacity: 0.9;">
+                <strong>{vereda_display}</strong> - {municipio_display}
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    # Estadísticas de la vereda
+    total_casos = len(casos)
+    total_epizootias = len(epizootias)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("🦠 Casos Humanos", total_casos)
+    
+    with col2:
+        st.metric("🐒 Epizootias", total_epizootias)
+    
+    with col3:
+        actividad_total = total_casos + total_epizootias
+        st.metric("📊 Total Eventos", actividad_total)
+    
+    # Análisis específico de la vereda
+    if total_casos > 0 or total_epizootias > 0:
+        st.markdown("---")
+        st.markdown("### 📊 Análisis Específico")
+        
+        # Casos por fecha si hay datos
+        if not casos.empty and "fecha_inicio_sintomas" in casos.columns:
+            casos_fecha = casos.dropna(subset=["fecha_inicio_sintomas"])
+            if not casos_fecha.empty:
+                st.markdown("**📅 Casos por Fecha**")
+                casos_temporal = casos_fecha.groupby(casos_fecha["fecha_inicio_sintomas"].dt.date).size().reset_index()
+                casos_temporal.columns = ["Fecha", "Casos"]
+                st.dataframe(casos_temporal, use_container_width=True, height=200)
+        
+        # Epizootias por fecha si hay datos
+        if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
+            epi_fecha = epizootias.dropna(subset=["fecha_recoleccion"])
+            if not epi_fecha.empty:
+                st.markdown("**📅 Epizootias por Fecha**")
+                epi_temporal = epi_fecha.groupby(epi_fecha["fecha_recoleccion"].dt.date).size().reset_index()
+                epi_temporal.columns = ["Fecha", "Epizootias"]
+                st.dataframe(epi_temporal, use_container_width=True, height=200)
+    else:
+        st.info("📊 No hay eventos registrados en esta vereda con los filtros actuales")
 
 
 def create_beautiful_information_cards(casos, epizootias, filters, colors):
@@ -473,6 +712,7 @@ def create_enhanced_epizootias_card(metrics, colors):
         """,
         unsafe_allow_html=True,
     )  
+
 
 def apply_enhanced_cards_css(colors):
     """
@@ -665,83 +905,6 @@ def apply_enhanced_cards_css(colors):
             font-style: italic;
         }}
         
-        /* Información de ubicación */
-        .location-info {{
-            margin-bottom: 20px;
-        }}
-        
-        .current-location {{
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 12px;
-            border-left: 4px solid {colors['primary']};
-        }}
-        
-        .location-icon {{
-            font-size: 2rem;
-        }}
-        
-        .location-name {{
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: {colors['primary']};
-            margin-bottom: 3px;
-        }}
-        
-        .location-level {{
-            font-size: 0.85rem;
-            color: #666;
-            font-weight: 500;
-        }}
-        
-        /* Filtros activos */
-        .filters-section {{
-            background: linear-gradient(135deg, #fff3e0, #ffe0b3);
-            border-radius: 12px;
-            padding: 15px;
-            margin: 15px 0;
-            border-left: 4px solid {colors['warning']};
-        }}
-        
-        .filters-title {{
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: {colors['primary']};
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        
-        .filters-list {{
-            font-size: 0.85rem;
-            color: #333;
-            line-height: 1.5;
-        }}
-        
-        /* Ayuda de navegación */
-        .navigation-help {{
-            background: #e8f5e8;
-            border-radius: 12px;
-            padding: 15px;
-            border-left: 4px solid {colors['success']};
-        }}
-        
-        .help-title {{
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: {colors['primary']};
-            margin-bottom: 8px;
-        }}
-        
-        .help-text {{
-            font-size: 0.8rem;
-            color: #555;
-            line-height: 1.5;
-        }}
-        
         /* Responsive design */
         @media (max-width: 768px) {{
             .main-metrics-grid {{
@@ -775,112 +938,7 @@ def apply_enhanced_cards_css(colors):
     )
 
 
-# === FUNCIONES DE APOYO MEJORADAS ===
-
-def handle_enhanced_click_interactions(map_data, municipios_data):
-    """
-    MEJORADO: Maneja clicks incluyendo municipios sin datos (grises).
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        # Verificar si es un click válido
-        if isinstance(clicked_object, dict):
-            # Buscar el municipio clicado en los datos
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                # Encontrar el municipio más cercano al punto clicado
-                min_distance = float('inf')
-                municipio_clicked = None
-                
-                for idx, row in municipios_data.iterrows():
-                    # Calcular el centroide del municipio
-                    centroid = row['geometry'].centroid
-                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                    
-                    if distance < min_distance:
-                        min_distance = distance
-                        municipio_clicked = row['MpNombre']
-                        
-                
-                if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
-                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
-                    st.session_state['municipio_filter'] = municipio_clicked
-                    
-                    # NUEVO: Resetear vereda cuando se cambia municipio
-                    st.session_state['vereda_filter'] = 'Todas'
-                    
-                    # **MENSAJE MEJORADO** según tenga datos o no
-                    row_data = municipios_data[municipios_data['MpNombre'] == municipio_clicked].iloc[0]
-                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
-                    
-                    if tiene_datos:
-                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
-                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
-                    else:
-                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
-                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
-                    
-                    # **ACTUALIZAR INMEDIATAMENTE**
-                    st.rerun()
-                    
-    except Exception as e:
-        st.warning(f"Error procesando clic en mapa: {str(e)}")
-
-
-def handle_vereda_click_enhanced(map_data, veredas_data, filters):
-    """
-    MEJORADO: Maneja clicks en veredas.
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                # Encontrar la vereda más cercana
-                min_distance = float('inf')
-                vereda_clicked = None
-                vereda_data = None
-                
-                for idx, row in veredas_data.iterrows():
-                    centroid = row['geometry'].centroid
-                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                    
-                    if distance < min_distance:
-                        min_distance = distance
-                        vereda_clicked = row.get('NOMBRE_VER', row.get('vereda', f'Vereda_{idx}'))
-                        vereda_data = row
-                
-                if vereda_clicked and min_distance < 0.05:  # Umbral más pequeño para veredas
-                    # **FILTRAR POR VEREDA**
-                    st.session_state['vereda_filter'] = vereda_clicked
-                    
-                    # **MENSAJE CON INFORMACIÓN**
-                    casos_count = vereda_data['casos']
-                    epi_count = vereda_data['epizootias']
-                    
-                    if casos_count > 0 or epi_count > 0:
-                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
-                    else:
-                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
-                    
-                    # **ACTUALIZAR**
-                    st.rerun()
-                    
-    except Exception as e:
-        st.warning(f"Error procesando clic en vereda: {str(e)}")
-
+# === FUNCIONES DE APOYO ===
 
 def prepare_municipal_data_enhanced(casos, epizootias, municipios):
     """
@@ -967,162 +1025,6 @@ def prepare_vereda_data_enhanced(casos, epizootias, veredas_gdf):
     
     return veredas_data
 
-
-# === FUNCIONES DE UTILIDAD REUTILIZADAS ===
-
-def determine_map_level(filters):
-    """Determina el nivel de zoom del mapa según filtros activos."""
-    if filters.get("vereda_normalizada"):
-        return "vereda"
-    elif filters.get("municipio_normalizada"):
-        return "municipio"
-    else:
-        return "departamento"
-
-
-def get_current_location_info(filters):
-    """Obtiene información de la ubicación actual según filtros."""
-    location_parts = []
-    
-    if filters.get("municipio_display") and filters["municipio_display"] != "Todos":
-        location_parts.append(f"{filters['municipio_display']}")
-    
-    if filters.get("vereda_display") and filters["vereda_display"] != "Todas":
-        location_parts.append(f"{filters['vereda_display']}")
-    
-    if not location_parts:
-        return "Tolima"
-    
-    return " - ".join(location_parts)
-
-
-def create_navigation_controls(current_level, filters, colors):
-    """Controles de navegación simplificados."""
-    level_info = {
-        "departamento": "🏛️ Vista Departamental - Tolima",
-        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
-        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
-    }
-    
-    current_info = level_info[current_level]
-    
-    # Botones de navegación
-    cols = st.columns([1, 1])
-    
-    with cols[0]:
-        if current_level != "departamento":
-            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced", use_container_width=True):
-                reset_all_location_filters()
-                st.rerun()
-    
-    with cols[1]:
-        if current_level == "vereda":
-            municipio_name = filters.get('municipio_display', 'Municipio')
-            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced", use_container_width=True):
-                reset_vereda_filter_only()
-                st.rerun()
-    
-
-
-def show_filter_indicator(filters, colors):
-    """Indicador de filtrado activo simplificado."""
-    active_filters = filters.get("active_filters", [])
-    
-    if active_filters:
-        filters_text = " • ".join(active_filters[:2])  # Máximo 2 filtros
-        
-        if len(active_filters) > 2:
-            filters_text += f" • +{len(active_filters) - 2} más"
-        
-        st.markdown(
-            f"""
-            <div style="
-                background: linear-gradient(45deg, {colors['info']}, {colors['warning']});
-                color: white;
-                padding: 8px 15px;
-                border-radius: 20px;
-                margin-bottom: 10px;
-                text-align: center;
-                font-size: 0.85rem;
-                font-weight: 600;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            ">
-                🎯 FILTROS: {filters_text}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
-def create_vereda_detail_view(casos, epizootias, filters, colors):
-    """Vista detallada de vereda específica."""
-    vereda_display = filters.get('vereda_display', 'Vereda')
-    municipio_display = filters.get('municipio_display', 'Municipio')
-    
-    # Información de la vereda
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
-            color: white;
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        ">
-            <h3 style="margin: 0; font-size: 1.4rem;">📍 Vista Detallada</h3>
-            <p style="margin: 10px 0 0 0; font-size: 1rem; opacity: 0.9;">
-                <strong>{vereda_display}</strong> - {municipio_display}
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    # Estadísticas de la vereda
-    total_casos = len(casos)
-    total_epizootias = len(epizootias)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.metric("🦠 Casos Humanos", total_casos)
-    
-    with col2:
-        st.metric("🐒 Epizootias", total_epizootias)
-    
-    with col3:
-        actividad_total = total_casos + total_epizootias
-        st.metric("📊 Total Eventos", actividad_total)
-    
-    # Análisis específico de la vereda
-    if total_casos > 0 or total_epizootias > 0:
-        st.markdown("---")
-        st.markdown("### 📊 Análisis Específico")
-        
-        # Casos por fecha si hay datos
-        if not casos.empty and "fecha_inicio_sintomas" in casos.columns:
-            casos_fecha = casos.dropna(subset=["fecha_inicio_sintomas"])
-            if not casos_fecha.empty:
-                st.markdown("**📅 Casos por Fecha**")
-                casos_temporal = casos_fecha.groupby(casos_fecha["fecha_inicio_sintomas"].dt.date).size().reset_index()
-                casos_temporal.columns = ["Fecha", "Casos"]
-                st.dataframe(casos_temporal, use_container_width=True, height=200)
-        
-        # Epizootias por fecha si hay datos
-        if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
-            epi_fecha = epizootias.dropna(subset=["fecha_recoleccion"])
-            if not epi_fecha.empty:
-                st.markdown("**📅 Epizootias por Fecha**")
-                epi_temporal = epi_fecha.groupby(epi_fecha["fecha_recoleccion"].dt.date).size().reset_index()
-                epi_temporal.columns = ["Fecha", "Epizootias"]
-                st.dataframe(epi_temporal, use_container_width=True, height=200)
-    else:
-        st.info("📊 No hay eventos registrados en esta vereda con los filtros actuales")
-
-
-# === FUNCIONES DE APOYO EXISTENTES ===
 
 def reset_all_location_filters():
     """Resetea todos los filtros de ubicación"""
