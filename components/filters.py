@@ -242,17 +242,6 @@ def create_hierarchical_filters_enhanced(data):
     # Mostrar indicador de sincronización si aplica
     show_map_sync_indicator()
     
-    # Sección de filtros principales
-    st.sidebar.markdown(
-        """
-        <div class="filter-section">
-            <div class="filter-header">
-                🎯 Filtros Principales
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
     # MEJORADO: Filtro de municipio con detección de cambios desde mapa
     municipio_options = ["Todos"] + [
         data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]

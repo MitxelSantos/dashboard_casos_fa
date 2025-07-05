@@ -101,7 +101,7 @@ for module_name in vista_modules:
 
 def load_enhanced_datasets():
     """
-    ACTUALIZADO: Carga datasets con epizootias positivas + en estudio y mapeo inteligente de veredas.
+    Carga datasets con epizootias positivas + en estudio y mapeo inteligente de veredas.
     """
     try:
         progress_bar = st.progress(0)
@@ -837,7 +837,7 @@ def main():
     if total_epizootias > 0:
         positivas_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "POSITIVO FA"]) if not data["epizootias"].empty else 0
         en_estudio_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "EN ESTUDIO"]) if not data["epizootias"].empty else 0
-        st.success(f"✅ Dashboard v3.2 - Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias} epizootias ({positivas_count} positivas + {en_estudio_count} en estudio)")
+        #st.success(f"✅ Dashboard v3.2 - Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias} epizootias ({positivas_count} positivas + {en_estudio_count} en estudio)")
 
     # Crear filtros responsive con integración de mapas MEJORADOS
     filters, data_filtered = create_filters_responsive_with_maps_enhanced(data)
@@ -847,27 +847,15 @@ def main():
 
     # **TÍTULO PRINCIPAL CORREGIDO** - Sin espaciado excesivo
     st.markdown(
-        '<h1 class="main-title">🗺️ Dashboard Fiebre Amarilla v3.2</h1>',
+        '<h1 class="main-title">🗺️ Dashboard Fiebre Amarilla</h1>',
         unsafe_allow_html=True,
     )
-
-    # Mostrar indicador de sincronización si está activa
-    if filters.get("active_filters"):
-        filter_count = len(filters["active_filters"])
-        st.markdown(
-            f"""
-            <div class="sync-indicator">
-                🔄 Filtros activos: {filter_count}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
     # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.2
     tab1, tab2, tab3 = st.tabs(
         [
-            "🗺️ Mapas Interactivos",      # Mapas CON todas las tarjetas mejoradas
-            "📊 Análisis Epidemiológico", # Tablas detalladas e interactivas
+            "🗺️ Mapa Interactivo",      # Mapas CON todas las tarjetas mejoradas
+            "📊 Análisis Detallado", # Tablas detalladas e interactivas
             "📈 Seguimiento Temporal",
         ]
     )
@@ -912,8 +900,8 @@ def main():
     st.markdown(
         f"""
         <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0; margin-top: 0.5rem;">
-            Dashboard Fiebre Amarilla v3.2 - Sistema Inteligente de Mapeo<br>
-            Desarrollado para la Secretaría de Salud del Tolima • © 2025
+            Dashboard Fiebre Amarilla - Desarrollado por: Ing. Jose Miguel Santos<br>
+            Secretaría de Salud del Tolima • © 2025
         </div>
         """,
         unsafe_allow_html=True,
