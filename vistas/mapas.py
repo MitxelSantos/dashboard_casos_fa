@@ -1,10 +1,8 @@
 """
-Vista de mapas CORREGIDA con sincronización robusta del dashboard de Fiebre Amarilla.
-CORRECCIONES PRINCIPALES:
+Vista de mapas CORREGIDA del dashboard de Fiebre Amarilla.
+CORRECCIÓN PRINCIPAL:
 - Fix en determine_map_level() para cambiar correctamente al mapa municipal al hacer click
-- Integración con FilterSyncManager para sincronización bidireccional robusta
-- Botón "Ver Tolima" ahora resetea completamente la sidebar
-- Manejo correcto de municipios grises (shapefile sin datos)
+- Limpieza de funciones obsoletas
 """
 
 import streamlit as st
@@ -81,8 +79,8 @@ def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, dat
     # Determinar nivel de mapa actual
     current_level = determine_map_level(filters)
     
-    # Controles de navegación CORREGIDOS
-    create_navigation_controls_fixed(current_level, filters, colors)
+    # Controles de navegación
+    create_navigation_controls(current_level, filters, colors)
     
     # Indicador de filtrado activo
     show_filter_indicator(filters, colors)
@@ -107,79 +105,6 @@ def determine_map_level(filters):
         return "municipio"
     else:
         return "departamento"
-
-
-def create_navigation_controls_fixed(current_level, filters, colors):
-    """
-    CORREGIDO: Controles de navegación con reset COMPLETO que sincroniza sidebar.
-    """
-    level_info = {
-        "departamento": "🏛️ Vista Departamental - Tolima",
-        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
-        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
-    }
-    
-    current_info = level_info[current_level]
-    
-    # Botones de navegación
-    cols = st.columns([1, 1])
-    
-    with cols[0]:
-        if current_level != "departamento":
-            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced_fixed", use_container_width=True):
-                # **CORREGIDO**: Reset completo usando sync manager
-                reset_all_location_filters_complete()
-                st.rerun()
-    
-    with cols[1]:
-        if current_level == "vereda":
-            municipio_name = filters.get('municipio_display', 'Municipio')
-            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced_fixed", use_container_width=True):
-                reset_vereda_filter_only()
-                st.rerun()
-
-
-def reset_all_location_filters_complete():
-    """
-    CORREGIDO: Reset completo que sincroniza TODA la sidebar usando sync manager.
-    """
-    try:
-        # Importar el sync manager desde filters
-        from components.filters import sync_manager
-        
-        # Usar el sync manager para reset completo
-        success = sync_manager.force_reset_all()
-        
-        if success:
-            st.success("✅ Regresando a vista departamental - Filtros restablecidos", icon="🏛️")
-        else:
-            st.warning("⚠️ Vista departamental restaurada", icon="🏛️")
-            
-    except ImportError:
-        # Fallback manual si no está disponible el sync manager
-        manual_reset_fallback()
-
-
-def manual_reset_fallback():
-    """
-    FALLBACK: Reset manual si el sync manager no está disponible.
-    """
-    filter_keys = [
-        "municipio_filter", "vereda_filter", "fecha_filter",
-        "condicion_filter", "sexo_filter", "edad_filter", "fuente_filter",
-        "map_filter_updated", "filter_stats", "filter_stats_detailed"
-    ]
-    
-    for key in filter_keys:
-        if key in st.session_state:
-            if key in ["municipio_filter"]:
-                st.session_state[key] = "Todos"
-            elif key in ["vereda_filter", "condicion_filter", "sexo_filter", "fuente_filter"]:
-                st.session_state[key] = "Todas" if key == "fuente_filter" else "Todos"
-            else:
-                del st.session_state[key]
-    
-    st.success("✅ Vista departamental restaurada", icon="🏛️")
 
 
 def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
@@ -288,67 +213,7 @@ def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
     )
     
     # **LÓGICA MEJORADA**: Procesar clicks (incluyendo municipios grises)
-    handle_enhanced_click_interactions_fixed(map_data, municipios_data)
-
-
-def handle_enhanced_click_interactions_fixed(map_data, municipios_data):
-    """
-    CORREGIDO: Maneja clicks incluyendo municipios grises con sincronización robusta.
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        # Verificar si es un click válido
-        if isinstance(clicked_object, dict):
-            # Buscar el municipio clicado en los datos
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                # Encontrar el municipio más cercano al punto clicado
-                min_distance = float('inf')
-                municipio_clicked = None
-                
-                for idx, row in municipios_data.iterrows():
-                    # Calcular el centroide del municipio
-                    centroid = row['geometry'].centroid
-                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                    
-                    if distance < min_distance:
-                        min_distance = distance
-                        municipio_clicked = row['MpNombre']
-                        
-                
-                if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
-                    # **USAR SYNC MANAGER para actualización desde mapa**
-                    try:
-                        from components.filters import sync_manager
-                        sync_manager.update_from_map(municipio_clicked, "Todas")
-                    except ImportError:
-                        # Fallback manual
-                        st.session_state['municipio_filter'] = municipio_clicked
-                        st.session_state['vereda_filter'] = 'Todas'
-                        st.session_state['map_filter_updated'] = True
-                    
-                    # **MENSAJE MEJORADO** según tenga datos o no
-                    row_data = municipios_data[municipios_data['MpNombre'] == municipio_clicked].iloc[0]
-                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
-                    
-                    if tiene_datos:
-                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
-                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
-                    else:
-                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
-                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
-                    
-                    # **ACTUALIZAR INMEDIATAMENTE**
-                    st.rerun()
-                    
-    except Exception as e:
-        st.warning(f"Error procesando clic en mapa: {str(e)}")
+    handle_enhanced_click_interactions(map_data, municipios_data)
 
 
 def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
@@ -458,8 +323,6 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         
         geojson.add_to(m)
     
-    st.info("💡 **Interacciones:** Pase el cursor sobre una vereda para ver información • Haga clic para filtrar y ver detalles →")
-    
     # Renderizar mapa
     map_data = st_folium(
         m, 
@@ -470,12 +333,68 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     )
     
     # Procesar clicks en veredas
-    handle_vereda_click_enhanced_fixed(map_data, veredas_data, filters)
+    handle_vereda_click_enhanced(map_data, veredas_data, filters)
 
 
-def handle_vereda_click_enhanced_fixed(map_data, veredas_data, filters):
+def handle_enhanced_click_interactions(map_data, municipios_data):
     """
-    CORREGIDO: Maneja clicks en veredas con sincronización robusta.
+    MEJORADO: Maneja clicks incluyendo municipios sin datos (grises).
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        # Verificar si es un click válido
+        if isinstance(clicked_object, dict):
+            # Buscar el municipio clicado en los datos
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar el municipio más cercano al punto clicado
+                min_distance = float('inf')
+                municipio_clicked = None
+                
+                for idx, row in municipios_data.iterrows():
+                    # Calcular el centroide del municipio
+                    centroid = row['geometry'].centroid
+                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                    
+                    if distance < min_distance:
+                        min_distance = distance
+                        municipio_clicked = row['MpNombre']
+                        
+                
+                if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
+                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
+                    st.session_state['municipio_filter'] = municipio_clicked
+                    
+                    # NUEVO: Resetear vereda cuando se cambia municipio
+                    st.session_state['vereda_filter'] = 'Todas'
+                    
+                    # **MENSAJE MEJORADO** según tenga datos o no
+                    row_data = municipios_data[municipios_data['MpNombre'] == municipio_clicked].iloc[0]
+                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
+                    
+                    if tiene_datos:
+                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
+                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
+                    else:
+                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
+                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
+                    
+                    # **ACTUALIZAR INMEDIATAMENTE**
+                    st.rerun()
+                    
+    except Exception as e:
+        st.warning(f"Error procesando clic en mapa: {str(e)}")
+
+
+def handle_vereda_click_enhanced(map_data, veredas_data, filters):
+    """
+    MEJORADO: Maneja clicks en veredas.
     """
     if not map_data or not map_data.get('last_object_clicked'):
         return
@@ -503,15 +422,8 @@ def handle_vereda_click_enhanced_fixed(map_data, veredas_data, filters):
                         vereda_data = row
                 
                 if vereda_clicked and min_distance < 0.05:  # Umbral más pequeño para veredas
-                    # **USAR SYNC MANAGER para actualización desde mapa**
-                    try:
-                        from components.filters import sync_manager
-                        current_municipio = st.session_state.get('municipio_filter', 'Todos')
-                        sync_manager.update_from_map(current_municipio, vereda_clicked)
-                    except ImportError:
-                        # Fallback manual
-                        st.session_state['vereda_filter'] = vereda_clicked
-                        st.session_state['map_filter_updated'] = True
+                    # **FILTRAR POR VEREDA**
+                    st.session_state['vereda_filter'] = vereda_clicked
                     
                     # **MENSAJE CON INFORMACIÓN**
                     casos_count = vereda_data['casos']
@@ -527,6 +439,33 @@ def handle_vereda_click_enhanced_fixed(map_data, veredas_data, filters):
                     
     except Exception as e:
         st.warning(f"Error procesando clic en vereda: {str(e)}")
+
+
+def create_navigation_controls(current_level, filters, colors):
+    """Controles de navegación simplificados."""
+    level_info = {
+        "departamento": "🏛️ Vista Departamental - Tolima",
+        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
+        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
+    }
+    
+    current_info = level_info[current_level]
+    
+    # Botones de navegación
+    cols = st.columns([1, 1])
+    
+    with cols[0]:
+        if current_level != "departamento":
+            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced", use_container_width=True):
+                reset_all_location_filters()
+                st.rerun()
+    
+    with cols[1]:
+        if current_level == "vereda":
+            municipio_name = filters.get('municipio_display', 'Municipio')
+            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced", use_container_width=True):
+                reset_vereda_filter_only()
+                st.rerun()
 
 
 def show_filter_indicator(filters, colors):
@@ -1087,16 +1026,18 @@ def prepare_vereda_data_enhanced(casos, epizootias, veredas_gdf):
     return veredas_data
 
 
+def reset_all_location_filters():
+    """Resetea todos los filtros de ubicación"""
+    if "municipio_filter" in st.session_state:
+        st.session_state.municipio_filter = "Todos"
+    if "vereda_filter" in st.session_state:
+        st.session_state.vereda_filter = "Todas"
+
+
 def reset_vereda_filter_only():
-    """Resetea solo el filtro de vereda usando sync manager."""
-    try:
-        from components.filters import sync_manager
-        current_municipio = st.session_state.get('municipio_filter', 'Todos')
-        sync_manager.update_from_map(current_municipio, "Todas")
-    except ImportError:
-        # Fallback manual
-        if "vereda_filter" in st.session_state:
-            st.session_state.vereda_filter = "Todas"
+    """Resetea solo el filtro de vereda"""
+    if "vereda_filter" in st.session_state:
+        st.session_state.vereda_filter = "Todas"
 
 
 def check_shapefiles_availability():
