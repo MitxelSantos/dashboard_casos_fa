@@ -1,19 +1,19 @@
 """
 Componentes reutilizables del dashboard.
-CORREGIDO: Importaciones actualizadas para funciones con sufijo _corrected
+CORREGIDO: Importaciones actualizadas para funciones con sufijo _enhanced
 """
 
 from .sidebar import create_sidebar, init_responsive_sidebar
 
-# Importar funciones corregidas de filters.py
+# Importar funciones CORREGIDAS de filters.py (con sufijo _enhanced, no _corrected)
 from .filters import (
-    create_complete_filter_system_corrected as create_complete_filter_system,
-    create_hierarchical_filters_corrected as create_hierarchical_filters,
-    create_content_filters_corrected as create_content_filters,
-    create_advanced_filters_corrected as create_advanced_filters,
-    apply_all_filters_corrected as apply_all_filters,
-    reset_all_filters,
-    show_active_filters_sidebar_corrected as show_active_filters_sidebar,
+    create_complete_filter_system_enhanced as create_complete_filter_system,
+    create_hierarchical_filters_enhanced as create_hierarchical_filters,
+    create_content_filters_enhanced as create_content_filters,
+    create_advanced_filters_enhanced as create_advanced_filters,
+    apply_all_filters_enhanced as apply_all_filters,
+    reset_all_filters_enhanced as reset_all_filters,
+    show_active_filters_sidebar_enhanced as show_active_filters_sidebar,
     create_complete_filter_system_with_maps
 )
 
