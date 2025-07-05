@@ -282,21 +282,86 @@ def load_enhanced_datasets():
         }
         epizootias_df = epizootias_df.rename(columns=existing_epi_columns)
 
-        # CAMBIO IMPORTANTE: Filtrar POSITIVAS + EN ESTUDIO
         if "descripcion" in epizootias_df.columns:
-            # Normalizar descripciones primero
-            epizootias_df["descripcion"] = epizootias_df["descripcion"].str.upper().str.strip()
+            # **DEBUG: Mostrar valores únicos ANTES del filtrado**
+            unique_descriptions = epizootias_df["descripcion"].dropna().unique()
+            logger.info("🔍 DEBUG - Valores únicos en 'descripcion' (RAW):")
+            for desc in unique_descriptions:
+                logger.info(f"   '{desc}' (tipo: {type(desc)})")
             
-            # Filtrar solo las positivas Y en estudio
+            # **NORMALIZACIÓN MEJORADA** - Más robusta
+            epizootias_df["descripcion"] = (
+                epizootias_df["descripcion"]
+                .astype(str)
+                .str.upper()
+                .str.strip()
+                .str.replace(r'\s+', ' ', regex=True)  # Normalizar espacios múltiples
+            )
+            
+            # **DEBUG: Después de normalización**
+            unique_descriptions_norm = epizootias_df["descripcion"].dropna().unique()
+            logger.info("🔍 DEBUG - Valores únicos en 'descripcion' (NORMALIZADO):")
+            for desc in unique_descriptions_norm:
+                logger.info(f"   '{desc}'")
+            
+            # **FILTRADO MÁS FLEXIBLE** - Múltiples patrones
             total_original = len(epizootias_df)
-            epizootias_df = epizootias_df[epizootias_df["descripcion"].isin(["POSITIVO FA", "EN ESTUDIO"])]
+            
+            # Patrones flexibles para coincidencias
+            patrones_positivo = ["POSITIVO FA", "POSITIVO", "POSITIVA FA", "POSITIVA"]
+            patrones_estudio = ["EN ESTUDIO", "ESTUDIO", "EN ANALISIS", "ANALISIS"]
+            
+            # Crear máscara de filtrado
+            mask_positivo = epizootias_df["descripcion"].isin(patrones_positivo)
+            mask_estudio = epizootias_df["descripcion"].isin(patrones_estudio)
+            
+            # **FILTRADO POR CONTENIDO** si no hay coincidencias exactas
+            if not mask_positivo.any():
+                logger.info("⚠️ Sin coincidencias exactas para POSITIVO, probando por contenido...")
+                mask_positivo = epizootias_df["descripcion"].str.contains("POSITIV", na=False)
+            
+            if not mask_estudio.any():
+                logger.info("⚠️ Sin coincidencias exactas para ESTUDIO, probando por contenido...")
+                mask_estudio = epizootias_df["descripcion"].str.contains("ESTUDIO", na=False)
+            
+            # Combinar máscaras
+            mask_final = mask_positivo | mask_estudio
+            
+            # Aplicar filtro
+            epizootias_df = epizootias_df[mask_final]
             total_filtradas = len(epizootias_df)
             
-            positivas_count = len(epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"])
-            en_estudio_count = len(epizootias_df[epizootias_df["descripcion"] == "EN ESTUDIO"])
+            # **CONTEO DETALLADO**
+            positivas_count = mask_positivo.sum()
+            en_estudio_count = mask_estudio.sum()
             
-            logger.info(f"🔵 Filtro aplicado: {total_filtradas} epizootias ({positivas_count} positivas + {en_estudio_count} en estudio) de {total_original} totales")
-            status_text.text(f"🔵 Filtradas {total_filtradas} epizootias: {positivas_count} positivas + {en_estudio_count} en estudio")
+            # **LOG DETALLADO**
+            logger.info(f"🔵 FILTRO EPIZOOTIAS APLICADO:")
+            logger.info(f"   📊 Total original: {total_original}")
+            logger.info(f"   ✅ Total filtradas: {total_filtradas}")
+            logger.info(f"   🔴 Positivas: {positivas_count}")
+            logger.info(f"   🔵 En estudio: {en_estudio_count}")
+            
+            status_text.text(f"🔵 Epizootias procesadas: {total_filtradas} ({positivas_count} positivas + {en_estudio_count} en estudio)")
+            
+            # **GUARDAR PARA DEBUGGING**
+            st.session_state["epizootias_debug"] = {
+                "total_original": total_original,
+                "total_filtradas": total_filtradas,
+                "positivas": positivas_count,
+                "en_estudio": en_estudio_count,
+                "valores_originales": unique_descriptions.tolist(),
+                "valores_normalizados": unique_descriptions_norm.tolist(),
+                "patrones_usados": {
+                    "positivo": patrones_positivo,
+                    "estudio": patrones_estudio
+                }
+            }
+            
+            # **VALIDACIÓN FINAL**
+            if total_filtradas == 0:
+                logger.warning("⚠️ ADVERTENCIA: Después del filtrado no quedaron epizootias")
+                status_text.text("⚠️ Sin epizootias después del filtrado - verificar datos")
 
         # Normalizar municipios y veredas en epizootias (solo las filtradas)
         if "municipio" in epizootias_df.columns:
@@ -329,6 +394,19 @@ def load_enhanced_datasets():
         except Exception as e:
             logger.warning(f"⚠️ Error en mapeo inteligente: {str(e)}")
             vereda_mapping = {}
+            
+        # ==================== APLICAR MAPEO INTELIGENTE ====================
+        # Aplicar mapeo a casos
+        if vereda_mapping and not casos_df.empty and "vereda" in casos_df.columns:
+            from utils.data_processor import apply_vereda_mapping
+            casos_df = apply_vereda_mapping(casos_df, "vereda", vereda_mapping)
+            logger.info("✅ Mapeo aplicado a casos")
+
+        # Aplicar mapeo a epizootias  
+        if vereda_mapping and not epizootias_df.empty and "vereda" in epizootias_df.columns:
+            from utils.data_processor import apply_vereda_mapping
+            epizootias_df = apply_vereda_mapping(epizootias_df, "vereda", vereda_mapping)
+            logger.info("✅ Mapeo aplicado a epizootias")
 
         # Obtener todos los municipios únicos (normalizados)
         municipios_casos = set(casos_df["municipio_normalizado"].dropna()) if not casos_df.empty else set()
@@ -525,6 +603,38 @@ def create_empty_data_structure():
         "data_source": "error",
     }
 
+def show_epizootias_debug_info():
+    """
+    NUEVA: Función para mostrar información de debug de epizootias en el sidebar.
+    """
+    if "epizootias_debug" in st.session_state:
+        debug_info = st.session_state["epizootias_debug"]
+        
+        with st.sidebar.expander("🔍 Debug Epizootias", expanded=False):
+            st.markdown("**📊 Estadísticas de Filtrado:**")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Original", debug_info['total_original'])
+                st.metric("Positivas", debug_info['positivas'])
+            with col2:
+                st.metric("Filtradas", debug_info['total_filtradas'])
+                st.metric("En Estudio", debug_info['en_estudio'])
+            
+            st.markdown("**🔍 Valores Encontrados (Raw):**")
+            for i, val in enumerate(debug_info.get('valores_originales', [])[:5]):
+                st.code(f"{i+1}. '{val}'")
+            
+            if len(debug_info.get('valores_originales', [])) > 5:
+                st.caption(f"... y {len(debug_info['valores_originales']) - 5} más")
+            
+            st.markdown("**✅ Valores Normalizados:**")
+            for i, val in enumerate(debug_info.get('valores_normalizados', [])[:5]):
+                st.code(f"{i+1}. '{val}'")
+            
+            st.markdown("**🎯 Patrones de Búsqueda:**")
+            patrones = debug_info.get('patrones_usados', {})
+            st.json(patrones)
 
 def create_filters_responsive_with_maps_enhanced(data):
     """Crea sistema de filtros MEJORADO con sincronización bidireccional completa."""
@@ -658,7 +768,9 @@ def configure_page_responsive():
 
 
 def handle_map_interactions(data_filtered, filters, colors):
-    """Maneja las interacciones del mapa si están disponibles."""
+    """
+    CORREGIDO: Maneja las interacciones del mapa con debugging mejorado.
+    """
     if not MAP_INTERACTIONS_AVAILABLE:
         return
     
@@ -666,23 +778,31 @@ def handle_map_interactions(data_filtered, filters, colors):
     if 'map_interaction_data' in st.session_state:
         map_data = st.session_state['map_interaction_data']
         
+        # **DEBUG: Mostrar datos de interacción**
+        if st.sidebar.checkbox("🔍 Debug Interacciones", value=False):
+            st.sidebar.markdown("**🗺️ Última Interacción:**")
+            st.sidebar.json(map_data)
+        
         # Procesar la interacción
-        interaction_result = process_map_interaction_complete(
-            map_data, data_filtered, colors
-        )
-        
-        # Mostrar feedback de la interacción
-        create_interaction_feedback_ui(interaction_result, colors)
-        
-        # Si requiere rerun, limpiar datos y reejecutar
-        if interaction_result.get('requires_rerun', False):
-            del st.session_state['map_interaction_data']
-            st.rerun()
+        try:
+            interaction_result = process_map_interaction_complete(
+                map_data, data_filtered, colors
+            )
+            
+            # Mostrar feedback de la interacción
+            create_interaction_feedback_ui(interaction_result, colors)
+            
+            # Si requiere rerun, limpiar datos y reejecutar
+            if interaction_result.get('requires_rerun', False):
+                del st.session_state['map_interaction_data']
+                st.rerun()
+            
+        except Exception as e:
+            st.sidebar.error(f"❌ Error procesando interacción: {str(e)}")
         
         # Limpiar datos de interacción después de procesar
         if 'map_interaction_data' in st.session_state:
             del st.session_state['map_interaction_data']
-
 
 def main():
     """
@@ -703,6 +823,8 @@ def main():
 
     # Cargar datos con indicadores responsive (POSITIVAS + EN ESTUDIO)
     data = load_enhanced_datasets()
+    
+    show_epizootias_debug_info()
 
     if data["casos"].empty and data["epizootias"].empty:
         # Error responsive con instrucciones claras
