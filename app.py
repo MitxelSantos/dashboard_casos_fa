@@ -1,9 +1,9 @@
 """
-Aplicación principal ACTUALIZADA del Dashboard de Fiebre Amarilla v3.2
-MEJORAS:
-- Carga epizootias POSITIVAS + EN ESTUDIO
-- Sistema inteligente de mapeo de veredas
-- Manejo mejorado de municipios sin datos
+Aplicación principal CORREGIDA del Dashboard de Fiebre Amarilla v3.3
+CORRECCIONES:
+- Mejor debugging para identificar problemas de importación
+- Manejo de errores más robusto
+- Logging detallado para módulos de vistas
 """
 
 import os
@@ -16,11 +16,11 @@ from pathlib import Path
 import unicodedata
 import re
 
-# Configurar logging
+# Configurar logging MÁS DETALLADO
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("FiebreAmarilla-Dashboard-v3.2")
+logger = logging.getLogger("FiebreAmarilla-Dashboard-v3.3")
 
 # Deshabilitar detección automática de páginas de Streamlit
 os.environ["STREAMLIT_PAGES_ENABLED"] = "false"
@@ -41,24 +41,37 @@ import sys
 sys.path.insert(0, str(ROOT_DIR))
 
 # Importar configuraciones y utilidades
-from config.colors import COLORS
-from config.settings import DASHBOARD_CONFIG
+try:
+    from config.colors import COLORS
+    from config.settings import DASHBOARD_CONFIG
+    logger.info("✅ Configuraciones básicas importadas correctamente")
+except ImportError as e:
+    logger.error(f"❌ Error importando configuraciones básicas: {str(e)}")
+    st.error(f"Error en configuraciones básicas: {str(e)}")
+    st.stop()
 
 # Importar utilidades responsive
 try:
     from config.responsive import init_responsive_dashboard
     from utils.responsive import init_responsive_utils, create_responsive_metric_cards
     RESPONSIVE_AVAILABLE = True
-except ImportError:
+    logger.info("✅ Utilidades responsive importadas correctamente")
+except ImportError as e:
     RESPONSIVE_AVAILABLE = False
-    logger.warning("Módulos responsive no disponibles, usando versión básica")
+    logger.warning(f"⚠️ Módulos responsive no disponibles: {str(e)}")
 
-from utils.data_processor import (
-    normalize_text,
-    excel_date_to_datetime,
-    capitalize_names,
-    create_intelligent_vereda_mapping,  # NUEVO
-)
+try:
+    from utils.data_processor import (
+        normalize_text,
+        excel_date_to_datetime,
+        capitalize_names,
+        create_intelligent_vereda_mapping,
+    )
+    logger.info("✅ Utilidades de procesamiento de datos importadas correctamente")
+except ImportError as e:
+    logger.error(f"❌ Error importando utilidades de datos: {str(e)}")
+    st.error(f"Error en utilidades de datos: {str(e)}")
+    st.stop()
 
 # Importar utilidades de interacciones de mapa
 try:
@@ -69,9 +82,10 @@ try:
         get_bounds_manager
     )
     MAP_INTERACTIONS_AVAILABLE = True
-except ImportError:
+    logger.info("✅ Utilidades de interacciones de mapa importadas correctamente")
+except ImportError as e:
     MAP_INTERACTIONS_AVAILABLE = False
-    logger.warning("Utilidades de interacciones de mapa no disponibles")
+    logger.warning(f"⚠️ Utilidades de interacciones de mapa no disponibles: {str(e)}")
 
 # Lista de vistas a importar
 vista_modules = ["mapas", "tablas", "comparativo"]
@@ -80,23 +94,111 @@ vistas_modules = {}
 
 def import_vista_module(module_name):
     """
-    Importa un módulo de vista específico con manejo de errores mejorado.
+    MEJORADO: Importa un módulo de vista específico con debugging detallado.
     """
+    logger.info(f"🔄 Intentando importar módulo: {module_name}")
+    
     try:
+        # Verificar si el archivo existe
+        module_path = ROOT_DIR / "vistas" / f"{module_name}.py"
+        if not module_path.exists():
+            logger.error(f"❌ Archivo no encontrado: {module_path}")
+            return None
+        
+        logger.debug(f"📁 Archivo encontrado: {module_path}")
+        
+        # Intentar importar el módulo
         module = __import__(f"vistas.{module_name}", fromlist=[module_name])
+        
+        # Verificar que el módulo tiene la función 'show'
+        if not hasattr(module, 'show'):
+            logger.error(f"❌ El módulo {module_name} no tiene función 'show'")
+            return None
+        
         logger.info(f"✅ Módulo {module_name} importado correctamente")
         return module
+        
     except ImportError as e:
-        logger.error(f"❌ No se pudo importar el módulo {module_name}: {str(e)}")
+        logger.error(f"❌ ImportError en módulo {module_name}: {str(e)}")
+        logger.error(f"   Detalles del error: {type(e).__name__}")
+        
+        # Mostrar información adicional sobre el error
+        import traceback
+        logger.error(f"   Traceback completo:\n{traceback.format_exc()}")
+        
         return None
     except Exception as e:
         logger.error(f"❌ Error inesperado importando {module_name}: {str(e)}")
+        logger.error(f"   Tipo de error: {type(e).__name__}")
+        
+        import traceback
+        logger.error(f"   Traceback completo:\n{traceback.format_exc()}")
+        
         return None
 
 
-# Importar módulos de vistas
+def check_module_dependencies():
+    """
+    NUEVO: Verifica las dependencias de cada módulo antes de importar.
+    """
+    logger.info("🔍 Verificando dependencias de módulos...")
+    
+    dependencies_status = {}
+    
+    # Verificar dependencias de mapas
+    try:
+        import geopandas as gpd
+        import folium
+        from streamlit_folium import st_folium
+        dependencies_status['maps_libs'] = True
+        logger.info("✅ Dependencias de mapas disponibles: geopandas, folium, streamlit-folium")
+    except ImportError as e:
+        dependencies_status['maps_libs'] = False
+        logger.warning(f"⚠️ Dependencias de mapas no disponibles: {str(e)}")
+    
+    # Verificar dependencias básicas
+    try:
+        import plotly.express as px
+        import plotly.graph_objects as go
+        dependencies_status['plotly'] = True
+        logger.info("✅ Plotly disponible")
+    except ImportError as e:
+        dependencies_status['plotly'] = False
+        logger.error(f"❌ Plotly no disponible: {str(e)}")
+    
+    return dependencies_status
+
+
+# Importar módulos de vistas CON DEBUGGING MEJORADO
+logger.info("🚀 Iniciando importación de módulos de vistas...")
+
+# Verificar dependencias primero
+deps_status = check_module_dependencies()
+
 for module_name in vista_modules:
-    vistas_modules[module_name] = import_vista_module(module_name)
+    logger.info(f"📦 Procesando módulo: {module_name}")
+    
+    # Información especial para mapas
+    if module_name == "mapas":
+        if not deps_status.get('maps_libs', False):
+            logger.warning(f"⚠️ Dependencias de mapas no disponibles, pero intentando importar {module_name} de todas formas...")
+        else:
+            logger.info(f"✅ Dependencias de mapas OK, procediendo con importación de {module_name}")
+    
+    # Importar el módulo
+    imported_module = import_vista_module(module_name)
+    vistas_modules[module_name] = imported_module
+    
+    if imported_module:
+        logger.info(f"✅ Módulo {module_name} importado y registrado correctamente")
+    else:
+        logger.error(f"❌ Módulo {module_name} falló al importar - se mostrará mensaje de desarrollo")
+
+# Mostrar estado final de importaciones
+logger.info("📊 Estado final de importaciones de vistas:")
+for module_name, module in vistas_modules.items():
+    status = "✅ OK" if module else "❌ FALLO"
+    logger.info(f"   {module_name}: {status}")
 
 
 def load_enhanced_datasets():
@@ -106,7 +208,7 @@ def load_enhanced_datasets():
     try:
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("🔄 Inicializando carga de datos v3.2...")
+        status_text.text("🔄 Inicializando carga de datos v3.3...")
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
         casos_filename = "BD_positivos.xlsx"
@@ -804,9 +906,36 @@ def handle_map_interactions(data_filtered, filters, colors):
         if 'map_interaction_data' in st.session_state:
             del st.session_state['map_interaction_data']
 
+def show_module_debug_info():
+    """
+    NUEVO: Muestra información de debug sobre el estado de los módulos.
+    """
+    if st.sidebar.checkbox("🔧 Debug Módulos", value=False):
+        st.sidebar.markdown("**📦 Estado de Módulos de Vistas:**")
+        
+        for module_name, module in vistas_modules.items():
+            if module:
+                status = "✅ Importado"
+                has_show = "✅" if hasattr(module, 'show') else "❌"
+                color = "green"
+            else:
+                status = "❌ Error"
+                has_show = "❌"
+                color = "red"
+                
+            st.sidebar.markdown(f"<span style='color: {color};'>**{module_name}:** {status}</span>", unsafe_allow_html=True)
+            st.sidebar.markdown(f"   función show(): {has_show}")
+        
+        # Mostrar dependencias
+        st.sidebar.markdown("**📚 Dependencias:**")
+        deps = check_module_dependencies()
+        for dep, status in deps.items():
+            status_text = "✅ OK" if status else "❌ Error"
+            st.sidebar.markdown(f"   {dep}: {status_text}")
+
 def main():
     """
-    Aplicación principal del dashboard v3.2 ACTUALIZADA.
+    Aplicación principal del dashboard v3.3 CORREGIDA con debugging mejorado.
     """
     # Configurar página con espaciado corregido
     configure_page_responsive()
@@ -819,7 +948,10 @@ def main():
     except ImportError:
         # Fallback básico
         with st.sidebar:
-            st.title("Dashboard Tolima v3.2")
+            st.title("Dashboard Tolima v3.3")
+
+    # NUEVO: Mostrar debug de módulos en desarrollo
+    show_module_debug_info()
 
     # Cargar datos con indicadores responsive (POSITIVAS + EN ESTUDIO)
     data = load_enhanced_datasets()
@@ -835,9 +967,8 @@ def main():
     # Mostrar información sobre el filtro de epizootias actualizado
     total_epizootias = len(data["epizootias"])
     if total_epizootias > 0:
-        positivas_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "POSITIVO FA"]) if not data["epizootias"].empty else 0
-        en_estudio_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "EN ESTUDIO"]) if not data["epizootias"].empty else 0
-        #st.success(f"✅ Dashboard v3.2 - Datos cargados: {len(data['casos'])} casos confirmados y {total_epizootias} epizootias ({positivas_count} positivas + {en_estudio_count} en estudio)")
+        positivas_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "POSITIVO FA"]) if not data["epizootias"].empty and "descripcion" in data["epizootias"].columns else 0
+        en_estudio_count = len(data["epizootias"][data["epizootias"]["descripcion"] == "EN ESTUDIO"]) if not data["epizootias"].empty and "descripcion" in data["epizootias"].columns else 0
 
     # Crear filtros responsive con integración de mapas MEJORADOS
     filters, data_filtered = create_filters_responsive_with_maps_enhanced(data)
@@ -851,7 +982,7 @@ def main():
         unsafe_allow_html=True,
     )
 
-    # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.2
+    # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.3
     tab1, tab2, tab3 = st.tabs(
         [
             "🗺️ Mapa Interactivo",      # Mapas CON todas las tarjetas mejoradas
@@ -861,17 +992,50 @@ def main():
     )
 
     with tab1:
-        # Vista de mapas CON todas las tarjetas informativas MEJORADAS
+        # Vista de mapas CON todas las tarjetas informativas MEJORADAS Y DEBUGGING
+        logger.info(f"🗺️ Intentando mostrar vista de mapas...")
+        logger.info(f"   Estado del módulo 'mapas': {'✅ OK' if vistas_modules.get('mapas') else '❌ None'}")
+        
         if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
+                logger.info("🔄 Ejecutando vistas_modules['mapas'].show()...")
+                
                 # Pasar data filtrada para que los mapas trabajen con positivas + en estudio
                 vistas_modules["mapas"].show(data_filtered, filters, COLORS)
+                
+                logger.info("✅ Vista de mapas ejecutada correctamente")
+                
             except Exception as e:
+                logger.error(f"❌ Error ejecutando vista de mapas: {str(e)}")
                 st.error(f"Error en módulo de mapas: {str(e)}")
-                st.exception(e)  # Mostrar traceback completo para debug
-                st.info("🗺️ Vista de mapas en desarrollo.")
+                
+                # Mostrar traceback completo para debug
+                import traceback
+                error_traceback = traceback.format_exc()
+                logger.error(f"Traceback completo:\n{error_traceback}")
+                
+                with st.expander("🔍 Ver detalles del error", expanded=False):
+                    st.code(error_traceback)
+                
+                st.info("🗺️ Vista de mapas temporalmente no disponible debido al error anterior.")
         else:
-            st.info("🗺️ Vista de mapas en desarrollo.")
+            # Mostrar información detallada sobre por qué no está disponible
+            logger.warning("⚠️ Módulo de mapas no disponible")
+            
+            st.warning("⚠️ **Vista de mapas temporalmente no disponible**")
+            
+            # Verificar dependencias específicamente
+            deps_status = check_module_dependencies()
+            
+            if not deps_status.get('maps_libs', False):
+                st.error("❌ **Dependencias de mapas no instaladas**")
+                st.code("pip install geopandas folium streamlit-folium")
+                st.info("Ejecute el comando anterior y reinicie la aplicación.")
+            else:
+                st.error("❌ **Error en la importación del módulo de mapas**")
+                st.info("Revise los logs de la aplicación para más detalles.")
+            
+            st.info("🗺️ Las otras pestañas funcionan normalmente.")
 
     with tab2:
         # NUEVO: Análisis epidemiológico con tablas detalladas e interactivas
@@ -900,8 +1064,8 @@ def main():
     st.markdown(
         f"""
         <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0; margin-top: 0.5rem;">
-            Dashboard Fiebre Amarilla - Desarrollado por: Ing. Jose Miguel Santos<br>
-            Secretaría de Salud del Tolima • © 2025
+            Dashboard Fiebre Amarilla v3.3 • CORRECCIÓN: Debugging mejorado<br>
+            Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
         </div>
         """,
         unsafe_allow_html=True,

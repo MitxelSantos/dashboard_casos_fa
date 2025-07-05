@@ -1,10 +1,10 @@
 """
 Vista de mapas CORREGIDA del dashboard de Fiebre Amarilla.
-CORREGIDO v3.3:
-- Navegación automática: Departamento → Municipal (veredas) → Vereda específica
-- Tarjetas rediseñadas y funcionales
-- Sin errores de importación o sintaxis
-- Funcionalidad completa restaurada
+CORREGIDO v3.4:
+- Ruta de shapefiles FLEXIBLE y configurable
+- Importaciones más robustas con manejo de errores
+- Debugging mejorado para identificar problemas
+- Mantiene toda la funcionalidad existente
 """
 
 import streamlit as st
@@ -12,76 +12,157 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 import json
+import logging
 from datetime import datetime
 
-# Importaciones opcionales para mapas
+# Configurar logger específico para mapas
+logger = logging.getLogger("FiebreAmarilla.Mapas")
+
+# Importaciones opcionales para mapas con mejor manejo de errores
 try:
     import geopandas as gpd
     import folium
     from streamlit_folium import st_folium
     MAPS_AVAILABLE = True
-except ImportError:
+    logger.info("✅ Librerías de mapas importadas correctamente: geopandas, folium, streamlit-folium")
+except ImportError as e:
     MAPS_AVAILABLE = False
+    logger.warning(f"⚠️ Librerías de mapas no disponibles: {str(e)}")
 
-from utils.data_processor import (
-    normalize_text, 
-    calculate_basic_metrics,
-    get_latest_case_info,
-    format_time_elapsed,
-    calculate_days_since
-)
+# Importaciones de utilidades con manejo de errores mejorado
+try:
+    from utils.data_processor import (
+        normalize_text, 
+        calculate_basic_metrics,
+        get_latest_case_info,
+        format_time_elapsed,
+        calculate_days_since
+    )
+    logger.info("✅ Utilidades de procesamiento de datos importadas correctamente")
+except ImportError as e:
+    logger.error(f"❌ Error importando utilidades de datos: {str(e)}")
+    # Crear funciones dummy para evitar errores
+    def normalize_text(text): return str(text).upper().strip() if text else ""
+    def calculate_basic_metrics(casos, epizootias): return {"total_casos": len(casos), "total_epizootias": len(epizootias)}
+    def get_latest_case_info(df, date_col, location_cols=None): return {"existe": False}
+    def format_time_elapsed(days): return f"{days} días" if days else "Sin datos"
+    def calculate_days_since(date): return 0
 
-# Ruta de shapefiles procesados
-PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
+# CORREGIDO: Rutas flexibles para shapefiles
+def get_shapefiles_paths():
+    """
+    NUEVO: Obtiene las rutas de shapefiles de manera flexible.
+    Busca en múltiples ubicaciones posibles.
+    """
+    # Directorio actual
+    current_dir = Path(__file__).resolve().parent.parent
+    
+    # Posibles ubicaciones de shapefiles
+    possible_paths = [
+        # Ruta original (para compatibilidad)
+        Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed"),
+        
+        # Rutas relativas al proyecto
+        current_dir / "shapefiles" / "processed",
+        current_dir / "data" / "shapefiles",
+        current_dir / "assets" / "shapefiles",
+        current_dir / "Tolima-Veredas" / "processed",
+        
+        # Rutas relativas al directorio padre
+        current_dir.parent / "Tolima-Veredas" / "processed",
+        current_dir.parent / "shapefiles",
+        
+        # Ruta en el escritorio del usuario actual
+        Path.home() / "Desktop" / "Tolima-Veredas" / "processed",
+        Path.home() / "Documents" / "Tolima-Veredas" / "processed",
+    ]
+    
+    logger.info("🔍 Buscando shapefiles en ubicaciones posibles...")
+    
+    for path in possible_paths:
+        logger.debug(f"   Verificando: {path}")
+        if path.exists():
+            municipios_file = path / "tolima_municipios.shp"
+            veredas_file = path / "tolima_veredas.shp"
+            
+            if municipios_file.exists() or veredas_file.exists():
+                logger.info(f"✅ Shapefiles encontrados en: {path}")
+                return path
+    
+    logger.warning("⚠️ No se encontraron shapefiles en ninguna ubicación")
+    return None
+
+# Definir ruta de shapefiles de manera flexible
+PROCESSED_DIR = get_shapefiles_paths()
 
 
 def show(data_filtered, filters, colors):
     """
     Vista completa de mapas con navegación jerárquica automática y tarjetas mejoradas.
+    CORREGIDA con mejor manejo de errores.
     """
     
-    # CSS para tarjetas mejoradas
-    apply_enhanced_cards_css(colors)
+    logger.info("🗺️ Iniciando vista de mapas...")
     
-    # Título principal elegante
-    st.markdown(
-        f'''
-        <div class="hero-title">
-            <div class="hero-icon">🗺️</div>
-            <h1>Mapas Interactivos Inteligentes</h1>
-            <p>Navegación automática • Visualización dinámica • Información completa</p>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
+    try:
+        # CSS para tarjetas mejoradas
+        apply_enhanced_cards_css(colors)
+        
+        # Título principal elegante
+        st.markdown(
+            f'''
+            <div class="hero-title">
+                <div class="hero-icon">🗺️</div>
+                <h1>Mapas Interactivos Inteligentes</h1>
+                <p>Navegación automática • Visualización dinámica • Información completa</p>
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
 
-    if not MAPS_AVAILABLE:
-        show_maps_not_available()
-        return
+        if not MAPS_AVAILABLE:
+            logger.warning("⚠️ Librerías de mapas no disponibles")
+            show_maps_not_available()
+            return
 
-    # Verificar disponibilidad de shapefiles
-    if not check_shapefiles_availability():
-        show_shapefiles_setup_instructions()
-        return
+        # Verificar disponibilidad de shapefiles
+        if not check_shapefiles_availability():
+            logger.warning("⚠️ Shapefiles no disponibles")
+            show_shapefiles_setup_instructions()
+            return
 
-    # Cargar datos geográficos
-    geo_data = load_geographic_data_silent()
-    
-    if not geo_data:
-        show_geographic_data_error()
-        return
+        # Cargar datos geográficos
+        geo_data = load_geographic_data_silent()
+        
+        if not geo_data:
+            logger.warning("⚠️ No se pudieron cargar datos geográficos")
+            show_geographic_data_error()
+            return
 
-    casos = data_filtered["casos"]
-    epizootias = data_filtered["epizootias"]
+        casos = data_filtered["casos"]
+        epizootias = data_filtered["epizootias"]
+        
+        logger.info(f"📊 Datos cargados: {len(casos)} casos, {len(epizootias)} epizootias")
 
-    # **LAYOUT MEJORADO**: División elegante lado a lado
-    col_mapa, col_tarjetas = st.columns([3, 2], gap="large")
-    
-    with col_mapa:
-        create_intelligent_map_system(casos, epizootias, geo_data, filters, colors, data_filtered)
-    
-    with col_tarjetas:
-        create_enhanced_information_cards(casos, epizootias, filters, colors)
+        # **LAYOUT MEJORADO**: División elegante lado a lado
+        col_mapa, col_tarjetas = st.columns([3, 2], gap="large")
+        
+        with col_mapa:
+            create_intelligent_map_system(casos, epizootias, geo_data, filters, colors, data_filtered)
+        
+        with col_tarjetas:
+            create_enhanced_information_cards(casos, epizootias, filters, colors)
+            
+        logger.info("✅ Vista de mapas completada exitosamente")
+            
+    except Exception as e:
+        logger.error(f"❌ Error crítico en vista de mapas: {str(e)}")
+        st.error(f"❌ Error en vista de mapas: {str(e)}")
+        
+        # Mostrar stack trace para debugging
+        import traceback
+        with st.expander("🔍 Detalles del error", expanded=False):
+            st.code(traceback.format_exc())
 
 
 def create_intelligent_map_system(casos, epizootias, geo_data, filters, colors, data_filtered):
@@ -89,22 +170,27 @@ def create_intelligent_map_system(casos, epizootias, geo_data, filters, colors, 
     Sistema de mapas inteligente con navegación automática jerárquica.
     """
     
-    # Determinar nivel actual
-    current_level = determine_map_level(filters)
-    
-    # Breadcrumb navigation
-    create_breadcrumb_navigation(current_level, filters, colors)
-    
-    # Indicador de estado
-    show_status_indicator(filters, colors)
-    
-    # Sistema de mapas con navegación automática
-    if current_level == "departamento":
-        create_departmental_map_with_navigation(casos, epizootias, geo_data, colors)
-    elif current_level == "municipio":
-        create_municipal_map_with_veredas(casos, epizootias, geo_data, filters, colors)
-    elif current_level == "vereda":
-        create_vereda_detail_view(casos, epizootias, filters, colors)
+    try:
+        # Determinar nivel actual
+        current_level = determine_map_level(filters)
+        
+        # Breadcrumb navigation
+        create_breadcrumb_navigation(current_level, filters, colors)
+        
+        # Indicador de estado
+        show_status_indicator(filters, colors)
+        
+        # Sistema de mapas con navegación automática
+        if current_level == "departamento":
+            create_departmental_map_with_navigation(casos, epizootias, geo_data, colors)
+        elif current_level == "municipio":
+            create_municipal_map_with_veredas(casos, epizootias, geo_data, filters, colors)
+        elif current_level == "vereda":
+            create_vereda_detail_view(casos, epizootias, filters, colors)
+            
+    except Exception as e:
+        logger.error(f"❌ Error en sistema de mapas inteligente: {str(e)}")
+        st.error(f"Error en sistema de mapas: {str(e)}")
 
 
 def create_departmental_map_with_navigation(casos, epizootias, geo_data, colors):
@@ -112,133 +198,138 @@ def create_departmental_map_with_navigation(casos, epizootias, geo_data, colors)
     Mapa departamental que automáticamente navega a nivel municipal al hacer clic.
     """
     
-    if 'municipios' not in geo_data:
-        st.error("No se pudo cargar el shapefile de municipios")
-        return
-    
-    municipios = geo_data['municipios'].copy()
-    
-    # Preparar datos agregados por municipio
-    municipios_data = prepare_municipal_data(casos, epizootias, municipios)
-    
-    # Configuración del mapa
-    bounds = municipios.total_bounds
-    center_lat = (bounds[1] + bounds[3]) / 2
-    center_lon = (bounds[0] + bounds[2]) / 2
-    
-    # Instrucciones
-    st.markdown(
-        f'''
-        <div class="map-instructions">
-            <div class="instruction-icon">💡</div>
-            <div class="instruction-text">
-                <strong>Navegación Inteligente:</strong> Haga clic en cualquier municipio para 
-                <span class="highlight">filtrar automáticamente</span> y ver sus veredas
-            </div>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
-    
-    # Crear mapa
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=8,
-        tiles='CartoDB positron',
-        zoom_control=False,
-        scrollWheelZoom=False,
-        doubleClickZoom=False,
-        dragging=False,
-        attributionControl=False,
-    )
-    
-    # Limitar al área del Tolima
-    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    
-    # Agregar municipios con colores mejorados
-    max_casos = municipios_data['casos'].max() if municipios_data['casos'].max() > 0 else 1
-    max_epi = municipios_data['epizootias'].max() if municipios_data['epizootias'].max() > 0 else 1
-    
-    for idx, row in municipios_data.iterrows():
-        municipio_name = row['MpNombre']
-        casos_count = row['casos']
-        fallecidos_count = row['fallecidos']
-        epizootias_count = row['epizootias']
-        epizootias_positivas = row.get('epizootias_positivas', 0)
-        epizootias_en_estudio = row.get('epizootias_en_estudio', 0)
+    try:
+        if 'municipios' not in geo_data:
+            st.error("No se pudo cargar el shapefile de municipios")
+            return
         
-        # Colores mejorados
-        if casos_count > 0:
-            intensity = min(casos_count / max_casos, 1.0)
-            fill_color = f"rgba(229, 25, 55, {0.3 + intensity * 0.6})"
-            border_color = colors['danger']
-            border_weight = 2 + int(intensity * 2)
-        elif epizootias_count > 0:
-            epi_intensity = min(epizootias_count / max_epi, 1.0)
-            fill_color = f"rgba(247, 148, 29, {0.3 + epi_intensity * 0.5})"
-            border_color = colors['warning']
-            border_weight = 2 + int(epi_intensity * 2)
-        else:
-            fill_color = "rgba(200, 200, 200, 0.3)"
-            border_color = "#999999"
-            border_weight = 1
+        municipios = geo_data['municipios'].copy()
         
-        # Tooltip mejorado
-        tooltip_text = f"""
-        <div style="font-family: 'Segoe UI', Arial; padding: 12px; max-width: 250px; 
-                    background: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-            <div style="color: {colors['primary']}; font-size: 1.1rem; font-weight: 700; 
-                        margin-bottom: 8px; border-bottom: 2px solid {colors['secondary']}; padding-bottom: 4px;">
-                📍 {municipio_name}
-            </div>
-            
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0;">
-                <div style="background: #ffebee; padding: 6px; border-radius: 4px; text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: bold; color: {colors['danger']};">🦠 {casos_count}</div>
-                    <div style="font-size: 0.7rem; color: #666;">Casos</div>
-                </div>
-                <div style="background: #fff3e0; padding: 6px; border-radius: 4px; text-align: center;">
-                    <div style="font-size: 1.2rem; font-weight: bold; color: {colors['warning']};">🐒 {epizootias_count}</div>
-                    <div style="font-size: 0.7rem; color: #666;">Epizootias</div>
+        # Preparar datos agregados por municipio
+        municipios_data = prepare_municipal_data(casos, epizootias, municipios)
+        
+        # Configuración del mapa
+        bounds = municipios.total_bounds
+        center_lat = (bounds[1] + bounds[3]) / 2
+        center_lon = (bounds[0] + bounds[2]) / 2
+        
+        # Instrucciones
+        st.markdown(
+            f'''
+            <div class="map-instructions">
+                <div class="instruction-icon">💡</div>
+                <div class="instruction-text">
+                    <strong>Navegación Inteligente:</strong> Haga clic en cualquier municipio para 
+                    <span class="highlight">filtrar automáticamente</span> y ver sus veredas
                 </div>
             </div>
-            
-            {f'<div style="font-size: 0.8rem; color: #666; margin-top: 6px;">🔴 {epizootias_positivas} positivas • 🔵 {epizootias_en_estudio} en estudio</div>' if epizootias_positivas > 0 or epizootias_en_estudio > 0 else ''}
-            
-            <div style="background: linear-gradient(45deg, {colors['info']}, {colors['secondary']}); 
-                        color: white; padding: 6px; border-radius: 4px; text-align: center; 
-                        margin-top: 8px; font-size: 0.8rem; font-weight: 600;">
-                👆 Clic para navegar a veredas
-            </div>
-        </div>
-        """
-        
-        # Agregar polígono
-        geojson = folium.GeoJson(
-            row['geometry'],
-            style_function=lambda x, color=fill_color, border=border_color, weight=border_weight: {
-                'fillColor': color,
-                'color': border,
-                'weight': weight,
-                'fillOpacity': 0.7,
-                'opacity': 1
-            },
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),
+            ''',
+            unsafe_allow_html=True,
         )
         
-        geojson.add_to(m)
-    
-    # Renderizar mapa
-    map_data = st_folium(
-        m, 
-        width=700,
-        height=500,
-        returned_objects=["last_object_clicked"],
-        key="intelligent_departmental_map"
-    )
-    
-    # Navegación automática
-    handle_intelligent_navigation(map_data, municipios_data)
+        # Crear mapa
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=8,
+            tiles='CartoDB positron',
+            zoom_control=False,
+            scrollWheelZoom=False,
+            doubleClickZoom=False,
+            dragging=False,
+            attributionControl=False,
+        )
+        
+        # Limitar al área del Tolima
+        m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+        
+        # Agregar municipios con colores mejorados
+        max_casos = municipios_data['casos'].max() if municipios_data['casos'].max() > 0 else 1
+        max_epi = municipios_data['epizootias'].max() if municipios_data['epizootias'].max() > 0 else 1
+        
+        for idx, row in municipios_data.iterrows():
+            municipio_name = row['MpNombre']
+            casos_count = row['casos']
+            fallecidos_count = row['fallecidos']
+            epizootias_count = row['epizootias']
+            epizootias_positivas = row.get('epizootias_positivas', 0)
+            epizootias_en_estudio = row.get('epizootias_en_estudio', 0)
+            
+            # Colores mejorados
+            if casos_count > 0:
+                intensity = min(casos_count / max_casos, 1.0)
+                fill_color = f"rgba(229, 25, 55, {0.3 + intensity * 0.6})"
+                border_color = colors['danger']
+                border_weight = 2 + int(intensity * 2)
+            elif epizootias_count > 0:
+                epi_intensity = min(epizootias_count / max_epi, 1.0)
+                fill_color = f"rgba(247, 148, 29, {0.3 + epi_intensity * 0.5})"
+                border_color = colors['warning']
+                border_weight = 2 + int(epi_intensity * 2)
+            else:
+                fill_color = "rgba(200, 200, 200, 0.3)"
+                border_color = "#999999"
+                border_weight = 1
+            
+            # Tooltip mejorado
+            tooltip_text = f"""
+            <div style="font-family: 'Segoe UI', Arial; padding: 12px; max-width: 250px; 
+                        background: white; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
+                <div style="color: {colors['primary']}; font-size: 1.1rem; font-weight: 700; 
+                            margin-bottom: 8px; border-bottom: 2px solid {colors['secondary']}; padding-bottom: 4px;">
+                    📍 {municipio_name}
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0;">
+                    <div style="background: #ffebee; padding: 6px; border-radius: 4px; text-align: center;">
+                        <div style="font-size: 1.2rem; font-weight: bold; color: {colors['danger']};">🦠 {casos_count}</div>
+                        <div style="font-size: 0.7rem; color: #666;">Casos</div>
+                    </div>
+                    <div style="background: #fff3e0; padding: 6px; border-radius: 4px; text-align: center;">
+                        <div style="font-size: 1.2rem; font-weight: bold; color: {colors['warning']};">🐒 {epizootias_count}</div>
+                        <div style="font-size: 0.7rem; color: #666;">Epizootias</div>
+                    </div>
+                </div>
+                
+                {f'<div style="font-size: 0.8rem; color: #666; margin-top: 6px;">🔴 {epizootias_positivas} positivas • 🔵 {epizootias_en_estudio} en estudio</div>' if epizootias_positivas > 0 or epizootias_en_estudio > 0 else ''}
+                
+                <div style="background: linear-gradient(45deg, {colors['info']}, {colors['secondary']}); 
+                            color: white; padding: 6px; border-radius: 4px; text-align: center; 
+                            margin-top: 8px; font-size: 0.8rem; font-weight: 600;">
+                    👆 Clic para navegar a veredas
+                </div>
+            </div>
+            """
+            
+            # Agregar polígono
+            geojson = folium.GeoJson(
+                row['geometry'],
+                style_function=lambda x, color=fill_color, border=border_color, weight=border_weight: {
+                    'fillColor': color,
+                    'color': border,
+                    'weight': weight,
+                    'fillOpacity': 0.7,
+                    'opacity': 1
+                },
+                tooltip=folium.Tooltip(tooltip_text, sticky=True),
+            )
+            
+            geojson.add_to(m)
+        
+        # Renderizar mapa
+        map_data = st_folium(
+            m, 
+            width=700,
+            height=500,
+            returned_objects=["last_object_clicked"],
+            key="intelligent_departmental_map"
+        )
+        
+        # Navegación automática
+        handle_intelligent_navigation(map_data, municipios_data)
+        
+    except Exception as e:
+        logger.error(f"❌ Error en mapa departamental: {str(e)}")
+        st.error(f"Error creando mapa departamental: {str(e)}")
 
 
 def create_municipal_map_with_veredas(casos, epizootias, geo_data, filters, colors):
@@ -246,177 +337,182 @@ def create_municipal_map_with_veredas(casos, epizootias, geo_data, filters, colo
     Mapa municipal mostrando veredas con navegación inteligente.
     """
     
-    municipio_display = filters.get('municipio_display', 'Municipio')
-    municipio_normalizado = filters.get('municipio_normalizado')
-    
-    if not municipio_normalizado:
-        st.error("No se pudo determinar el municipio para la vista de veredas")
-        return
-    
-    # Header elegante para vista municipal
-    st.markdown(
-        f'''
-        <div class="municipal-header">
-            <div class="municipal-icon">🏘️</div>
-            <div class="municipal-info">
-                <h3>Vista Municipal: {municipio_display}</h3>
-                <p>Explorando veredas y distribución detallada</p>
-            </div>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
-    
-    if 'veredas' not in geo_data:
-        st.warning("🗺️ Shapefile de veredas no disponible - mostrando información tabular")
-        show_municipal_tabular_view(casos, epizootias, filters, colors)
-        return
-    
-    # Filtrar veredas del municipio
-    veredas = geo_data['veredas'].copy()
-    veredas_municipio = pd.DataFrame()
-    
-    for col in ['municipi_1', 'municipio', 'MUNICIPIO', 'Municipio']:
-        if col in veredas.columns:
-            veredas_temp = veredas[veredas[col].str.upper().str.strip() == municipio_normalizado.upper()]
-            if not veredas_temp.empty:
-                veredas_municipio = veredas_temp
-                break
-    
-    if veredas_municipio.empty:
-        st.warning(f"No se encontraron veredas para el municipio {municipio_display}")
-        show_municipal_tabular_view(casos, epizootias, filters, colors)
-        return
-    
-    # Preparar datos por vereda
-    veredas_data = prepare_vereda_data(casos, epizootias, veredas_municipio)
-    
-    # Configuración del mapa de veredas
-    bounds = veredas_municipio.total_bounds
-    center_lat = (bounds[1] + bounds[3]) / 2
-    center_lon = (bounds[0] + bounds[2]) / 2
-    
-    # Estadísticas rápidas
-    total_veredas = len(veredas_data)
-    veredas_con_datos = len(veredas_data[(veredas_data['casos'] > 0) | (veredas_data['epizootias'] > 0)])
-    
-    st.markdown(
-        f'''
-        <div class="map-stats">
-            <div class="stat-item">
-                <span class="stat-number">{total_veredas}</span>
-                <span class="stat-label">Veredas Total</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">{veredas_con_datos}</span>
-                <span class="stat-label">Con Datos</span>
-            </div>
-            <div class="stat-item">
-                <span class="stat-number">{total_veredas - veredas_con_datos}</span>
-                <span class="stat-label">Sin Eventos</span>
-            </div>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
-    
-    # Crear mapa de veredas
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=10,
-        tiles='CartoDB positron',
-        zoom_control=False,
-        scrollWheelZoom=False,
-        doubleClickZoom=False,
-        dragging=False,
-        attributionControl=False,
-    )
-    
-    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    
-    # Agregar veredas
-    max_casos_vereda = veredas_data['casos'].max() if veredas_data['casos'].max() > 0 else 1
-    max_epi_vereda = veredas_data['epizootias'].max() if veredas_data['epizootias'].max() > 0 else 1
-    
-    for idx, row in veredas_data.iterrows():
-        vereda_name = row.get('NOMBRE_VER', row.get('vereda', f'Vereda_{idx}'))
-        casos_count = row['casos']
-        epizootias_count = row['epizootias']
-        epizootias_positivas = row.get('epizootias_positivas', 0)
-        epizootias_en_estudio = row.get('epizootias_en_estudio', 0)
+    try:
+        municipio_display = filters.get('municipio_display', 'Municipio')
+        municipio_normalizado = filters.get('municipio_normalizado')
         
-        # Colores para veredas
-        if casos_count > 0:
-            intensity = min(casos_count / max_casos_vereda, 1.0)
-            fill_color = f"rgba(229, 25, 55, {0.4 + intensity * 0.5})"
-            border_color = colors['danger']
-            border_weight = 3
-        elif epizootias_count > 0:
-            intensity = min(epizootias_count / max_epi_vereda, 1.0)
-            fill_color = f"rgba(247, 148, 29, {0.4 + intensity * 0.5})"
-            border_color = colors['warning']
-            border_weight = 2
-        else:
-            fill_color = "rgba(200, 200, 200, 0.2)"
-            border_color = "#cccccc"
-            border_weight = 1
+        if not municipio_normalizado:
+            st.error("No se pudo determinar el municipio para la vista de veredas")
+            return
         
-        # Tooltip para veredas
-        tooltip_text = f"""
-        <div style="font-family: 'Segoe UI', Arial; padding: 10px; max-width: 220px; 
-                    background: white; border-radius: 6px; box-shadow: 0 3px 12px rgba(0,0,0,0.15);">
-            <div style="color: {colors['primary']}; font-size: 1rem; font-weight: 700; 
-                        margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                🏘️ {vereda_name}
-            </div>
-            
-            <div style="display: flex; gap: 8px; margin: 6px 0;">
-                <div style="background: #ffebee; padding: 4px 8px; border-radius: 3px; flex: 1; text-align: center;">
-                    <div style="font-weight: bold; color: {colors['danger']};">🦠 {casos_count}</div>
-                    <div style="font-size: 0.7rem; color: #666;">Casos</div>
-                </div>
-                <div style="background: #fff3e0; padding: 4px 8px; border-radius: 3px; flex: 1; text-align: center;">
-                    <div style="font-weight: bold; color: {colors['warning']};">🐒 {epizootias_count}</div>
-                    <div style="font-size: 0.7rem; color: #666;">Epizootias</div>
+        # Header elegante para vista municipal
+        st.markdown(
+            f'''
+            <div class="municipal-header">
+                <div class="municipal-icon">🏘️</div>
+                <div class="municipal-info">
+                    <h3>Vista Municipal: {municipio_display}</h3>
+                    <p>Explorando veredas y distribución detallada</p>
                 </div>
             </div>
-            
-            {f'<div style="font-size: 0.75rem; color: #666; margin-top: 4px; text-align: center;">🔴 {epizootias_positivas} pos. • 🔵 {epizootias_en_estudio} est.</div>' if epizootias_positivas > 0 or epizootias_en_estudio > 0 else ''}
-            
-            <div style="background: linear-gradient(45deg, {colors['info']}, {colors['primary']}); 
-                        color: white; padding: 4px; border-radius: 3px; text-align: center; 
-                        margin-top: 6px; font-size: 0.75rem; font-weight: 600;">
-                👆 Clic para vista detallada
-            </div>
-        </div>
-        """
-        
-        # Agregar vereda
-        geojson = folium.GeoJson(
-            row['geometry'],
-            style_function=lambda x, color=fill_color, border=border_color, weight=border_weight: {
-                'fillColor': color,
-                'color': border,
-                'weight': weight,
-                'fillOpacity': 0.6,
-                'opacity': 1
-            },
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),
+            ''',
+            unsafe_allow_html=True,
         )
         
-        geojson.add_to(m)
-    
-    # Renderizar mapa de veredas
-    map_data = st_folium(
-        m, 
-        width=700,
-        height=500,
-        returned_objects=["last_object_clicked"],
-        key="intelligent_municipal_map"
-    )
-    
-    # Manejar clics en veredas
-    handle_vereda_navigation(map_data, veredas_data, filters)
+        if 'veredas' not in geo_data:
+            st.warning("🗺️ Shapefile de veredas no disponible - mostrando información tabular")
+            show_municipal_tabular_view(casos, epizootias, filters, colors)
+            return
+        
+        # Filtrar veredas del municipio
+        veredas = geo_data['veredas'].copy()
+        veredas_municipio = pd.DataFrame()
+        
+        for col in ['municipi_1', 'municipio', 'MUNICIPIO', 'Municipio']:
+            if col in veredas.columns:
+                veredas_temp = veredas[veredas[col].str.upper().str.strip() == municipio_normalizado.upper()]
+                if not veredas_temp.empty:
+                    veredas_municipio = veredas_temp
+                    break
+        
+        if veredas_municipio.empty:
+            st.warning(f"No se encontraron veredas para el municipio {municipio_display}")
+            show_municipal_tabular_view(casos, epizootias, filters, colors)
+            return
+        
+        # Preparar datos por vereda
+        veredas_data = prepare_vereda_data(casos, epizootias, veredas_municipio)
+        
+        # Configuración del mapa de veredas
+        bounds = veredas_municipio.total_bounds
+        center_lat = (bounds[1] + bounds[3]) / 2
+        center_lon = (bounds[0] + bounds[2]) / 2
+        
+        # Estadísticas rápidas
+        total_veredas = len(veredas_data)
+        veredas_con_datos = len(veredas_data[(veredas_data['casos'] > 0) | (veredas_data['epizootias'] > 0)])
+        
+        st.markdown(
+            f'''
+            <div class="map-stats">
+                <div class="stat-item">
+                    <span class="stat-number">{total_veredas}</span>
+                    <span class="stat-label">Veredas Total</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">{veredas_con_datos}</span>
+                    <span class="stat-label">Con Datos</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-number">{total_veredas - veredas_con_datos}</span>
+                    <span class="stat-label">Sin Eventos</span>
+                </div>
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
+        
+        # Crear mapa de veredas
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=10,
+            tiles='CartoDB positron',
+            zoom_control=False,
+            scrollWheelZoom=False,
+            doubleClickZoom=False,
+            dragging=False,
+            attributionControl=False,
+        )
+        
+        m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+        
+        # Agregar veredas
+        max_casos_vereda = veredas_data['casos'].max() if veredas_data['casos'].max() > 0 else 1
+        max_epi_vereda = veredas_data['epizootias'].max() if veredas_data['epizootias'].max() > 0 else 1
+        
+        for idx, row in veredas_data.iterrows():
+            vereda_name = row.get('NOMBRE_VER', row.get('vereda', f'Vereda_{idx}'))
+            casos_count = row['casos']
+            epizootias_count = row['epizootias']
+            epizootias_positivas = row.get('epizootias_positivas', 0)
+            epizootias_en_estudio = row.get('epizootias_en_estudio', 0)
+            
+            # Colores para veredas
+            if casos_count > 0:
+                intensity = min(casos_count / max_casos_vereda, 1.0)
+                fill_color = f"rgba(229, 25, 55, {0.4 + intensity * 0.5})"
+                border_color = colors['danger']
+                border_weight = 3
+            elif epizootias_count > 0:
+                intensity = min(epizootias_count / max_epi_vereda, 1.0)
+                fill_color = f"rgba(247, 148, 29, {0.4 + intensity * 0.5})"
+                border_color = colors['warning']
+                border_weight = 2
+            else:
+                fill_color = "rgba(200, 200, 200, 0.2)"
+                border_color = "#cccccc"
+                border_weight = 1
+            
+            # Tooltip para veredas
+            tooltip_text = f"""
+            <div style="font-family: 'Segoe UI', Arial; padding: 10px; max-width: 220px; 
+                        background: white; border-radius: 6px; box-shadow: 0 3px 12px rgba(0,0,0,0.15);">
+                <div style="color: {colors['primary']}; font-size: 1rem; font-weight: 700; 
+                            margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    🏘️ {vereda_name}
+                </div>
+                
+                <div style="display: flex; gap: 8px; margin: 6px 0;">
+                    <div style="background: #ffebee; padding: 4px 8px; border-radius: 3px; flex: 1; text-align: center;">
+                        <div style="font-weight: bold; color: {colors['danger']};">🦠 {casos_count}</div>
+                        <div style="font-size: 0.7rem; color: #666;">Casos</div>
+                    </div>
+                    <div style="background: #fff3e0; padding: 4px 8px; border-radius: 3px; flex: 1; text-align: center;">
+                        <div style="font-weight: bold; color: {colors['warning']};">🐒 {epizootias_count}</div>
+                        <div style="font-size: 0.7rem; color: #666;">Epizootias</div>
+                    </div>
+                </div>
+                
+                {f'<div style="font-size: 0.75rem; color: #666; margin-top: 4px; text-align: center;">🔴 {epizootias_positivas} pos. • 🔵 {epizootias_en_estudio} est.</div>' if epizootias_positivas > 0 or epizootias_en_estudio > 0 else ''}
+                
+                <div style="background: linear-gradient(45deg, {colors['info']}, {colors['primary']}); 
+                            color: white; padding: 4px; border-radius: 3px; text-align: center; 
+                            margin-top: 6px; font-size: 0.75rem; font-weight: 600;">
+                    👆 Clic para vista detallada
+                </div>
+            </div>
+            """
+            
+            # Agregar vereda
+            geojson = folium.GeoJson(
+                row['geometry'],
+                style_function=lambda x, color=fill_color, border=border_color, weight=border_weight: {
+                    'fillColor': color,
+                    'color': border,
+                    'weight': weight,
+                    'fillOpacity': 0.6,
+                    'opacity': 1
+                },
+                tooltip=folium.Tooltip(tooltip_text, sticky=True),
+            )
+            
+            geojson.add_to(m)
+        
+        # Renderizar mapa de veredas
+        map_data = st_folium(
+            m, 
+            width=700,
+            height=500,
+            returned_objects=["last_object_clicked"],
+            key="intelligent_municipal_map"
+        )
+        
+        # Manejar clics en veredas
+        handle_vereda_navigation(map_data, veredas_data, filters)
+        
+    except Exception as e:
+        logger.error(f"❌ Error en mapa municipal: {str(e)}")
+        st.error(f"Error creando mapa municipal: {str(e)}")
 
 
 def create_enhanced_information_cards(casos, epizootias, filters, colors):
@@ -424,30 +520,35 @@ def create_enhanced_information_cards(casos, epizootias, filters, colors):
     Tarjetas de información mejoradas y funcionales.
     """
     
-    st.markdown(
-        '''
-        <div class="cards-section-header">
-            <h2>📊 Información Detallada</h2>
-            <p>Datos actualizados en tiempo real</p>
-        </div>
-        ''',
-        unsafe_allow_html=True,
-    )
-    
-    # Calcular métricas completas
-    metrics = calculate_basic_metrics(casos, epizootias)
-    
-    # Tarjeta 1: Casos Humanos
-    create_cases_card(metrics, colors)
-    
-    # Tarjeta 2: Epizootias
-    create_epizootias_card(metrics, colors)
-    
-    # Tarjeta 3: Ubicación y Navegación
-    create_location_card(filters, colors)
-    
-    # Tarjeta 4: Insights
-    create_insights_card(casos, epizootias, metrics, colors)
+    try:
+        st.markdown(
+            '''
+            <div class="cards-section-header">
+                <h2>📊 Información Detallada</h2>
+                <p>Datos actualizados en tiempo real</p>
+            </div>
+            ''',
+            unsafe_allow_html=True,
+        )
+        
+        # Calcular métricas completas
+        metrics = calculate_basic_metrics(casos, epizootias)
+        
+        # Tarjeta 1: Casos Humanos
+        create_cases_card(metrics, colors)
+        
+        # Tarjeta 2: Epizootias
+        create_epizootias_card(metrics, colors)
+        
+        # Tarjeta 3: Ubicación y Navegación
+        create_location_card(filters, colors)
+        
+        # Tarjeta 4: Insights
+        create_insights_card(casos, epizootias, metrics, colors)
+        
+    except Exception as e:
+        logger.error(f"❌ Error creando tarjetas de información: {str(e)}")
+        st.error(f"Error en tarjetas de información: {str(e)}")
 
 
 def create_cases_card(metrics, colors):
@@ -455,10 +556,10 @@ def create_cases_card(metrics, colors):
     Tarjeta de casos con diseño mejorado.
     """
     total_casos = metrics["total_casos"]
-    vivos = metrics["vivos"]
-    fallecidos = metrics["fallecidos"]
-    letalidad = metrics["letalidad"]
-    ultimo_caso = metrics["ultimo_caso"]
+    vivos = metrics.get("vivos", 0)
+    fallecidos = metrics.get("fallecidos", 0)
+    letalidad = metrics.get("letalidad", 0)
+    ultimo_caso = metrics.get("ultimo_caso", {"existe": False})
     
     # Determinar nivel de intensidad
     if total_casos == 0:
@@ -540,9 +641,9 @@ def create_epizootias_card(metrics, colors):
     Tarjeta de epizootias con diseño mejorado.
     """
     total_epizootias = metrics["total_epizootias"]
-    positivas = metrics["epizootias_positivas"]
-    en_estudio = metrics["epizootias_en_estudio"]
-    ultima_epizootia = metrics["ultima_epizootia_positiva"]
+    positivas = metrics.get("epizootias_positivas", 0)
+    en_estudio = metrics.get("epizootias_en_estudio", 0)
+    ultima_epizootia = metrics.get("ultima_epizootia_positiva", {"existe": False})
     
     # Calcular porcentaje de positividad
     positividad = (positivas / total_epizootias * 100) if total_epizootias > 0 else 0
@@ -1348,10 +1449,10 @@ def handle_intelligent_navigation(map_data, municipios_data):
     """
     Navegación inteligente que automáticamente cambia al nivel municipal con veredas.
     """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
     try:
+        if not map_data or not map_data.get('last_object_clicked'):
+            return
+        
         clicked_object = map_data['last_object_clicked']
         
         if isinstance(clicked_object, dict) and 'lat' in clicked_object and 'lng' in clicked_object:
@@ -1404,17 +1505,18 @@ def handle_intelligent_navigation(map_data, municipios_data):
                     st.rerun()
                     
     except Exception as e:
-        st.error(f"❌ Error en navegación automática: {str(e)}")
+        logger.error(f"❌ Error en navegación automática: {str(e)}")
+        st.error(f"Error en navegación automática: {str(e)}")
 
 
 def handle_vereda_navigation(map_data, veredas_data, filters):
     """
     Navegación a nivel de vereda específica.
     """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
     try:
+        if not map_data or not map_data.get('last_object_clicked'):
+            return
+        
         clicked_object = map_data['last_object_clicked']
         
         if isinstance(clicked_object, dict) and 'lat' in clicked_object and 'lng' in clicked_object:
@@ -1469,294 +1571,312 @@ def handle_vereda_navigation(map_data, veredas_data, filters):
                     st.rerun()
                     
     except Exception as e:
-        st.warning(f"Error en navegación de vereda: {str(e)}")
+        logger.warning(f"Error en navegación de vereda: {str(e)}")
 
 
 def create_breadcrumb_navigation(current_level, filters, colors):
     """
     Sistema de breadcrumb elegante con navegación funcional.
     """
-    # Construir breadcrumb path
-    breadcrumb_items = []
-    
-    # Siempre empezar con Tolima
-    breadcrumb_items.append({
-        'name': 'Tolima',
-        'icon': '🏛️',
-        'level': 'departamento',
-        'active': current_level == 'departamento'
-    })
-    
-    # Agregar municipio si está seleccionado
-    if filters.get('municipio_display') and filters['municipio_display'] != 'Todos':
+    try:
+        # Construir breadcrumb path
+        breadcrumb_items = []
+        
+        # Siempre empezar con Tolima
         breadcrumb_items.append({
-            'name': filters['municipio_display'],
-            'icon': '🏘️',
-            'level': 'municipio', 
-            'active': current_level == 'municipio'
+            'name': 'Tolima',
+            'icon': '🏛️',
+            'level': 'departamento',
+            'active': current_level == 'departamento'
         })
-    
-    # Agregar vereda si está seleccionada
-    if filters.get('vereda_display') and filters['vereda_display'] != 'Todas':
-        breadcrumb_items.append({
-            'name': filters['vereda_display'],
-            'icon': '📍',
-            'level': 'vereda',
-            'active': current_level == 'vereda'
-        })
-    
-    # Crear HTML del breadcrumb
-    breadcrumb_html = '<div class="elegant-breadcrumb">'
-    
-    for i, item in enumerate(breadcrumb_items):
-        # Separador
-        if i > 0:
-            breadcrumb_html += '<div class="breadcrumb-separator">→</div>'
         
-        # Item
-        active_class = 'active' if item['active'] else ''
-        breadcrumb_html += f'''
-        <div class="breadcrumb-item {active_class}">
-            <span class="breadcrumb-icon">{item['icon']}</span>
-            <span class="breadcrumb-text">{item['name']}</span>
-        </div>
-        '''
-    
-    breadcrumb_html += '</div>'
-    
-    # CSS para el breadcrumb
-    st.markdown(
-        f'''
-        <style>
-        .elegant-breadcrumb {{
-            display: flex;
-            align-items: center;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 1rem 1.5rem;
-            border-radius: 12px;
-            margin-bottom: 1rem;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
-            border-left: 4px solid {colors['primary']};
-        }}
+        # Agregar municipio si está seleccionado
+        if filters.get('municipio_display') and filters['municipio_display'] != 'Todos':
+            breadcrumb_items.append({
+                'name': filters['municipio_display'],
+                'icon': '🏘️',
+                'level': 'municipio', 
+                'active': current_level == 'municipio'
+            })
         
-        .breadcrumb-item {{
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }}
+        # Agregar vereda si está seleccionada
+        if filters.get('vereda_display') and filters['vereda_display'] != 'Todas':
+            breadcrumb_items.append({
+                'name': filters['vereda_display'],
+                'icon': '📍',
+                'level': 'vereda',
+                'active': current_level == 'vereda'
+            })
         
-        .breadcrumb-item:hover {{
-            background: rgba(255,255,255,0.8);
-            transform: translateY(-1px);
-        }}
+        # Crear HTML del breadcrumb
+        breadcrumb_html = '<div class="elegant-breadcrumb">'
         
-        .breadcrumb-item.active {{
-            background: linear-gradient(135deg, {colors['primary']}, {colors['accent']});
-            color: white;
-            font-weight: 600;
-        }}
+        for i, item in enumerate(breadcrumb_items):
+            # Separador
+            if i > 0:
+                breadcrumb_html += '<div class="breadcrumb-separator">→</div>'
+            
+            # Item
+            active_class = 'active' if item['active'] else ''
+            breadcrumb_html += f'''
+            <div class="breadcrumb-item {active_class}">
+                <span class="breadcrumb-icon">{item['icon']}</span>
+                <span class="breadcrumb-text">{item['name']}</span>
+            </div>
+            '''
         
-        .breadcrumb-icon {{
-            font-size: 1.2rem;
-        }}
+        breadcrumb_html += '</div>'
         
-        .breadcrumb-text {{
-            font-size: 0.9rem;
-            font-weight: 500;
-        }}
+        # CSS para el breadcrumb
+        st.markdown(
+            f'''
+            <style>
+            .elegant-breadcrumb {{
+                display: flex;
+                align-items: center;
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                padding: 1rem 1.5rem;
+                border-radius: 12px;
+                margin-bottom: 1rem;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+                border-left: 4px solid {colors['primary']};
+            }}
+            
+            .breadcrumb-item {{
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                padding: 0.5rem 1rem;
+                border-radius: 8px;
+                transition: all 0.3s ease;
+                cursor: pointer;
+            }}
+            
+            .breadcrumb-item:hover {{
+                background: rgba(255,255,255,0.8);
+                transform: translateY(-1px);
+            }}
+            
+            .breadcrumb-item.active {{
+                background: linear-gradient(135deg, {colors['primary']}, {colors['accent']});
+                color: white;
+                font-weight: 600;
+            }}
+            
+            .breadcrumb-icon {{
+                font-size: 1.2rem;
+            }}
+            
+            .breadcrumb-text {{
+                font-size: 0.9rem;
+                font-weight: 500;
+            }}
+            
+            .breadcrumb-separator {{
+                margin: 0 0.5rem;
+                color: {colors['accent']};
+                font-weight: 600;
+                font-size: 1.1rem;
+            }}
+            </style>
+            ''',
+            unsafe_allow_html=True,
+        )
         
-        .breadcrumb-separator {{
-            margin: 0 0.5rem;
-            color: {colors['accent']};
-            font-weight: 600;
-            font-size: 1.1rem;
-        }}
-        </style>
-        ''',
-        unsafe_allow_html=True,
-    )
-    
-    st.markdown(breadcrumb_html, unsafe_allow_html=True)
+        st.markdown(breadcrumb_html, unsafe_allow_html=True)
+        
+    except Exception as e:
+        logger.error(f"❌ Error creando breadcrumb: {str(e)}")
 
 
 def show_status_indicator(filters, colors):
     """
     Indicador de estado animado para mostrar el nivel actual.
     """
-    current_level = determine_map_level(filters)
-    
-    level_config = {
-        'departamento': {
-            'name': 'Vista Departamental',
-            'description': 'Explorando todos los municipios del Tolima',
-            'icon': '🏛️',
-            'color': colors['info']
-        },
-        'municipio': {
-            'name': 'Vista Municipal',
-            'description': f"Analizando veredas de {filters.get('municipio_display', 'Municipio')}",
-            'icon': '🏘️',
-            'color': colors['warning']
-        },
-        'vereda': {
-            'name': 'Vista de Vereda',
-            'description': f"Datos específicos de {filters.get('vereda_display', 'Vereda')}",
-            'icon': '📍',
-            'color': colors['danger']
+    try:
+        current_level = determine_map_level(filters)
+        
+        level_config = {
+            'departamento': {
+                'name': 'Vista Departamental',
+                'description': 'Explorando todos los municipios del Tolima',
+                'icon': '🏛️',
+                'color': colors['info']
+            },
+            'municipio': {
+                'name': 'Vista Municipal',
+                'description': f"Analizando veredas de {filters.get('municipio_display', 'Municipio')}",
+                'icon': '🏘️',
+                'color': colors['warning']
+            },
+            'vereda': {
+                'name': 'Vista de Vereda',
+                'description': f"Datos específicos de {filters.get('vereda_display', 'Vereda')}",
+                'icon': '📍',
+                'color': colors['danger']
+            }
         }
-    }
-    
-    config = level_config[current_level]
-    
-    st.markdown(
-        f'''
-        <div class="status-indicator" style="background: {config['color']};">
-            <div class="status-icon">{config['icon']}</div>
-            <div class="status-content">
-                <div class="status-title">{config['name']}</div>
-                <div class="status-description">{config['description']}</div>
+        
+        config = level_config[current_level]
+        
+        st.markdown(
+            f'''
+            <div class="status-indicator" style="background: {config['color']};">
+                <div class="status-icon">{config['icon']}</div>
+                <div class="status-content">
+                    <div class="status-title">{config['name']}</div>
+                    <div class="status-description">{config['description']}</div>
+                </div>
+                <div class="status-pulse"></div>
             </div>
-            <div class="status-pulse"></div>
-        </div>
+            
+            <style>
+            .status-indicator {{
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+                color: white;
+                padding: 1rem 1.5rem;
+                border-radius: 12px;
+                margin-bottom: 1rem;
+                position: relative;
+                overflow: hidden;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+            }}
+            
+            .status-icon {{
+                font-size: 1.8rem;
+                animation: glow 2s ease-in-out infinite alternate;
+            }}
+            
+            @keyframes glow {{
+                from {{ text-shadow: 0 0 5px rgba(255,255,255,0.5); }}
+                to {{ text-shadow: 0 0 20px rgba(255,255,255,0.8), 0 0 30px rgba(255,255,255,0.6); }}
+            }}
+            
+            .status-content {{
+                flex: 1;
+            }}
+            
+            .status-title {{
+                font-size: 1.1rem;
+                font-weight: 700;
+                margin-bottom: 0.25rem;
+            }}
+            
+            .status-description {{
+                font-size: 0.9rem;
+                opacity: 0.9;
+            }}
+            
+            .status-pulse {{
+                position: absolute;
+                top: 0;
+                right: 0;
+                bottom: 0;
+                width: 4px;
+                background: rgba(255,255,255,0.6);
+                animation: pulse-bar 1.5s ease-in-out infinite;
+            }}
+            
+            @keyframes pulse-bar {{
+                0%, 100% {{ opacity: 0.6; transform: scaleY(1); }}
+                50% {{ opacity: 1; transform: scaleY(1.2); }}
+            }}
+            </style>
+            ''',
+            unsafe_allow_html=True,
+        )
         
-        <style>
-        .status-indicator {{
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            color: white;
-            padding: 1rem 1.5rem;
-            border-radius: 12px;
-            margin-bottom: 1rem;
-            position: relative;
-            overflow: hidden;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-        }}
-        
-        .status-icon {{
-            font-size: 1.8rem;
-            animation: glow 2s ease-in-out infinite alternate;
-        }}
-        
-        @keyframes glow {{
-            from {{ text-shadow: 0 0 5px rgba(255,255,255,0.5); }}
-            to {{ text-shadow: 0 0 20px rgba(255,255,255,0.8), 0 0 30px rgba(255,255,255,0.6); }}
-        }}
-        
-        .status-content {{
-            flex: 1;
-        }}
-        
-        .status-title {{
-            font-size: 1.1rem;
-            font-weight: 700;
-            margin-bottom: 0.25rem;
-        }}
-        
-        .status-description {{
-            font-size: 0.9rem;
-            opacity: 0.9;
-        }}
-        
-        .status-pulse {{
-            position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            width: 4px;
-            background: rgba(255,255,255,0.6);
-            animation: pulse-bar 1.5s ease-in-out infinite;
-        }}
-        
-        @keyframes pulse-bar {{
-            0%, 100% {{ opacity: 0.6; transform: scaleY(1); }}
-            50% {{ opacity: 1; transform: scaleY(1.2); }}
-        }}
-        </style>
-        ''',
-        unsafe_allow_html=True,
-    )
+    except Exception as e:
+        logger.error(f"❌ Error creando indicador de estado: {str(e)}")
 
 
 # === FUNCIONES DE APOYO EXISTENTES ===
 
 def prepare_municipal_data(casos, epizootias, municipios):
     """Prepara datos agregados por municipio."""
-    casos_por_municipio = {}
-    fallecidos_por_municipio = {}
-    
-    if not casos.empty and 'municipio_normalizado' in casos.columns:
-        casos_counts = casos.groupby('municipio_normalizado').size()
-        casos_por_municipio = casos_counts.to_dict()
+    try:
+        casos_por_municipio = {}
+        fallecidos_por_municipio = {}
         
-        if 'condicion_final' in casos.columns:
-            fallecidos_counts = casos[casos['condicion_final'] == 'Fallecido'].groupby('municipio_normalizado').size()
-            fallecidos_por_municipio = fallecidos_counts.to_dict()
-    
-    epizootias_por_municipio = {}
-    positivas_por_municipio = {}
-    en_estudio_por_municipio = {}
-    
-    if not epizootias.empty and 'municipio_normalizado' in epizootias.columns:
-        epi_counts = epizootias.groupby('municipio_normalizado').size()
-        epizootias_por_municipio = epi_counts.to_dict()
-        
-        if 'descripcion' in epizootias.columns:
-            positivas_counts = epizootias[epizootias['descripcion'] == 'POSITIVO FA'].groupby('municipio_normalizado').size()
-            positivas_por_municipio = positivas_counts.to_dict()
+        if not casos.empty and 'municipio_normalizado' in casos.columns:
+            casos_counts = casos.groupby('municipio_normalizado').size()
+            casos_por_municipio = casos_counts.to_dict()
             
-            en_estudio_counts = epizootias[epizootias['descripcion'] == 'EN ESTUDIO'].groupby('municipio_normalizado').size()
-            en_estudio_por_municipio = en_estudio_counts.to_dict()
-    
-    municipios_data = municipios.copy()
-    
-    municipios_data['casos'] = municipios_data['municipi_1'].map(casos_por_municipio).fillna(0).astype(int)
-    municipios_data['fallecidos'] = municipios_data['municipi_1'].map(fallecidos_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias'] = municipios_data['municipi_1'].map(epizootias_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias_positivas'] = municipios_data['municipi_1'].map(positivas_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias_en_estudio'] = municipios_data['municipi_1'].map(en_estudio_por_municipio).fillna(0).astype(int)
-    
-    return municipios_data
+            if 'condicion_final' in casos.columns:
+                fallecidos_counts = casos[casos['condicion_final'] == 'Fallecido'].groupby('municipio_normalizado').size()
+                fallecidos_por_municipio = fallecidos_counts.to_dict()
+        
+        epizootias_por_municipio = {}
+        positivas_por_municipio = {}
+        en_estudio_por_municipio = {}
+        
+        if not epizootias.empty and 'municipio_normalizado' in epizootias.columns:
+            epi_counts = epizootias.groupby('municipio_normalizado').size()
+            epizootias_por_municipio = epi_counts.to_dict()
+            
+            if 'descripcion' in epizootias.columns:
+                positivas_counts = epizootias[epizootias['descripcion'] == 'POSITIVO FA'].groupby('municipio_normalizado').size()
+                positivas_por_municipio = positivas_counts.to_dict()
+                
+                en_estudio_counts = epizootias[epizootias['descripcion'] == 'EN ESTUDIO'].groupby('municipio_normalizado').size()
+                en_estudio_por_municipio = en_estudio_counts.to_dict()
+        
+        municipios_data = municipios.copy()
+        
+        municipios_data['casos'] = municipios_data['municipi_1'].map(casos_por_municipio).fillna(0).astype(int)
+        municipios_data['fallecidos'] = municipios_data['municipi_1'].map(fallecidos_por_municipio).fillna(0).astype(int)
+        municipios_data['epizootias'] = municipios_data['municipi_1'].map(epizootias_por_municipio).fillna(0).astype(int)
+        municipios_data['epizootias_positivas'] = municipios_data['municipi_1'].map(positivas_por_municipio).fillna(0).astype(int)
+        municipios_data['epizootias_en_estudio'] = municipios_data['municipi_1'].map(en_estudio_por_municipio).fillna(0).astype(int)
+        
+        return municipios_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error preparando datos municipales: {str(e)}")
+        return municipios
 
 
 def prepare_vereda_data(casos, epizootias, veredas_gdf):
     """Prepara datos agregados por vereda."""
-    casos_por_vereda = {}
-    epizootias_por_vereda = {}
-    positivas_por_vereda = {}
-    en_estudio_por_vereda = {}
-    
-    if not casos.empty and 'vereda_normalizada' in casos.columns:
-        for vereda_norm, group in casos.groupby('vereda_normalizada'):
-            casos_por_vereda[vereda_norm.upper()] = len(group)
-    
-    if not epizootias.empty and 'vereda_normalizada' in epizootias.columns:
-        for vereda_norm, group in epizootias.groupby('vereda_normalizada'):
-            epizootias_por_vereda[vereda_norm.upper()] = len(group)
-            
-            if 'descripcion' in group.columns:
-                positivas_por_vereda[vereda_norm.upper()] = len(group[group['descripcion'] == 'POSITIVO FA'])
-                en_estudio_por_vereda[vereda_norm.upper()] = len(group[group['descripcion'] == 'EN ESTUDIO'])
-    
-    veredas_data = veredas_gdf.copy()
-    
-    for col in ['NOMBRE_VER', 'vereda', 'Vereda']:
-        if col in veredas_data.columns:
-            veredas_data['casos'] = veredas_data[col].str.upper().str.strip().map(casos_por_vereda).fillna(0).astype(int)
-            veredas_data['epizootias'] = veredas_data[col].str.upper().str.strip().map(epizootias_por_vereda).fillna(0).astype(int)
-            veredas_data['epizootias_positivas'] = veredas_data[col].str.upper().str.strip().map(positivas_por_vereda).fillna(0).astype(int)
-            veredas_data['epizootias_en_estudio'] = veredas_data[col].str.upper().str.strip().map(en_estudio_por_vereda).fillna(0).astype(int)
-            break
-    
-    for col in ['casos', 'epizootias', 'epizootias_positivas', 'epizootias_en_estudio']:
-        if col not in veredas_data.columns:
-            veredas_data[col] = 0
-    
-    return veredas_data
+    try:
+        casos_por_vereda = {}
+        epizootias_por_vereda = {}
+        positivas_por_vereda = {}
+        en_estudio_por_vereda = {}
+        
+        if not casos.empty and 'vereda_normalizada' in casos.columns:
+            for vereda_norm, group in casos.groupby('vereda_normalizada'):
+                casos_por_vereda[vereda_norm.upper()] = len(group)
+        
+        if not epizootias.empty and 'vereda_normalizada' in epizootias.columns:
+            for vereda_norm, group in epizootias.groupby('vereda_normalizada'):
+                epizootias_por_vereda[vereda_norm.upper()] = len(group)
+                
+                if 'descripcion' in group.columns:
+                    positivas_por_vereda[vereda_norm.upper()] = len(group[group['descripcion'] == 'POSITIVO FA'])
+                    en_estudio_por_vereda[vereda_norm.upper()] = len(group[group['descripcion'] == 'EN ESTUDIO'])
+        
+        veredas_data = veredas_gdf.copy()
+        
+        for col in ['NOMBRE_VER', 'vereda', 'Vereda']:
+            if col in veredas_data.columns:
+                veredas_data['casos'] = veredas_data[col].str.upper().str.strip().map(casos_por_vereda).fillna(0).astype(int)
+                veredas_data['epizootias'] = veredas_data[col].str.upper().str.strip().map(epizootias_por_vereda).fillna(0).astype(int)
+                veredas_data['epizootias_positivas'] = veredas_data[col].str.upper().str.strip().map(positivas_por_vereda).fillna(0).astype(int)
+                veredas_data['epizootias_en_estudio'] = veredas_data[col].str.upper().str.strip().map(en_estudio_por_vereda).fillna(0).astype(int)
+                break
+        
+        for col in ['casos', 'epizootias', 'epizootias_positivas', 'epizootias_en_estudio']:
+            if col not in veredas_data.columns:
+                veredas_data[col] = 0
+        
+        return veredas_data
+        
+    except Exception as e:
+        logger.error(f"❌ Error preparando datos de veredas: {str(e)}")
+        return veredas_gdf
 
 
 def determine_map_level(filters):
@@ -1783,7 +1903,6 @@ def get_current_location_info(filters):
         return "Tolima - Vista Departamental"
     
     return " → ".join(location_parts)
-
 
 def create_vereda_detail_view(casos, epizootias, filters, colors):
     """Vista detallada para vereda específica."""
