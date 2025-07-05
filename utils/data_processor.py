@@ -1,14 +1,18 @@
 """
-Procesamiento y filtrado de datos del dashboard de Fiebre Amarilla.
-ACTUALIZADO: Sistema inteligente de mapeo de veredas con fuzzy matching
+Procesamiento y filtrado de datos MEJORADO del dashboard de Fiebre Amarilla.
+ACTUALIZADO: Integración con sistema de mapeo automático y manejo robusto de datos
 """
 
 import pandas as pd
 import numpy as np
 import unicodedata
 import re
+import logging
 from datetime import datetime
 from config.settings import GRUPOS_EDAD, CONDICION_FINAL_MAP, DESCRIPCION_EPIZOOTIAS_MAP
+
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 # Importación opcional para fuzzy matching
 try:
@@ -17,54 +21,63 @@ try:
 except ImportError:
     FUZZY_AVAILABLE = False
 
+# Importación del sistema de mapeos automáticos (se actualiza después de generar)
+try:
+    from utils.automatic_mappings import (
+        apply_shapefile_mapping_safe,
+        get_municipio_mapping,
+        get_vereda_mapping,
+        safe_normalize_text
+    )
+    MAPPING_SYSTEM_AVAILABLE = True
+    logger.info("✅ Sistema de mapeos automáticos cargado")
+except ImportError:
+    MAPPING_SYSTEM_AVAILABLE = False
+    logger.warning("⚠️ Sistema de mapeos automáticos no disponible")
+
 
 def normalize_text(text):
     """
     Normaliza texto removiendo tildes, convirtiendo a mayúsculas y limpiando espacios.
-    Maneja inconsistencias entre bases de datos.
-
-    Args:
-        text (str): Texto a normalizar
-
-    Returns:
-        str: Texto normalizado
+    MEJORADO: Manejo robusto de tipos y valores especiales.
     """
     if pd.isna(text) or not isinstance(text, str):
         return ""
 
-    # Remover tildes y diacríticos
-    text = unicodedata.normalize("NFD", text)
-    text = "".join(char for char in text if unicodedata.category(char) != "Mn")
+    # Validación adicional para valores problemáticos
+    if text.strip() == "" or text.lower() in ['nan', 'none', 'null']:
+        return ""
 
-    # Convertir a mayúsculas y limpiar espacios
-    text = text.upper().strip()
+    try:
+        # Remover tildes y diacríticos
+        text = unicodedata.normalize("NFD", text)
+        text = "".join(char for char in text if unicodedata.category(char) != "Mn")
 
-    # Limpiar espacios múltiples
-    text = re.sub(r"\s+", " ", text)
+        # Convertir a mayúsculas y limpiar espacios
+        text = text.upper().strip()
+        text = re.sub(r"\s+", " ", text)
 
-    # Reemplazos específicos para problemas comunes
-    replacements = {
-        "VILLARICA": "VILLARRICA",  # Corregir inconsistencia común
-        "PURIFICACION": "PURIFICACION",  # Mantener sin tilde
-    }
+        # Reemplazos específicos para problemas comunes
+        replacements = {
+            "VILLARICA": "VILLARRICA",  # Corregir inconsistencia detectada en diagnóstico
+            "PURIFICACION": "PURIFICACION",  # Mantener sin tilde
+        }
 
-    for old, new in replacements.items():
-        if text == old:
-            text = new
-            break
+        for old, new in replacements.items():
+            if text == old:
+                text = new
+                break
 
-    return text
+        return text
+        
+    except Exception as e:
+        logger.warning(f"Error normalizando texto '{text}': {e}")
+        return ""
 
 
 def normalize_vereda_name(vereda_name):
     """
-    NUEVO: Normalización específica para nombres de veredas.
-    
-    Args:
-        vereda_name (str): Nombre de vereda a normalizar
-    
-    Returns:
-        str: Nombre normalizado
+    MEJORADO: Normalización específica para nombres de veredas con mapeo automático.
     """
     if pd.isna(vereda_name) or not isinstance(vereda_name, str):
         return ""
@@ -106,20 +119,30 @@ def normalize_vereda_name(vereda_name):
 
 def create_intelligent_vereda_mapping(casos_df, epizootias_df):
     """
-    NUEVO: Crea un mapeo inteligente entre nombres de veredas usando fuzzy matching.
-    
-    Args:
-        casos_df (pd.DataFrame): DataFrame de casos
-        epizootias_df (pd.DataFrame): DataFrame de epizootias
-    
-    Returns:
-        dict: Mapeo de veredas normalizadas
+    MEJORADO: Integra sistema automático de mapeo si está disponible.
     """
     mapping = {}
     
-    if not FUZZY_AVAILABLE:
-        print("⚠️ FuzzyWuzzy no disponible. Usando mapeo básico.")
-        return mapping
+    # Si está disponible el sistema automático, usarlo como base
+    if MAPPING_SYSTEM_AVAILABLE:
+        try:
+            auto_mapping = get_vereda_mapping(include_medium_confidence=True)
+            mapping.update(auto_mapping)
+            logger.info(f"✅ Sistema automático aplicado: {len(auto_mapping)} mapeos de veredas")
+        except Exception as e:
+            logger.warning(f"Error aplicando sistema automático: {e}")
+    
+    # Si no está disponible o como fallback, usar fuzzy matching
+    if not mapping and FUZZY_AVAILABLE:
+        mapping = _create_fuzzy_vereda_mapping(casos_df, epizootias_df)
+        logger.info(f"✅ Sistema fuzzy aplicado: {len(mapping)} mapeos de veredas")
+    
+    return mapping
+
+
+def _create_fuzzy_vereda_mapping(casos_df, epizootias_df):
+    """Sistema de mapeo fuzzy como fallback."""
+    mapping = {}
     
     # Obtener todas las veredas únicas de ambos datasets
     veredas_casos = set()
@@ -153,11 +176,9 @@ def create_intelligent_vereda_mapping(casos_df, epizootias_df):
         similares = []
         for otra_vereda_norm in veredas_normalizadas:
             if otra_vereda_norm != vereda_norm and otra_vereda_norm not in processed_veredas:
-                # Calcular similitud
                 ratio = fuzz.ratio(vereda_norm, otra_vereda_norm)
                 token_ratio = fuzz.token_sort_ratio(vereda_norm, otra_vereda_norm)
                 
-                # Si la similitud es alta, considerarlas equivalentes
                 if ratio >= 85 or token_ratio >= 90:
                     similares.append(otra_vereda_norm)
         
@@ -176,97 +197,148 @@ def create_intelligent_vereda_mapping(casos_df, epizootias_df):
         
         processed_veredas.add(vereda_norm)
     
-    print(f"✅ Sistema de mapeo inteligente: {len(mapping)} mapeos creados")
-    
-    # Mostrar algunos ejemplos de mapeo para verificación
-    if mapping:
-        print("📋 Ejemplos de mapeo:")
-        count = 0
-        for original, mapeada in mapping.items():
-            if original != mapeada and count < 5:  # Mostrar solo diferencias
-                print(f"   '{original}' → '{mapeada}'")
-                count += 1
-    
     return mapping
+
+
+def apply_automatic_mapping_to_dataframes(casos_df, epizootias_df):
+    """
+    NUEVA: Aplica mapeo automático a ambos DataFrames si está disponible.
+    """
+    if not MAPPING_SYSTEM_AVAILABLE:
+        logger.info("Sistema de mapeo automático no disponible, usando mapeo básico")
+        return casos_df, epizootias_df
+    
+    try:
+        casos_mapped = casos_df.copy()
+        epizootias_mapped = epizootias_df.copy()
+        
+        # Aplicar mapeo a municipios en casos
+        if not casos_mapped.empty and "municipio_normalizado" in casos_mapped.columns:
+            casos_mapped = apply_shapefile_mapping_safe(
+                casos_mapped,
+                'municipio_normalizado',
+                'municipios',
+                include_medium_confidence=False  # Solo alta confianza inicialmente
+            )
+            # Usar la columna mapeada
+            if 'municipio_normalizado_mapped' in casos_mapped.columns:
+                casos_mapped['municipio_normalizado'] = casos_mapped['municipio_normalizado_mapped']
+                casos_mapped.drop('municipio_normalizado_mapped', axis=1, inplace=True)
+        
+        # Aplicar mapeo a municipios en epizootias
+        if not epizootias_mapped.empty and "municipio_normalizado" in epizootias_mapped.columns:
+            epizootias_mapped = apply_shapefile_mapping_safe(
+                epizootias_mapped,
+                'municipio_normalizado', 
+                'municipios',
+                include_medium_confidence=False
+            )
+            if 'municipio_normalizado_mapped' in epizootias_mapped.columns:
+                epizootias_mapped['municipio_normalizado'] = epizootias_mapped['municipio_normalizado_mapped']
+                epizootias_mapped.drop('municipio_normalizado_mapped', axis=1, inplace=True)
+        
+        # Aplicar mapeo a veredas en casos
+        if not casos_mapped.empty and "vereda_normalizada" in casos_mapped.columns:
+            casos_mapped = apply_shapefile_mapping_safe(
+                casos_mapped,
+                'vereda_normalizada',
+                'veredas',
+                include_medium_confidence=False
+            )
+            if 'vereda_normalizada_mapped' in casos_mapped.columns:
+                casos_mapped['vereda_normalizada'] = casos_mapped['vereda_normalizada_mapped'] 
+                casos_mapped.drop('vereda_normalizada_mapped', axis=1, inplace=True)
+        
+        # Aplicar mapeo a veredas en epizootias
+        if not epizootias_mapped.empty and "vereda_normalizada" in epizootias_mapped.columns:
+            epizootias_mapped = apply_shapefile_mapping_safe(
+                epizootias_mapped,
+                'vereda_normalizada',
+                'veredas',
+                include_medium_confidence=False
+            )
+            if 'vereda_normalizada_mapped' in epizootias_mapped.columns:
+                epizootias_mapped['vereda_normalizada'] = epizootias_mapped['vereda_normalizada_mapped']
+                epizootias_mapped.drop('vereda_normalizada_mapped', axis=1, inplace=True)
+        
+        logger.info("✅ Mapeo automático aplicado a ambos DataFrames")
+        return casos_mapped, epizootias_mapped
+        
+    except Exception as e:
+        logger.error(f"Error aplicando mapeo automático: {e}")
+        return casos_df, epizootias_df
 
 
 def apply_vereda_mapping(df, vereda_column, mapping):
     """
-    NUEVO: Aplica el mapeo inteligente de veredas a un DataFrame.
-    
-    Args:
-        df (pd.DataFrame): DataFrame a procesar
-        vereda_column (str): Nombre de la columna de vereda
-        mapping (dict): Diccionario de mapeo
-    
-    Returns:
-        pd.DataFrame: DataFrame con veredas mapeadas
+    MEJORADO: Aplica el mapeo inteligente de veredas a un DataFrame con logging.
     """
     if df.empty or vereda_column not in df.columns or not mapping:
         return df
     
     df_copy = df.copy()
+    original_count = len(df_copy[vereda_column].unique())
     
     # Aplicar mapeo
     df_copy[vereda_column] = df_copy[vereda_column].map(mapping).fillna(df_copy[vereda_column])
+    
+    mapped_count = len(df_copy[vereda_column].unique())
+    mappings_applied = original_count - mapped_count
+    
+    if mappings_applied > 0:
+        logger.info(f"✅ Mapeo de veredas aplicado: {mappings_applied} nombres unificados")
     
     return df_copy
 
 
 def capitalize_names(text):
     """
-    Convierte texto a formato de nombres propios (Primera letra mayúscula, resto minúscula).
-    Maneja casos especiales como nombres con preposiciones.
-
-    Args:
-        text (str): Texto a formatear
-
-    Returns:
-        str: Texto con formato de nombre propio
+    MEJORADO: Convierte texto a formato de nombres propios con manejo robusto.
     """
     if pd.isna(text) or not isinstance(text, str):
         return ""
 
     # Limpiar texto primero
     text = text.strip()
+    
+    if not text:
+        return ""
 
     # Palabras que deben mantenerse en minúscula (preposiciones, artículos)
     lowercase_words = {"de", "del", "la", "las", "el", "los", "y", "e", "o", "u"}
 
-    # Dividir en palabras
-    words = text.split()
-    formatted_words = []
+    try:
+        # Dividir en palabras
+        words = text.split()
+        formatted_words = []
 
-    for i, word in enumerate(words):
-        # Limpiar palabra de caracteres especiales al inicio/final para el análisis
-        clean_word = re.sub(r"^[^\w]+|[^\w]+$", "", word.lower())
+        for i, word in enumerate(words):
+            # Limpiar palabra de caracteres especiales al inicio/final para el análisis
+            clean_word = re.sub(r"^[^\w]+|[^\w]+$", "", word.lower())
 
-        # Si es la primera palabra o no está en la lista de palabras en minúscula
-        if i == 0 or clean_word not in lowercase_words:
-            # Capitalizar la primera letra
-            if word:
-                formatted_word = word[0].upper() + word[1:].lower()
+            # Si es la primera palabra o no está en la lista de palabras en minúscula
+            if i == 0 or clean_word not in lowercase_words:
+                # Capitalizar la primera letra
+                if word:
+                    formatted_word = word[0].upper() + word[1:].lower()
+                else:
+                    formatted_word = word
             else:
-                formatted_word = word
-        else:
-            # Mantener en minúscula
-            formatted_word = word.lower()
+                # Mantener en minúscula
+                formatted_word = word.lower()
 
-        formatted_words.append(formatted_word)
+            formatted_words.append(formatted_word)
 
-    return " ".join(formatted_words)
+        return " ".join(formatted_words)
+        
+    except Exception as e:
+        logger.warning(f"Error capitalizando '{text}': {e}")
+        return text
 
 
 def excel_date_to_datetime(excel_date):
     """
-    Convierte fecha de Excel a datetime.
-    CORREGIDO: Maneja formato DD/MM/YYYY correctamente.
-
-    Args:
-        excel_date: Número de fecha de Excel, datetime, o string
-
-    Returns:
-        datetime: Fecha convertida o None si no es válida
+    MEJORADO: Convierte fecha de Excel a datetime con manejo más robusto.
     """
     try:
         # Si ya es datetime, retornar tal como está
@@ -279,6 +351,11 @@ def excel_date_to_datetime(excel_date):
 
         # Si es string, intentar parsear con formato DD/MM/YYYY
         if isinstance(excel_date, str):
+            # Limpiar string primero
+            excel_date = excel_date.strip()
+            if not excel_date or excel_date.lower() in ['nan', 'none', 'null']:
+                return None
+                
             # Intentar diferentes formatos comunes
             formatos_fecha = [
                 "%d/%m/%Y",      # DD/MM/YYYY
@@ -292,7 +369,7 @@ def excel_date_to_datetime(excel_date):
             
             for formato in formatos_fecha:
                 try:
-                    fecha_convertida = datetime.strptime(excel_date.strip(), formato)
+                    fecha_convertida = datetime.strptime(excel_date, formato)
                     # Si el año es menor a 50, asumimos que es 20XX, sino 19XX
                     if fecha_convertida.year < 50:
                         fecha_convertida = fecha_convertida.replace(year=fecha_convertida.year + 2000)
@@ -310,28 +387,25 @@ def excel_date_to_datetime(excel_date):
 
         # Si es número, convertir desde formato Excel
         if isinstance(excel_date, (int, float)):
-            # Excel cuenta días desde 1900-01-01, pero tiene un bug del año bisiesto
-            # Usar 1899-12-30 como origen para corregir
+            # Validar que sea un número razonable
+            if pd.isna(excel_date) or excel_date < 0 or excel_date > 100000:
+                return None
+                
             try:
                 return pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
             except:
                 return None
 
         return None
+        
     except Exception as e:
-        print(f"Error procesando fecha: {excel_date} - {str(e)}")
+        logger.warning(f"Error procesando fecha: {excel_date} - {str(e)}")
         return None
 
 
 def format_date_display(date_value):
     """
-    Formatea una fecha para mostrar solo YYYY-MM-DD sin hora.
-
-    Args:
-        date_value: Valor de fecha a formatear
-
-    Returns:
-        str: Fecha formateada o cadena vacía si no es válida
+    MEJORADO: Formatea una fecha para mostrar con manejo de errores.
     """
     if pd.isna(date_value):
         return ""
@@ -346,20 +420,162 @@ def format_date_display(date_value):
                 return converted_date.strftime("%Y-%m-%d")
             else:
                 return ""
-    except:
+    except Exception as e:
+        logger.warning(f"Error formateando fecha {date_value}: {e}")
         return ""
 
 
+def process_casos_dataframe(df):
+    """
+    MEJORADO: Procesa el dataframe de casos confirmados con mapeo automático.
+    """
+    df_processed = df.copy()
+
+    # Normalizar municipios y veredas
+    if "municipio" in df_processed.columns:
+        df_processed["municipio_normalizado"] = df_processed["municipio"].apply(normalize_text)
+        df_processed["municipio"] = df_processed["municipio"].apply(capitalize_names)
+
+    if "vereda" in df_processed.columns:
+        df_processed["vereda_normalizada"] = df_processed["vereda"].apply(normalize_text)
+        df_processed["vereda"] = df_processed["vereda"].apply(capitalize_names)
+
+    # Procesar fechas con formato DD/MM/YYYY
+    if "fecha_inicio_sintomas" in df_processed.columns:
+        logger.info("📅 Procesando fechas de casos...")
+        df_processed["fecha_inicio_sintomas"] = df_processed["fecha_inicio_sintomas"].apply(excel_date_to_datetime)
+        
+        # Debug: mostrar algunas fechas procesadas
+        fechas_validas = df_processed["fecha_inicio_sintomas"].dropna()
+        if not fechas_validas.empty:
+            logger.info(f"   Fechas procesadas - Mínima: {fechas_validas.min()}, Máxima: {fechas_validas.max()}")
+
+    # Crear grupos de edad
+    if "edad" in df_processed.columns:
+        df_processed["grupo_edad"] = create_age_groups(df_processed["edad"])
+
+    # Normalizar sexo
+    if "sexo" in df_processed.columns:
+        df_processed["sexo"] = (
+            df_processed["sexo"]
+            .str.upper()
+            .replace({"M": "Masculino", "F": "Femenino"})
+        )
+
+    # Agregar año de inicio de síntomas
+    if "fecha_inicio_sintomas" in df_processed.columns:
+        df_processed["año_inicio"] = df_processed["fecha_inicio_sintomas"].dt.year
+
+    return df_processed
+
+
+def process_epizootias_dataframe(df):
+    """
+    MEJORADO: Procesa el dataframe de epizootias con mapeo automático.
+    """
+    df_processed = df.copy()
+
+    # Normalizar municipios y veredas
+    if "municipio" in df_processed.columns:
+        df_processed["municipio_normalizado"] = df_processed["municipio"].apply(normalize_text)
+        df_processed["municipio"] = df_processed["municipio"].apply(capitalize_names)
+
+    if "vereda" in df_processed.columns:
+        df_processed["vereda_normalizada"] = df_processed["vereda"].apply(normalize_text)
+        df_processed["vereda"] = df_processed["vereda"].apply(capitalize_names)
+
+    # Procesar fechas con formato DD/MM/YYYY
+    if "fecha_recoleccion" in df_processed.columns:
+        logger.info("📅 Procesando fechas de epizootias...")
+        df_processed["fecha_recoleccion"] = df_processed["fecha_recoleccion"].apply(excel_date_to_datetime)
+        
+        # Debug: mostrar algunas fechas procesadas
+        fechas_validas = df_processed["fecha_recoleccion"].dropna()
+        if not fechas_validas.empty:
+            logger.info(f"   Fechas de epizootias - Mínima: {fechas_validas.min()}, Máxima: {fechas_validas.max()}")
+
+    # Normalizar descripción
+    if "descripcion" in df_processed.columns:
+        df_processed["descripcion"] = (
+            df_processed["descripcion"].str.upper().str.strip()
+        )
+
+    # Normalizar proveniente
+    if "proveniente" in df_processed.columns:
+        df_processed["proveniente"] = df_processed["proveniente"].str.strip()
+
+    # Agregar año de recolección
+    if "fecha_recoleccion" in df_processed.columns:
+        df_processed["año_recoleccion"] = df_processed["fecha_recoleccion"].dt.year
+
+    # Categorizar resultados (incluyendo en estudio)
+    if "descripcion" in df_processed.columns:
+        df_processed["categoria_resultado"] = (
+            df_processed["descripcion"]
+            .map(
+                {
+                    "POSITIVO FA": "Positivo",
+                    "NEGATIVO FA": "Negativo",
+                    "NO APTA": "No apta",
+                    "EN ESTUDIO": "En Estudio",
+                }
+            )
+            .fillna("Otro")
+        )
+
+    return df_processed
+
+
+def validate_mapping_results(casos_df, epizootias_df):
+    """
+    NUEVA: Valida los resultados del mapeo automático.
+    """
+    validation_results = {
+        'casos': {'issues': [], 'stats': {}},
+        'epizootias': {'issues': [], 'stats': {}}
+    }
+    
+    # Validar casos
+    if not casos_df.empty:
+        if 'municipio_normalizado' in casos_df.columns:
+            # Buscar casos específicos conocidos
+            villarica_count = len(casos_df[casos_df['municipio_normalizado'] == 'VILLARICA'])
+            villarrica_count = len(casos_df[casos_df['municipio_normalizado'] == 'VILLARRICA'])
+            
+            validation_results['casos']['stats'] = {
+                'total_municipios': casos_df['municipio_normalizado'].nunique(),
+                'villarica_original': villarica_count,
+                'villarrica_mapped': villarrica_count
+            }
+            
+            if villarica_count > 0:
+                validation_results['casos']['issues'].append(
+                    f"❌ Encontrados {villarica_count} casos con 'VILLARICA' sin mapear"
+                )
+    
+    # Validar epizootias
+    if not epizootias_df.empty:
+        if 'municipio_normalizado' in epizootias_df.columns:
+            villarica_count = len(epizootias_df[epizootias_df['municipio_normalizado'] == 'VILLARICA'])
+            villarrica_count = len(epizootias_df[epizootias_df['municipio_normalizado'] == 'VILLARRICA'])
+            
+            validation_results['epizootias']['stats'] = {
+                'total_municipios': epizootias_df['municipio_normalizado'].nunique(),
+                'villarica_original': villarica_count,
+                'villarrica_mapped': villarrica_count
+            }
+            
+            if villarica_count > 0:
+                validation_results['epizootias']['issues'].append(
+                    f"❌ Encontradas {villarica_count} epizootias con 'VILLARICA' sin mapear"
+                )
+    
+    return validation_results
+
+
+# Las demás funciones permanecen igual...
 def calculate_days_since(date_value):
-    """
-    NUEVO: Calcula los días transcurridos desde una fecha hasta hoy.
-    
-    Args:
-        date_value: Fecha a comparar
-    
-    Returns:
-        int: Días transcurridos, None si fecha inválida
-    """
+    """Calcula los días transcurridos desde una fecha hasta hoy."""
     if pd.isna(date_value):
         return None
     
@@ -380,15 +596,7 @@ def calculate_days_since(date_value):
 
 
 def format_time_elapsed(days):
-    """
-    NUEVO: Formatea tiempo transcurrido en formato legible.
-    
-    Args:
-        days (int): Días transcurridos
-    
-    Returns:
-        str: Tiempo formateado (ej: "3 días", "2 semanas", "1 año")
-    """
+    """Formatea tiempo transcurrido en formato legible."""
     if days is None or days < 0:
         return "Fecha inválida"
     
@@ -410,17 +618,7 @@ def format_time_elapsed(days):
 
 
 def get_latest_case_info(df, date_column, location_columns=None):
-    """
-    NUEVO: Obtiene información del caso más reciente.
-    
-    Args:
-        df (pd.DataFrame): DataFrame a analizar
-        date_column (str): Columna de fecha
-        location_columns (list): Columnas de ubicación a incluir
-    
-    Returns:
-        dict: Información del caso más reciente
-    """
+    """Obtiene información del caso más reciente."""
     if df.empty or date_column not in df.columns:
         return {
             "existe": False,
@@ -469,16 +667,7 @@ def get_latest_case_info(df, date_column, location_columns=None):
 
 
 def create_age_groups(ages):
-    """
-    Crea grupos de edad a partir de una serie de edades usando configuración predefinida.
-
-    Args:
-        ages (pd.Series): Serie con las edades
-
-    Returns:
-        pd.Series: Serie con los grupos de edad
-    """
-
+    """Crea grupos de edad a partir de una serie de edades."""
     def classify_age(age):
         if pd.isna(age):
             return "No especificado"
@@ -496,13 +685,7 @@ def create_age_groups(ages):
 
 def normalize_municipio_name(municipio):
     """
-    Normaliza nombres de municipios para resolver inconsistencias específicas.
-
-    Args:
-        municipio (str): Nombre del municipio
-
-    Returns:
-        str: Nombre normalizado
+    MEJORADO: Normaliza nombres de municipios integrando sistema automático.
     """
     if pd.isna(municipio):
         return ""
@@ -510,7 +693,18 @@ def normalize_municipio_name(municipio):
     # Aplicar normalización básica
     normalized = normalize_text(str(municipio))
 
-    # Mapeo específico para municipios conocidos con inconsistencias
+    # Si está disponible el sistema automático, intentar mapear
+    if MAPPING_SYSTEM_AVAILABLE:
+        try:
+            municipio_mapping = get_municipio_mapping()
+            mapped_value = municipio_mapping.get(str(municipio), municipio_mapping.get(normalized, normalized))
+            if mapped_value != normalized:
+                logger.debug(f"Municipio mapeado: {normalized} → {mapped_value}")
+            return mapped_value
+        except Exception as e:
+            logger.warning(f"Error aplicando mapeo automático a municipio '{municipio}': {e}")
+
+    # Mapeo manual específico como fallback
     municipio_map = {
         "VILLARICA": "VILLARRICA",
         "PURIFICACION": "PURIFICACION",
@@ -523,7 +717,6 @@ def normalize_municipio_name(municipio):
     }
 
     return municipio_map.get(normalized, normalized)
-
 
 def process_casos_dataframe(df):
     """
