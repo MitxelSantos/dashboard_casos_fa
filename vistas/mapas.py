@@ -891,10 +891,14 @@ def handle_enhanced_click_interactions(map_data, municipios_data):
                     if distance < min_distance:
                         min_distance = distance
                         municipio_clicked = row['MpNombre']
+                        
                 
                 if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
-                    # **FILTRAR AUTOMÁTICAMENTE** (incluso si no tiene datos)
+                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
                     st.session_state['municipio_filter'] = municipio_clicked
+                    
+                    # NUEVO: Resetear vereda cuando se cambia municipio
+                    st.session_state['vereda_filter'] = 'Todas'
                     
                     # **MENSAJE MEJORADO** según tenga datos o no
                     row_data = municipios_data[municipios_data['MpNombre'] == municipio_clicked].iloc[0]
@@ -902,8 +906,10 @@ def handle_enhanced_click_interactions(map_data, municipios_data):
                     
                     if tiene_datos:
                         st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
+                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
                     else:
                         st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
+                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
                     
                     # **ACTUALIZAR INMEDIATAMENTE**
                     st.rerun()

@@ -1,9 +1,11 @@
 """
-Vista de información principal CORREGIDA del dashboard de Fiebre Amarilla.
-CORRECCIONES: 
-- Colorscales de Plotly corregidos
-- Eliminados mensajes de riesgo
-- Análisis enfocado en información, no en alarma
+Vista de análisis epidemiológico ACTUALIZADA del dashboard de Fiebre Amarilla.
+NUEVAS FUNCIONALIDADES:
+- Tablas detalladas estilo Excel con todas las columnas
+- Tablas resumen estéticamente mejoradas
+- Manejo de epizootias positivas + en estudio
+- Información de último caso/epizootia con tiempo transcurrido
+- Sin pestañas anidadas - interfaz simplificada
 """
 
 import streamlit as st
@@ -13,630 +15,674 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
-from utils.data_processor import prepare_dataframe_for_display
+from utils.data_processor import (
+    prepare_dataframe_for_display,
+    get_latest_case_info,
+    calculate_basic_metrics
+)
 
 
 def show(data_filtered, filters, colors):
     """
-    Vista simplificada SOLO con gráficos, análisis y tablas.
-    CORREGIDA: Sin análisis de riesgo, solo información.
+    Vista de análisis epidemiológico con tablas detalladas y estéticas.
     """
     casos = data_filtered["casos"]
-    epizootias = data_filtered["epizootias"]
+    epizootias = data_filtered["epizootias"]  # Ya contiene positivas + en estudio
 
-    # **TÍTULO CORREGIDO**: Sin menciones de riesgo
+    # Título principal
     st.markdown(
         f"""
         <div style="
             background: linear-gradient(135deg, {colors['info']}, {colors['secondary']});
             color: white;
-            padding: 15px 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 25px;
             text-align: center;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
         ">
-            <h2 style="margin: 0; font-size: 1.5rem;">📊 Análisis Epidemiológico</h2>
-            <p style="margin: 5px 0 0 0; opacity: 0.9; font-size: 0.9rem;">
-                💡 <strong>Tip:</strong> Las métricas están en la pestaña "🗺️ Mapas Interactivos"
+            <h2 style="margin: 0; font-size: 1.8rem; font-weight: 700;">📊 Análisis Epidemiológico Detallado</h2>
+            <p style="margin: 8px 0 0 0; opacity: 0.95; font-size: 1rem;">
+                📋 Tablas detalladas • 📈 Análisis visual • 📥 Exportación avanzada
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Análisis epidemiológico (SIN análisis de riesgo)
-    show_epidemiological_analysis_charts(casos, epizootias, colors, filters)
+    # CSS para tablas mejoradas
+    apply_enhanced_tables_css(colors)
+
+    # Sección 1: Información general
+    show_general_information_section(casos, epizootias, colors)
 
     st.markdown("---")
-    
-    # Distribución geográfica
-    show_enhanced_geographic_analysis(casos, epizootias, colors, filters)
-    
+
+    # Sección 2: Tablas detalladas tipo Excel
+    show_detailed_excel_tables(casos, epizootias, colors)
+
     st.markdown("---")
-    
-    # Tablas de datos detalladas
-    show_detailed_data_tables(casos, epizootias, colors)
-    
+
+    # Sección 3: Tabla resumen estética
+    show_aesthetic_summary_table(casos, epizootias, colors)
+
     st.markdown("---")
-    
-    # Exportación de datos
-    show_advanced_export_section(casos, epizootias)
 
+    # Sección 4: Análisis visual simplificado
+    show_simplified_visual_analysis(casos, epizootias, colors)
 
-def show_epidemiological_analysis_charts(casos, epizootias, colors, filters):
-    """
-    Análisis epidemiológico enfocado en información descriptiva.
-    CORREGIDO: Colorscales válidos de Plotly.
-    """
-    st.subheader("📈 Análisis Epidemiológico")
-    
-    st.markdown("### 🦠 Casos Humanos - Análisis Demográfico")
-    
-    if not casos.empty:
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("**📊 Distribución por Sexo**")
-            if "sexo" in casos.columns:
-                sexo_dist = casos["sexo"].value_counts()
-                if not sexo_dist.empty:
-                    fig_sexo = px.pie(
-                        values=sexo_dist.values,
-                        names=sexo_dist.index,
-                        title="Casos por Género",
-                        color_discrete_map={
-                            "Masculino": colors["info"],
-                            "Femenino": colors["secondary"],
-                        },
-                        hole=0.4
-                    )
-                    fig_sexo.update_layout(height=350)
-                    fig_sexo.update_traces(textposition='inside', textinfo='percent+label')
-                    st.plotly_chart(fig_sexo, use_container_width=True)
-                else:
-                    st.info("No hay datos de sexo disponibles")
-            else:
-                st.info("No hay datos de sexo en los casos")
-
-        with col2:
-            st.markdown("**📈 Distribución por Grupos de Edad**")
-            if "edad" in casos.columns:
-                casos_edad = casos.dropna(subset=["edad"]).copy()
-                
-                if not casos_edad.empty:
-                    casos_edad["grupo_edad"] = pd.cut(
-                        casos_edad["edad"], 
-                        bins=[0, 10, 20, 30, 40, 50, 60, 70, 80, 100], 
-                        labels=["0-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80", "80+"],
-                        include_lowest=True
-                    )
-                    
-                    edad_counts = casos_edad["grupo_edad"].value_counts().sort_index()
-                    
-                    if not edad_counts.empty:
-                        fig_edad = px.bar(
-                            x=edad_counts.index,
-                            y=edad_counts.values,
-                            title="Casos por Grupo de Edad",
-                            labels={"x": "Grupo de Edad", "y": "Número de Casos"},
-                            color=edad_counts.values,
-                            color_continuous_scale="reds",  # CORREGIDO: colorscale válido
-                        )
-                        fig_edad.update_layout(height=350, showlegend=False)
-                        st.plotly_chart(fig_edad, use_container_width=True)
-                    else:
-                        st.info("No hay datos suficientes para grupos de edad")
-                else:
-                    st.info("No hay datos de edad disponibles")
-            else:
-                st.info("No hay datos de edad en los casos")
-
-        # Segunda fila: Análisis demográfico (SIN análisis de letalidad alarmante)
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("**📊 Análisis Demográfico Detallado**")
-            if "condicion_final" in casos.columns and "edad" in casos.columns and "sexo" in casos.columns:
-                casos_completos = casos.dropna(subset=["condicion_final", "edad", "sexo"]).copy()
-                
-                if not casos_completos.empty:
-                    casos_completos["grupo_edad"] = pd.cut(
-                        casos_completos["edad"], 
-                        bins=[0, 20, 40, 60, 100], 
-                        labels=["0-20", "21-40", "41-60", "60+"],
-                        include_lowest=True
-                    )
-                    
-                    demografia_data = casos_completos.groupby(["grupo_edad", "sexo", "condicion_final"]).size().reset_index(name="count")
-                    
-                    if not demografia_data.empty:
-                        fig_demografia = px.sunburst(
-                            demografia_data,
-                            path=["grupo_edad", "sexo", "condicion_final"],
-                            values="count",
-                            title="Distribución Demográfica",
-                            color="count",
-                            color_continuous_scale="blues"  # CORREGIDO: colorscale válido
-                        )
-                        fig_demografia.update_layout(height=350)
-                        st.plotly_chart(fig_demografia, use_container_width=True)
-                    else:
-                        st.info("Datos insuficientes para análisis demográfico")
-                else:
-                    st.info("Datos incompletos para análisis demográfico")
-            else:
-                st.info("Faltan datos demográficos completos")
-
-        with col2:
-            st.markdown("**📅 Evolución Temporal de Casos**")
-            if "fecha_inicio_sintomas" in casos.columns:
-                casos_fecha = casos.dropna(subset=["fecha_inicio_sintomas"]).copy()
-                
-                if not casos_fecha.empty:
-                    casos_fecha["año_mes"] = casos_fecha["fecha_inicio_sintomas"].dt.to_period("M")
-                    casos_temporal = casos_fecha.groupby("año_mes").size().reset_index(name="casos")
-                    casos_temporal["fecha"] = casos_temporal["año_mes"].dt.to_timestamp()
-                    
-                    if not casos_temporal.empty:
-                        fig_temporal = px.line(
-                            casos_temporal,
-                            x="fecha",
-                            y="casos",
-                            title="Casos por Mes",
-                            labels={"fecha": "Fecha", "casos": "Número de Casos"},
-                            markers=True
-                        )
-                        fig_temporal.update_traces(line=dict(color=colors["danger"], width=3))
-                        fig_temporal.update_layout(height=350)
-                        st.plotly_chart(fig_temporal, use_container_width=True)
-                    else:
-                        st.info("No hay datos temporales suficientes")
-                else:
-                    st.info("No hay fechas de casos disponibles")
-            else:
-                st.info("No hay datos de fechas en los casos")
-
-    else:
-        st.info("⚠️ No hay casos disponibles para analizar con los filtros actuales")
-
-    # Epizootias - Análisis de fuentes
     st.markdown("---")
-    st.markdown("### 🐒 Epizootias - Análisis de Vigilancia")
-    
-    if not epizootias.empty:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("**📋 Análisis de Fuentes de Epizootias**")
-            if "proveniente" in epizootias.columns:
-                fuente_dist = epizootias["proveniente"].value_counts()
 
-                fuente_dist_simplified = {}
-                for fuente, count in fuente_dist.items():
-                    if "VIGILANCIA COMUNITARIA" in str(fuente):
-                        fuente_dist_simplified["Vigilancia Comunitaria"] = fuente_dist_simplified.get("Vigilancia Comunitaria", 0) + count
-                    elif "INCAUTACIÓN" in str(fuente):
-                        fuente_dist_simplified["Incautación/Rescate"] = fuente_dist_simplified.get("Incautación/Rescate", 0) + count
-                    else:
-                        fuente_simplified = str(fuente)[:25] + "..." if len(str(fuente)) > 25 else str(fuente)
-                        fuente_dist_simplified[fuente_simplified] = fuente_dist_simplified.get(fuente_simplified, 0) + count
-
-                if fuente_dist_simplified:
-                    fig_fuente = px.bar(
-                        x=list(fuente_dist_simplified.values()),
-                        y=list(fuente_dist_simplified.keys()),
-                        orientation="h",
-                        title="Epizootias por Fuente",
-                        labels={"x": "Número de Epizootias", "y": "Fuente"},
-                        color=list(fuente_dist_simplified.values()),
-                        color_continuous_scale="oranges",  # CORREGIDO: colorscale válido
-                    )
-                    fig_fuente.update_layout(height=350, showlegend=False)
-                    st.plotly_chart(fig_fuente, use_container_width=True)
-                else:
-                    st.info("No hay datos de fuentes disponibles")
-            else:
-                st.info("No hay datos de fuentes en las epizootias")
-
-        with col2:
-            st.markdown("**📅 Evolución Temporal de Epizootias**")
-            if "fecha_recoleccion" in epizootias.columns:
-                epi_fecha = epizootias.dropna(subset=["fecha_recoleccion"]).copy()
-                
-                if not epi_fecha.empty:
-                    epi_fecha["año_mes"] = epi_fecha["fecha_recoleccion"].dt.to_period("M")
-                    epi_temporal = epi_fecha.groupby("año_mes").size().reset_index(name="epizootias")
-                    epi_temporal["fecha"] = epi_temporal["año_mes"].dt.to_timestamp()
-                    
-                    if not epi_temporal.empty:
-                        fig_epi_temporal = px.area(
-                            epi_temporal,
-                            x="fecha",
-                            y="epizootias",
-                            title="Epizootias por Mes",
-                            labels={"fecha": "Fecha", "epizootias": "Número de Epizootias"},
-                        )
-                        fig_epi_temporal.update_traces(
-                            fill='tonexty', 
-                            fillcolor=f'rgba(247, 148, 29, 0.3)', 
-                            line=dict(color=colors["warning"], width=3)
-                        )
-                        fig_epi_temporal.update_layout(height=350)
-                        st.plotly_chart(fig_epi_temporal, use_container_width=True)
-                    else:
-                        st.info("No hay datos temporales suficientes")
-                else:
-                    st.info("No hay fechas de epizootias disponibles")
-            else:
-                st.info("No hay datos de fechas en las epizootias")
-
-    else:
-        st.info("⚠️ No hay epizootias disponibles para analizar con los filtros actuales")
+    # Sección 5: Exportación avanzada
+    show_comprehensive_export_section(casos, epizootias, colors)
 
 
-def show_enhanced_geographic_analysis(casos, epizootias, colors, filters):
-    """
-    Análisis geográfico descriptivo sin análisis de riesgo.
-    """
-    st.subheader("🗺️ Análisis Geográfico")
-    
-    municipio_filtrado = filters.get("municipio_normalizado")
-    
-    if municipio_filtrado:
-        st.markdown(f"### 🏘️ Análisis de {filters.get('municipio_display', 'Municipio')}")
-        show_municipal_detailed_analysis(casos, epizootias, municipio_filtrado, colors)
-    else:
-        st.markdown("### 🏛️ Análisis Departamental por Municipios")
-        show_departmental_detailed_analysis(casos, epizootias, colors)
+def apply_enhanced_tables_css(colors):
+    """CSS mejorado para tablas estéticas."""
+    st.markdown(
+        f"""
+        <style>
+        /* Estilos para secciones principales */
+        .analysis-section {{
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border-left: 5px solid {colors['primary']};
+        }}
+
+        .section-header {{
+            color: {colors['primary']};
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid {colors['secondary']};
+        }}
+
+        /* Tabla resumen estética */
+        .aesthetic-table {{
+            width: 100%;
+            border-collapse: collapse;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            margin: 20px 0;
+        }}
+
+        .aesthetic-table th {{
+            background: linear-gradient(135deg, {colors['primary']}, {colors['accent']});
+            color: white;
+            padding: 15px 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+
+        .aesthetic-table td {{
+            padding: 12px;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 0.9rem;
+            transition: background-color 0.3s ease;
+        }}
+
+        .aesthetic-table tr:hover td {{
+            background-color: #f8f9fa;
+        }}
+
+        .aesthetic-table tr:last-child td {{
+            border-bottom: none;
+        }}
+
+        /* Estilos para métricas rápidas */
+        .quick-metrics {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }}
+
+        .quick-metric {{
+            background: linear-gradient(135deg, #f8f9fa, white);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            border-left: 4px solid {colors['info']};
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease;
+        }}
+
+        .quick-metric:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+        }}
+
+        .quick-metric-value {{
+            font-size: 2rem;
+            font-weight: 700;
+            color: {colors['primary']};
+            margin-bottom: 8px;
+        }}
+
+        .quick-metric-label {{
+            color: #666;
+            font-weight: 500;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+
+        /* Indicadores de color por tipo */
+        .municipio-casos {{ border-left-color: {colors['danger']} !important; }}
+        .municipio-epizootias {{ border-left-color: {colors['warning']} !important; }}
+        .municipio-mixto {{ border-left-color: {colors['primary']} !important; }}
+        .municipio-sin-datos {{ border-left-color: #cccccc !important; }}
+
+        /* Tablas de datos responsivas */
+        .data-table-container {{
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            overflow-x: auto;
+            margin: 20px 0;
+        }}
+
+        .data-table-container h4 {{
+            color: {colors['primary']};
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }}
+
+        /* Botones de filtro */
+        .filter-chips {{
+            display: flex;
+            gap: 10px;
+            margin: 15px 0;
+            flex-wrap: wrap;
+        }}
+
+        .filter-chip {{
+            background: {colors['light']};
+            color: {colors['primary']};
+            padding: 8px 15px;
+            border-radius: 20px;
+            border: 1px solid {colors['secondary']};
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }}
+
+        .filter-chip:hover {{
+            background: {colors['secondary']};
+            color: white;
+            transform: translateY(-1px);
+        }}
+
+        /* Información contextual */
+        .info-box {{
+            background: linear-gradient(135deg, {colors['light']}, #ffffff);
+            border-radius: 10px;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid {colors['info']};
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }}
+
+        .info-box-title {{
+            color: {colors['primary']};
+            font-weight: 600;
+            margin-bottom: 8px;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
-def show_municipal_detailed_analysis(casos, epizootias, municipio_normalizado, colors):
-    """
-    Análisis detallado a nivel municipal - solo información descriptiva.
-    """
-    casos_municipio = casos[casos["municipio_normalizado"] == municipio_normalizado] if not casos.empty else pd.DataFrame()
-    epizootias_municipio = epizootias[epizootias["municipio_normalizado"] == municipio_normalizado] if not epizootias.empty else pd.DataFrame()
-    
-    col1, col2 = st.columns(2)
-    
+def show_general_information_section(casos, epizootias, colors):
+    """Sección de información general con métricas rápidas."""
+    st.markdown(
+        """
+        <div class="analysis-section">
+            <div class="section-header">
+                📋 Información General
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Calcular métricas generales
+    metrics = calculate_basic_metrics(casos, epizootias)
+
+    # Métricas rápidas en grid
+    col1, col2, col3, col4 = st.columns(4)
+
     with col1:
-        st.markdown("**📊 Distribución por Veredas - Casos**")
-        if not casos_municipio.empty and "vereda" in casos_municipio.columns:
-            vereda_casos = casos_municipio["vereda"].value_counts().head(10)
-            
-            if not vereda_casos.empty:
-                fig_vereda_casos = px.bar(
-                    x=vereda_casos.values,
-                    y=vereda_casos.index,
-                    orientation="h",
-                    title="Top 10 Veredas con Casos",
-                    labels={"x": "Número de Casos", "y": "Vereda"},
-                    color=vereda_casos.values,
-                    color_continuous_scale="reds",  # CORREGIDO: colorscale válido
-                )
-                fig_vereda_casos.update_layout(height=400, showlegend=False)
-                st.plotly_chart(fig_vereda_casos, use_container_width=True)
-            else:
-                st.info("No hay casos en veredas para mostrar")
-        else:
-            st.info("No hay datos de casos por vereda")
-    
+        st.markdown(
+            f"""
+            <div class="quick-metric municipio-casos">
+                <div class="quick-metric-value">{metrics['total_casos']}</div>
+                <div class="quick-metric-label">Casos Humanos</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     with col2:
-        st.markdown("**📊 Distribución por Veredas - Epizootias**")
-        if not epizootias_municipio.empty and "vereda" in epizootias_municipio.columns:
-            vereda_epi = epizootias_municipio["vereda"].value_counts().head(10)
-            
-            if not vereda_epi.empty:
-                fig_vereda_epi = px.bar(
-                    x=vereda_epi.values,
-                    y=vereda_epi.index,
-                    orientation="h",
-                    title="Top 10 Veredas con Epizootias",
-                    labels={"x": "Número de Epizootias", "y": "Vereda"},
-                    color=vereda_epi.values,
-                    color_continuous_scale="oranges",  # CORREGIDO: colorscale válido
-                )
-                fig_vereda_epi.update_layout(height=400, showlegend=False)
-                st.plotly_chart(fig_vereda_epi, use_container_width=True)
-            else:
-                st.info("No hay epizootias en veredas para mostrar")
-        else:
-            st.info("No hay datos de epizootias por vereda")
+        st.markdown(
+            f"""
+            <div class="quick-metric municipio-epizootias">
+                <div class="quick-metric-value">{metrics['total_epizootias']}</div>
+                <div class="quick-metric-label">Epizootias Total</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-    # Análisis combinado por veredas
-    st.markdown("**🔗 Análisis Combinado por Veredas**")
-    create_combined_vereda_analysis(casos_municipio, epizootias_municipio, colors)
+    with col3:
+        st.markdown(
+            f"""
+            <div class="quick-metric municipio-casos">
+                <div class="quick-metric-value">{metrics['epizootias_positivas']}</div>
+                <div class="quick-metric-label">Positivas</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
+    with col4:
+        st.markdown(
+            f"""
+            <div class="quick-metric municipio-mixto">
+                <div class="quick-metric-value">{metrics['epizootias_en_estudio']}</div>
+                <div class="quick-metric-label">En Estudio</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-def show_departmental_detailed_analysis(casos, epizootias, colors):
-    """
-    Análisis detallado a nivel departamental.
-    """
+    # Información del último caso y epizootia
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        st.markdown("**📊 Ranking de Municipios - Casos**")
-        if not casos.empty and "municipio" in casos.columns:
-            municipio_casos = casos["municipio"].value_counts().head(15)
-            
-            if not municipio_casos.empty:
-                fig_mpio_casos = px.bar(
-                    x=municipio_casos.values,
-                    y=municipio_casos.index,
-                    orientation="h",
-                    title="Top 15 Municipios con Casos",
-                    labels={"x": "Número de Casos", "y": "Municipio"},
-                    color=municipio_casos.values,
-                    color_continuous_scale="reds",  # CORREGIDO: colorscale válido
-                )
-                fig_mpio_casos.update_layout(height=500, showlegend=False)
-                st.plotly_chart(fig_mpio_casos, use_container_width=True)
-            else:
-                st.info("No hay casos por municipio para mostrar")
+        ultimo_caso = metrics["ultimo_caso"]
+        if ultimo_caso["existe"]:
+            st.markdown(
+                f"""
+                <div class="info-box">
+                    <div class="info-box-title">🦠 Último Caso Registrado</div>
+                    <strong>Ubicación:</strong> {ultimo_caso["ubicacion"]}<br>
+                    <strong>Fecha:</strong> {ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}<br>
+                    <strong>Tiempo transcurrido:</strong> {ultimo_caso["tiempo_transcurrido"]}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.info("No hay datos de casos por municipio")
-    
+            st.markdown(
+                """
+                <div class="info-box">
+                    <div class="info-box-title">🦠 Último Caso Registrado</div>
+                    No hay casos registrados con los filtros actuales
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
     with col2:
-        st.markdown("**📊 Ranking de Municipios - Epizootias**")
-        if not epizootias.empty and "municipio" in epizootias.columns:
-            municipio_epi = epizootias["municipio"].value_counts().head(15)
-            
-            if not municipio_epi.empty:
-                fig_mpio_epi = px.bar(
-                    x=municipio_epi.values,
-                    y=municipio_epi.index,
-                    orientation="h",
-                    title="Top 15 Municipios con Epizootias",
-                    labels={"x": "Número de Epizootias", "y": "Municipio"},
-                    color=municipio_epi.values,
-                    color_continuous_scale="oranges",  # CORREGIDO: colorscale válido
-                )
-                fig_mpio_epi.update_layout(height=500, showlegend=False)
-                st.plotly_chart(fig_mpio_epi, use_container_width=True)
-            else:
-                st.info("No hay epizootias por municipio para mostrar")
+        ultima_epizootia = metrics["ultima_epizootia_positiva"]
+        if ultima_epizootia["existe"]:
+            st.markdown(
+                f"""
+                <div class="info-box">
+                    <div class="info-box-title">🔴 Última Epizootia Positiva</div>
+                    <strong>Ubicación:</strong> {ultima_epizootia["ubicacion"]}<br>
+                    <strong>Fecha:</strong> {ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}<br>
+                    <strong>Tiempo transcurrido:</strong> {ultima_epizootia["tiempo_transcurrido"]}
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
         else:
-            st.info("No hay datos de epizootias por municipio")
+            st.markdown(
+                """
+                <div class="info-box">
+                    <div class="info-box-title">🔴 Última Epizootia Positiva</div>
+                    No hay epizootias positivas registradas con los filtros actuales
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-    # Análisis combinado por municipios
-    st.markdown("**🔗 Análisis Combinado por Municipios**")
-    create_combined_municipio_analysis(casos, epizootias, colors)
-
-
-def create_combined_vereda_analysis(casos, epizootias, colors):
-    """
-    Análisis combinado de casos y epizootias por vereda.
-    """
-    combined_data = []
-    
-    veredas_casos = set(casos["vereda"].dropna()) if not casos.empty and "vereda" in casos.columns else set()
-    veredas_epi = set(epizootias["vereda"].dropna()) if not epizootias.empty and "vereda" in epizootias.columns else set()
-    todas_veredas = veredas_casos.union(veredas_epi)
-    
-    for vereda in todas_veredas:
-        casos_count = len(casos[casos["vereda"] == vereda]) if not casos.empty and "vereda" in casos.columns else 0
-        epi_count = len(epizootias[epizootias["vereda"] == vereda]) if not epizootias.empty and "vereda" in epizootias.columns else 0
-        total_actividad = casos_count + epi_count
-        
-        if total_actividad > 0:
-            combined_data.append({
-                "Vereda": vereda,
-                "Casos": casos_count,
-                "Epizootias": epi_count,
-                "Total": total_actividad
-            })
-    
-    if combined_data:
-        df_combined = pd.DataFrame(combined_data).sort_values("Total", ascending=True).tail(10)
-        
-        fig_combined = go.Figure()
-        
-        fig_combined.add_trace(go.Bar(
-            x=df_combined["Casos"],
-            y=df_combined["Vereda"],
-            name="Casos Humanos",
-            orientation="h",
-            marker_color=colors["danger"],
-            opacity=0.8
-        ))
-        
-        fig_combined.add_trace(go.Bar(
-            x=df_combined["Epizootias"],
-            y=df_combined["Vereda"],
-            name="Epizootias",
-            orientation="h",
-            marker_color=colors["warning"],
-            opacity=0.8
-        ))
-        
-        fig_combined.update_layout(
-            title="Top 10 Veredas - Actividad Combinada",
-            xaxis_title="Número de Eventos",
-            yaxis_title="Vereda",
-            barmode="stack",
-            height=400,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02)
-        )
-        
-        st.plotly_chart(fig_combined, use_container_width=True)
-    else:
-        st.info("No hay datos combinados para mostrar")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-def create_combined_municipio_analysis(casos, epizootias, colors):
-    """
-    Análisis combinado de casos y epizootias por municipio.
-    """
-    combined_data = []
-    
-    municipios_casos = set(casos["municipio"].dropna()) if not casos.empty and "municipio" in casos.columns else set()
-    municipios_epi = set(epizootias["municipio"].dropna()) if not epizootias.empty and "municipio" in epizootias.columns else set()
-    todos_municipios = municipios_casos.union(municipios_epi)
-    
-    for municipio in todos_municipios:
-        casos_count = len(casos[casos["municipio"] == municipio]) if not casos.empty and "municipio" in casos.columns else 0
-        epi_count = len(epizootias[epizootias["municipio"] == municipio]) if not epizootias.empty and "municipio" in epizootias.columns else 0
-        total_actividad = casos_count + epi_count
-        
-        if total_actividad > 0:
-            combined_data.append({
-                "Municipio": municipio,
-                "Casos": casos_count,
-                "Epizootias": epi_count,
-                "Total": total_actividad
-            })
-    
-    if combined_data:
-        df_combined = pd.DataFrame(combined_data).sort_values("Total", ascending=False).head(10)
-        
-        fig_scatter = px.scatter(
-            df_combined,
-            x="Casos",
-            y="Epizootias",
-            size="Total",
-            color="Total",
-            hover_name="Municipio",
-            title="Correlación Casos vs Epizootias por Municipio",
-            labels={"Casos": "Número de Casos Humanos", "Epizootias": "Número de Epizootias"},
-            color_continuous_scale="oranges",  # CORREGIDO: colorscale válido
-            size_max=60
-        )
-        
-        fig_scatter.update_layout(height=400)
-        st.plotly_chart(fig_scatter, use_container_width=True)
-        
-        st.markdown("**📋 Top 10 Municipios - Resumen**")
-        st.dataframe(
-            df_combined[["Municipio", "Casos", "Epizootias", "Total"]].reset_index(drop=True),
-            use_container_width=True,
-            height=300
-        )
-    else:
-        st.info("No hay datos combinados para mostrar")
+def show_detailed_excel_tables(casos, epizootias, colors):
+    """Tablas detalladas tipo Excel con todas las columnas."""
+    st.markdown(
+        """
+        <div class="analysis-section">
+            <div class="section-header">
+                📊 Tablas Detalladas
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
+    # Preparar datos para mostrar
+    casos_display = prepare_casos_for_detailed_view(casos)
+    epizootias_display = prepare_epizootias_for_detailed_view(epizootias)
 
-# [El resto del código permanece igual - solo cambiando colorscales y eliminando referencias de riesgo]
+    # Crear dos columnas para las tablas
+    col1, col2 = st.columns([1, 1])
 
-def show_detailed_data_tables(casos, epizootias, colors):
-    """Tablas de datos detalladas y mejoradas."""
-    st.subheader("📋 Datos Detallados")
-    
-    casos_display = prepare_enhanced_casos_display(casos) if not casos.empty else pd.DataFrame()
-    epizootias_display = prepare_enhanced_epizootias_display(epizootias) if not epizootias.empty else pd.DataFrame()
-    
-    tab1, tab2, tab3 = st.tabs(["🦠 Casos Humanos", "🐒 Epizootias", "📊 Resumen"])
-    
-    with tab1:
-        st.markdown("#### 🦠 Casos Humanos Detallados")
+    with col1:
+        st.markdown("### 🦠 Casos Humanos Detallados")
         if not casos_display.empty:
-            col1, col2, col3 = st.columns(3)
+            # Filtros rápidos para casos
+            create_quick_filters_casos(casos_display)
             
-            with col1:
-                if "sexo" in casos_display.columns:
-                    sexo_filter = st.selectbox("Filtrar por Sexo:", ["Todos"] + list(casos_display["sexo"].dropna().unique()))
-                    if sexo_filter != "Todos":
-                        casos_display = casos_display[casos_display["sexo"] == sexo_filter]
+            # Aplicar filtros si están activos
+            casos_filtrados = apply_table_filters_casos(casos_display)
             
-            with col2:
-                if "condicion_final" in casos_display.columns:
-                    condicion_filter = st.selectbox("Filtrar por Condición:", ["Todas"] + list(casos_display["condicion_final"].dropna().unique()))
-                    if condicion_filter != "Todas":
-                        casos_display = casos_display[casos_display["condicion_final"] == condicion_filter]
+            st.markdown(
+                f"""
+                <div class="data-table-container">
+                    <h4>📋 Todos los casos ({len(casos_filtrados)} registros)</h4>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             
-            with col3:
-                if "municipio" in casos_display.columns:
-                    municipio_filter = st.selectbox("Filtrar por Municipio:", ["Todos"] + list(casos_display["municipio"].dropna().unique()))
-                    if municipio_filter != "Todos":
-                        casos_display = casos_display[casos_display["municipio"] == municipio_filter]
+            # Mostrar tabla con scroll
+            st.dataframe(
+                casos_filtrados,
+                use_container_width=True,
+                height=500,
+                hide_index=True
+            )
             
-            st.dataframe(casos_display, use_container_width=True, height=500)
-            st.caption(f"📊 Mostrando {len(casos_display)} casos de {len(casos)} totales")
+            # Información adicional
+            st.caption(f"💡 Mostrando {len(casos_filtrados)} de {len(casos_display)} casos totales")
             
         else:
-            st.info("No hay casos para mostrar con los filtros actuales")
-    
-    with tab2:
-        st.markdown("#### 🐒 Epizootias Detalladas")
+            st.info("📭 No hay casos para mostrar con los filtros actuales")
+
+    with col2:
+        st.markdown("### 🐒 Epizootias Detalladas")
         if not epizootias_display.empty:
-            col1, col2 = st.columns(2)
+            # Filtros rápidos para epizootias
+            create_quick_filters_epizootias(epizootias_display)
             
-            with col1:
-                if "proveniente" in epizootias_display.columns:
-                    fuente_filter = st.selectbox("Filtrar por Fuente:", ["Todas"] + list(epizootias_display["proveniente"].dropna().unique()))
-                    if fuente_filter != "Todas":
-                        epizootias_display = epizootias_display[epizootias_display["proveniente"] == fuente_filter]
+            # Aplicar filtros si están activos
+            epizootias_filtradas = apply_table_filters_epizootias(epizootias_display)
             
-            with col2:
-                if "municipio" in epizootias_display.columns:
-                    municipio_epi_filter = st.selectbox("Filtrar por Municipio:", ["Todos"] + list(epizootias_display["municipio"].dropna().unique()), key="municipio_epi")
-                    if municipio_epi_filter != "Todos":
-                        epizootias_display = epizootias_display[epizootias_display["municipio"] == municipio_epi_filter]
+            st.markdown(
+                f"""
+                <div class="data-table-container">
+                    <h4>📋 Todas las epizootias ({len(epizootias_filtradas)} registros)</h4>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
             
-            st.dataframe(epizootias_display, use_container_width=True, height=500)
-            st.caption(f"📊 Mostrando {len(epizootias_display)} epizootias de {len(epizootias)} totales")
+            # Mostrar tabla con scroll
+            st.dataframe(
+                epizootias_filtradas,
+                use_container_width=True,
+                height=500,
+                hide_index=True
+            )
             
+            # Desglose por tipo
+            if "Resultado" in epizootias_filtradas.columns:
+                positivas = len(epizootias_filtradas[epizootias_filtradas["Resultado"] == "POSITIVO FA"])
+                en_estudio = len(epizootias_filtradas[epizootias_filtradas["Resultado"] == "EN ESTUDIO"])
+                st.caption(f"💡 {positivas} positivas • {en_estudio} en estudio • {len(epizootias_filtradas)} total")
+            else:
+                st.caption(f"💡 Mostrando {len(epizootias_filtradas)} de {len(epizootias_display)} epizootias totales")
+                
         else:
-            st.info("No hay epizootias para mostrar con los filtros actuales")
+            st.info("📭 No hay epizootias para mostrar con los filtros actuales")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def show_aesthetic_summary_table(casos, epizootias, colors):
+    """Tabla resumen estéticamente mejorada."""
+    st.markdown(
+        """
+        <div class="analysis-section">
+            <div class="section-header">
+                📈 Resumen por Ubicación
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Crear resumen por municipios
+    summary_data = create_location_summary(casos, epizootias)
     
-    with tab3:
-        st.markdown("#### 📊 Resumen")
-        create_summary_table(casos, epizootias, colors)
+    if summary_data:
+        
+        # Mostrar como DataFrame estético
+        summary_df = create_aesthetic_summary_html(summary_data, colors)
+        if isinstance(summary_df, pd.DataFrame):
+            st.dataframe(
+                summary_df,
+                use_container_width=True,
+                height=400,
+                hide_index=True
+            )
+        else:
+            st.info("No hay datos suficientes para el resumen")
+        
+        # Estadísticas generales del resumen
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_municipios = len(summary_data)
+            st.metric("🏛️ Municipios", total_municipios)
+        
+        with col2:
+            municipios_con_casos = len([m for m in summary_data if m["casos"] > 0])
+            st.metric("🦠 Con Casos", municipios_con_casos)
+        
+        with col3:
+            municipios_con_epizootias = len([m for m in summary_data if m["epizootias"] > 0])
+            st.metric("🐒 Con Epizootias", municipios_con_epizootias)
+        
+        with col4:
+            municipios_mixtos = len([m for m in summary_data if m["casos"] > 0 and m["epizootias"] > 0])
+            st.metric("🔄 Ambos", municipios_mixtos)
+            
+    else:
+        st.info("📊 No hay datos suficientes para crear el resumen por ubicación")
+
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-def prepare_enhanced_casos_display(casos):
-    """Prepara datos de casos con columnas mejoradas para visualización."""
+def show_simplified_visual_analysis(casos, epizootias, colors):
+    """Análisis visual simplificado sin pestañas anidadas."""
+    st.markdown(
+        """
+        <div class="analysis-section">
+            <div class="section-header">
+                📊 Análisis Visual
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Solo 2 gráficos principales - uno para casos, uno para epizootias
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("#### 🦠 Distribución de Casos")
+        if not casos.empty:
+            create_casos_distribution_chart(casos, colors)
+        else:
+            st.info("Sin datos de casos para graficar")
+
+    with col2:
+        st.markdown("#### 🐒 Distribución de Epizootias")
+        if not epizootias.empty:
+            create_epizootias_distribution_chart(epizootias, colors)
+        else:
+            st.info("Sin datos de epizootias para graficar")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def show_comprehensive_export_section(casos, epizootias, colors):
+    """Sección de exportación completa y mejorada."""
+    st.markdown(
+        """
+        <div class="analysis-section">
+            <div class="section-header">
+                📥 Exportación de Datos
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        f"""
+        <div class="info-box">
+            <div class="info-box-title">📊 Datos Listos para Exportar</div>
+            <strong>Casos humanos:</strong> {len(casos)} registros<br>
+            <strong>Epizootias:</strong> {len(epizootias)} registros ({len(epizootias[epizootias["descripcion"] == "POSITIVO FA"]) if not epizootias.empty and "descripcion" in epizootias.columns else 0} positivas + {len(epizootias[epizootias["descripcion"] == "EN ESTUDIO"]) if not epizootias.empty and "descripcion" in epizootias.columns else 0} en estudio)<br>
+            <strong>Incluye:</strong> Todas las columnas disponibles + resumen ejecutivo
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Botones de exportación mejorados
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        if not casos.empty or not epizootias.empty:
+            excel_data = create_comprehensive_excel_export(casos, epizootias)
+            st.download_button(
+                label="📊 Excel Completo",
+                data=excel_data,
+                file_name=f"fiebre_amarilla_completo_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                help="Excel con todas las hojas y análisis",
+                use_container_width=True
+            )
+        else:
+            st.button("📊 Excel Completo", disabled=True, help="Sin datos")
+
+    with col2:
+        if not casos.empty:
+            casos_csv = prepare_casos_for_detailed_view(casos).to_csv(index=False)
+            st.download_button(
+                label="🦠 Casos CSV",
+                data=casos_csv,
+                file_name=f"casos_detallados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                help="Casos con todas las columnas",
+                use_container_width=True
+            )
+        else:
+            st.button("🦠 Casos CSV", disabled=True, help="Sin casos")
+
+    with col3:
+        if not epizootias.empty:
+            epizootias_csv = prepare_epizootias_for_detailed_view(epizootias).to_csv(index=False)
+            st.download_button(
+                label="🐒 Epizootias CSV",
+                data=epizootias_csv,
+                file_name=f"epizootias_detalladas_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                help="Epizootias con todas las columnas",
+                use_container_width=True
+            )
+        else:
+            st.button("🐒 Epizootias CSV", disabled=True, help="Sin epizootias")
+
+    with col4:
+        summary_data = create_location_summary(casos, epizootias)
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            summary_csv = summary_df.to_csv(index=False)
+            st.download_button(
+                label="📈 Resumen CSV",
+                data=summary_csv,
+                file_name=f"resumen_ubicacion_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                mime="text/csv",
+                help="Resumen por ubicación",
+                use_container_width=True
+            )
+        else:
+            st.button("📈 Resumen CSV", disabled=True, help="Sin datos para resumen")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# === FUNCIONES DE APOYO ===
+
+def prepare_casos_for_detailed_view(casos):
+    """Prepara casos para vista detallada con todas las columnas."""
     if casos.empty:
-        return casos
+        return pd.DataFrame()
+
+    casos_display = casos.copy()
     
-    columnas_importantes = [
-        'municipio', 'vereda', 'fecha_inicio_sintomas', 'edad', 'sexo', 
-        'condicion_final', 'eps'
-    ]
+    # Formatear fechas
+    if "fecha_inicio_sintomas" in casos_display.columns:
+        casos_display["fecha_inicio_sintomas"] = casos_display["fecha_inicio_sintomas"].dt.strftime('%d/%m/%Y')
     
-    columnas_existentes = [col for col in columnas_importantes if col in casos.columns]
-    casos_display = casos[columnas_existentes].copy()
-    
-    if 'fecha_inicio_sintomas' in casos_display.columns:
-        casos_display['fecha_inicio_sintomas'] = casos_display['fecha_inicio_sintomas'].dt.strftime('%d/%m/%Y')
-    
+    # Renombrar columnas para mejor legibilidad
     rename_map = {
         'municipio': 'Municipio',
         'vereda': 'Vereda',
-        'fecha_inicio_sintomas': 'Fecha Inicio',
+        'fecha_inicio_sintomas': 'Fecha Inicio Síntomas',
         'edad': 'Edad',
         'sexo': 'Sexo',
         'condicion_final': 'Condición Final',
         'eps': 'EPS'
     }
     
-    casos_display = casos_display.rename(columns=rename_map)
+    # Solo renombrar columnas que existen
+    existing_renames = {k: v for k, v in rename_map.items() if k in casos_display.columns}
+    casos_display = casos_display.rename(columns=existing_renames)
     
     return casos_display
 
 
-def prepare_enhanced_epizootias_display(epizootias):
-    """Prepara datos de epizootias con columnas mejoradas para visualización."""
+def prepare_epizootias_for_detailed_view(epizootias):
+    """Prepara epizootias para vista detallada con todas las columnas."""
     if epizootias.empty:
-        return epizootias
+        return pd.DataFrame()
+
+    epi_display = epizootias.copy()
     
-    columnas_importantes = [
-        'municipio', 'vereda', 'fecha_recoleccion', 'descripcion', 'proveniente'
-    ]
+    # Formatear fechas
+    if "fecha_recoleccion" in epi_display.columns:
+        epi_display["fecha_recoleccion"] = epi_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
     
-    columnas_existentes = [col for col in columnas_importantes if col in epizootias.columns]
-    epi_display = epizootias[columnas_existentes].copy()
-    
-    if 'fecha_recoleccion' in epi_display.columns:
-        epi_display['fecha_recoleccion'] = epi_display['fecha_recoleccion'].dt.strftime('%d/%m/%Y')
-    
-    if 'proveniente' in epi_display.columns:
-        epi_display['proveniente'] = epi_display['proveniente'].apply(lambda x: 
-            "Vigilancia Comunitaria" if "VIGILANCIA COMUNITARIA" in str(x) 
+    # Simplificar texto de proveniente
+    if "proveniente" in epi_display.columns:
+        epi_display["proveniente"] = epi_display["proveniente"].apply(
+            lambda x: "Vigilancia Comunitaria" if "VIGILANCIA COMUNITARIA" in str(x) 
             else "Incautación/Rescate" if "INCAUTACIÓN" in str(x)
-            else str(x)[:30] + "..." if len(str(x)) > 30 else str(x)
+            else str(x)[:50] + "..." if len(str(x)) > 50 else str(x)
         )
     
+    # Renombrar columnas
     rename_map = {
         'municipio': 'Municipio',
         'vereda': 'Vereda',
@@ -645,15 +691,109 @@ def prepare_enhanced_epizootias_display(epizootias):
         'proveniente': 'Fuente'
     }
     
-    epi_display = epi_display.rename(columns=rename_map)
+    existing_renames = {k: v for k, v in rename_map.items() if k in epi_display.columns}
+    epi_display = epi_display.rename(columns=existing_renames)
     
     return epi_display
 
 
-def create_summary_table(casos, epizootias, colors):
-    """Crea tabla de resumen sin análisis de riesgo."""
+def create_quick_filters_casos(casos_display):
+    """Crea filtros rápidos para la tabla de casos."""
+    if casos_display.empty:
+        return
+
+    # Filtros en una sola fila
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if "Sexo" in casos_display.columns:
+            sexo_options = ["Todos"] + sorted(casos_display["Sexo"].dropna().unique().tolist())
+            sexo_filter = st.selectbox("🚻 Filtrar por Sexo:", sexo_options, key="sexo_filter_table")
+            st.session_state["casos_sexo_filter"] = sexo_filter
+    
+    with col2:
+        if "Condición Final" in casos_display.columns:
+            condicion_options = ["Todas"] + sorted(casos_display["Condición Final"].dropna().unique().tolist())
+            condicion_filter = st.selectbox("⚰️ Condición:", condicion_options, key="condicion_filter_table")
+            st.session_state["casos_condicion_filter"] = condicion_filter
+    
+    with col3:
+        if "Municipio" in casos_display.columns:
+            municipio_options = ["Todos"] + sorted(casos_display["Municipio"].dropna().unique().tolist())
+            municipio_filter = st.selectbox("📍 Municipio:", municipio_options, key="municipio_filter_table")
+            st.session_state["casos_municipio_filter"] = municipio_filter
+
+
+def create_quick_filters_epizootias(epizootias_display):
+    """Crea filtros rápidos para la tabla de epizootias."""
+    if epizootias_display.empty:
+        return
+
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if "Resultado" in epizootias_display.columns:
+            resultado_options = ["Todos"] + sorted(epizootias_display["Resultado"].dropna().unique().tolist())
+            resultado_filter = st.selectbox("🔬 Resultado:", resultado_options, key="resultado_filter_table")
+            st.session_state["epi_resultado_filter"] = resultado_filter
+    
+    with col2:
+        if "Fuente" in epizootias_display.columns:
+            fuente_options = ["Todas"] + sorted(epizootias_display["Fuente"].dropna().unique().tolist())
+            fuente_filter = st.selectbox("📋 Fuente:", fuente_options, key="fuente_filter_table")
+            st.session_state["epi_fuente_filter"] = fuente_filter
+
+
+def apply_table_filters_casos(casos_display):
+    """Aplica filtros a la tabla de casos."""
+    if casos_display.empty:
+        return casos_display
+
+    casos_filtrados = casos_display.copy()
+    
+    # Aplicar filtro de sexo
+    sexo_filter = st.session_state.get("casos_sexo_filter", "Todos")
+    if sexo_filter != "Todos" and "Sexo" in casos_filtrados.columns:
+        casos_filtrados = casos_filtrados[casos_filtrados["Sexo"] == sexo_filter]
+    
+    # Aplicar filtro de condición
+    condicion_filter = st.session_state.get("casos_condicion_filter", "Todas")
+    if condicion_filter != "Todas" and "Condición Final" in casos_filtrados.columns:
+        casos_filtrados = casos_filtrados[casos_filtrados["Condición Final"] == condicion_filter]
+    
+    # Aplicar filtro de municipio
+    municipio_filter = st.session_state.get("casos_municipio_filter", "Todos")
+    if municipio_filter != "Todos" and "Municipio" in casos_filtrados.columns:
+        casos_filtrados = casos_filtrados[casos_filtrados["Municipio"] == municipio_filter]
+    
+    return casos_filtrados
+
+
+def apply_table_filters_epizootias(epizootias_display):
+    """Aplica filtros a la tabla de epizootias."""
+    if epizootias_display.empty:
+        return epizootias_display
+
+    epi_filtradas = epizootias_display.copy()
+    
+    # Aplicar filtro de resultado
+    resultado_filter = st.session_state.get("epi_resultado_filter", "Todos")
+    if resultado_filter != "Todos" and "Resultado" in epi_filtradas.columns:
+        epi_filtradas = epi_filtradas[epi_filtradas["Resultado"] == resultado_filter]
+    
+    # Aplicar filtro de fuente
+    fuente_filter = st.session_state.get("epi_fuente_filter", "Todas")
+    if fuente_filter != "Todas" and "Fuente" in epi_filtradas.columns:
+        epi_filtradas = epi_filtradas[epi_filtradas["Fuente"] == fuente_filter]
+    
+    return epi_filtradas
+
+
+def create_location_summary(casos, epizootias):
+    """Crea resumen por ubicación."""
     summary_data = []
     
+    # Obtener todas las ubicaciones únicas
     ubicaciones = set()
     if not casos.empty and "municipio" in casos.columns:
         ubicaciones.update(casos["municipio"].dropna())
@@ -661,6 +801,7 @@ def create_summary_table(casos, epizootias, colors):
         ubicaciones.update(epizootias["municipio"].dropna())
     
     for ubicacion in sorted(ubicaciones):
+        # Casos en esta ubicación
         casos_ubi = casos[casos["municipio"] == ubicacion] if not casos.empty and "municipio" in casos.columns else pd.DataFrame()
         epi_ubi = epizootias[epizootias["municipio"] == ubicacion] if not epizootias.empty and "municipio" in epizootias.columns else pd.DataFrame()
         
@@ -668,269 +809,193 @@ def create_summary_table(casos, epizootias, colors):
         epi_count = len(epi_ubi)
         
         if casos_count > 0 or epi_count > 0:
-            fallecidos = (casos_ubi["condicion_final"] == "Fallecido").sum() if not casos_ubi.empty and "condicion_final" in casos_ubi.columns else 0
+            # Cálculos adicionales
+            fallecidos = 0
+            if not casos_ubi.empty and "condicion_final" in casos_ubi.columns:
+                fallecidos = (casos_ubi["condicion_final"] == "Fallecido").sum()
+            
             letalidad = (fallecidos / casos_count * 100) if casos_count > 0 else 0
             
+            # Desglose de epizootias
+            positivas = 0
+            en_estudio = 0
+            if not epi_ubi.empty and "descripcion" in epi_ubi.columns:
+                positivas = (epi_ubi["descripcion"] == "POSITIVO FA").sum()
+                en_estudio = (epi_ubi["descripcion"] == "EN ESTUDIO").sum()
+            
+            # Determinar categoría
+            if casos_count > 0 and epi_count > 0:
+                categoria = "Mixto"
+            elif casos_count > 0:
+                categoria = "Solo Casos"
+            else:
+                categoria = "Solo Epizootias"
+            
             summary_data.append({
-                "Municipio": ubicacion,
-                "Casos Humanos": casos_count,
-                "Fallecidos": fallecidos,
-                "Porcentaje Letalidad": f"{letalidad:.1f}%",
-                "Epizootias": epi_count,
-                "Total Eventos": casos_count + epi_count
+                "municipio": ubicacion,
+                "casos": casos_count,
+                "fallecidos": fallecidos,
+                "letalidad": round(letalidad, 1),
+                "epizootias": epi_count,
+                "positivas": positivas,
+                "en_estudio": en_estudio,
+                "categoria": categoria
             })
     
-    if summary_data:
-        df_summary = pd.DataFrame(summary_data)
-        df_summary = df_summary.sort_values("Total Eventos", ascending=False)
+    return summary_data
+
+
+def create_aesthetic_summary_html(summary_data, colors):
+    """Crea HTML estético para la tabla resumen."""
+    if not summary_data:
+        return "<p>No hay datos para mostrar</p>"
+    
+    # Ordenar por casos descendente
+    summary_data_sorted = sorted(summary_data, key=lambda x: x["casos"], reverse=True)
+    
+    # USAR DATAFRAME EN LUGAR DE HTML CRUDO
+    summary_df = pd.DataFrame(summary_data_sorted)
+    
+    # Renombrar columnas para mejor visualización
+    summary_df = summary_df.rename(columns={
+        'municipio': '📍 Municipio',
+        'casos': '🦠 Casos', 
+        'fallecidos': '⚰️ Fallecidos',
+        'letalidad': '📊 Letalidad (%)',
+        'epizootias': '🐒 Epizootias',
+        'positivas': '🔴 Positivas',
+        'en_estudio': '🔵 En Estudio',
+        'categoria': '🏷️ Tipo'
+    })
+    
+    return summary_df  # Retornar DataFrame en lugar de HTML
+
+
+def create_casos_distribution_chart(casos, colors):
+    """Crea gráfico de distribución de casos simplificado."""
+    if casos.empty:
+        return
+    
+    # Gráfico por municipio (top 10)
+    if "municipio" in casos.columns:
+        municipio_counts = casos["municipio"].value_counts().head(10)
         
-        st.dataframe(df_summary, use_container_width=True, height=400)
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("Municipios Registrados", len(df_summary))
-        
-        with col2:
-            total_casos = df_summary["Casos Humanos"].sum()
-            total_epi = df_summary["Epizootias"].sum()
-            st.metric("Total Eventos", total_casos + total_epi)
-        
-        with col3:
-            casos_con_actividad = len(df_summary[df_summary["Casos Humanos"] > 0])
-            st.metric("Municipios con Casos", casos_con_actividad)
+        if not municipio_counts.empty:
+            fig = px.bar(
+                x=municipio_counts.values,
+                y=municipio_counts.index,
+                orientation="h",
+                title="Top 10 Municipios",
+                labels={"x": "Casos", "y": "Municipio"},
+                color=municipio_counts.values,
+                color_continuous_scale="Reds"
+            )
+            fig.update_layout(height=400, showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Sin datos suficientes para el gráfico")
     else:
-        st.info("No hay datos suficientes para el resumen")
+        st.info("No hay datos de municipio disponibles")
 
 
-def show_advanced_export_section(casos, epizootias):
-    """Sección de exportación avanzada con múltiples formatos."""
-    st.subheader("📥 Exportación de Datos")
+def create_epizootias_distribution_chart(epizootias, colors):
+    """Crea gráfico de distribución de epizootias simplificado."""
+    if epizootias.empty:
+        return
     
-    casos_count = len(casos)
-    epi_count = len(epizootias)
-    
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-            padding: 20px;
-            border-radius: 12px;
-            border-left: 5px solid #2196f3;
-            margin-bottom: 20px;
-        ">
-            <h4 style="color: #1976d2; margin-top: 0;">📊 Datos Disponibles para Exportación</h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                <div>
-                    <strong>🦠 Casos confirmados:</strong> {casos_count} registros<br>
-                    <strong>🐒 Epizootias:</strong> {epi_count} registros
-                </div>
-                <div>
-                    <strong>📅 Período:</strong> Según filtros aplicados<br>
-                    <strong>📍 Ubicación:</strong> Según filtros geográficos
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown("**📊 Excel Completo**")
-        if not casos.empty or not epizootias.empty:
-            excel_data = create_advanced_excel_export(casos, epizootias)
-            st.download_button(
-                label="📊 Excel Avanzado",
-                data=excel_data,
-                file_name=f"fiebre_amarilla_avanzado_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Excel con múltiples hojas",
-                use_container_width=True
+    # Gráfico por resultado
+    if "descripcion" in epizootias.columns:
+        resultado_counts = epizootias["descripcion"].value_counts()
+        
+        if not resultado_counts.empty:
+            fig = px.pie(
+                values=resultado_counts.values,
+                names=resultado_counts.index,
+                title="Distribución por Resultado",
+                color_discrete_map={
+                    "POSITIVO FA": colors["danger"],
+                    "EN ESTUDIO": colors["info"]
+                }
             )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
         else:
-            st.button("📊 Excel Avanzado", disabled=True, help="No hay datos")
-    
-    with col2:
-        st.markdown("**🦠 Casos CSV**")
-        if not casos.empty:
-            casos_enhanced = prepare_enhanced_casos_display(casos)
-            casos_csv = casos_enhanced.to_csv(index=False)
-            st.download_button(
-                label="🦠 Casos Detallados",
-                data=casos_csv,
-                file_name=f"casos_detallados_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.button("🦠 Casos Detallados", disabled=True, help="No hay casos")
-    
-    with col3:
-        st.markdown("**🐒 Epizootias CSV**")
-        if not epizootias.empty:
-            epi_enhanced = prepare_enhanced_epizootias_display(epizootias)
-            epi_csv = epi_enhanced.to_csv(index=False)
-            st.download_button(
-                label="🐒 Epizootias",
-                data=epi_csv,
-                file_name=f"epizootias_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-        else:
-            st.button("🐒 Epizootias", disabled=True, help="No hay epizootias")
-    
-    with col4:
-        st.markdown("**📊 Resumen CSV**")
-        if not casos.empty or not epizootias.empty:
-            summary_data = create_summary_for_export(casos, epizootias)
-            if summary_data is not None:
-                summary_csv = summary_data.to_csv(index=False)
-                st.download_button(
-                    label="📊 Resumen",
-                    data=summary_csv,
-                    file_name=f"resumen_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-            else:
-                st.button("📊 Resumen", disabled=True, help="Sin datos para resumen")
-        else:
-            st.button("📊 Resumen", disabled=True, help="No hay datos")
+            st.info("Sin datos suficientes para el gráfico")
+    else:
+        st.info("No hay datos de resultado disponibles")
 
 
-def create_advanced_excel_export(casos, epizootias):
-    """Crea archivo Excel avanzado con múltiples hojas."""
+def create_comprehensive_excel_export(casos, epizootias):
+    """Crea exportación Excel completa."""
     buffer = io.BytesIO()
     
     with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+        # Hoja 1: Casos detallados
         if not casos.empty:
-            casos_enhanced = prepare_enhanced_casos_display(casos)
-            casos_enhanced.to_excel(writer, sheet_name='Casos_Detallados', index=False)
+            casos_export = prepare_casos_for_detailed_view(casos)
+            casos_export.to_excel(writer, sheet_name='Casos_Detallados', index=False)
         
+        # Hoja 2: Epizootias detalladas
         if not epizootias.empty:
-            epi_enhanced = prepare_enhanced_epizootias_display(epizootias)
-            epi_enhanced.to_excel(writer, sheet_name='Epizootias_Detalladas', index=False)
+            epizootias_export = prepare_epizootias_for_detailed_view(epizootias)
+            epizootias_export.to_excel(writer, sheet_name='Epizootias_Detalladas', index=False)
         
-        summary_data = create_summary_for_export(casos, epizootias)
-        if summary_data is not None:
-            summary_data.to_excel(writer, sheet_name='Resumen', index=False)
+        # Hoja 3: Resumen por ubicación
+        summary_data = create_location_summary(casos, epizootias)
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            summary_df.to_excel(writer, sheet_name='Resumen_Ubicacion', index=False)
         
-        metadata = create_metadata_for_export(casos, epizootias)
+        # Hoja 4: Metadatos
+        metadata = create_export_metadata(casos, epizootias)
         metadata.to_excel(writer, sheet_name='Metadatos', index=False)
     
     buffer.seek(0)
     return buffer.getvalue()
 
 
-def create_summary_for_export(casos, epizootias):
-    """Crea resumen para exportación."""
-    try:
-        summary_rows = []
-        
-        summary_rows.append({
-            "Categoría": "GENERAL",
-            "Indicador": "Total Casos Confirmados",
-            "Valor": len(casos),
-            "Observaciones": "Casos humanos confirmados de fiebre amarilla"
-        })
-        
-        summary_rows.append({
-            "Categoría": "GENERAL",
-            "Indicador": "Total Epizootias",
-            "Valor": len(epizootias),
-            "Observaciones": "Epizootias confirmadas positivas"
-        })
-        
-        if not casos.empty and "condicion_final" in casos.columns:
-            fallecidos = (casos["condicion_final"] == "Fallecido").sum()
-            letalidad = (fallecidos / len(casos) * 100) if len(casos) > 0 else 0
-            
-            summary_rows.append({
-                "Categoría": "DESENLACE",
-                "Indicador": "Fallecidos",
-                "Valor": fallecidos,
-                "Observaciones": f"Porcentaje: {letalidad:.1f}%"
-            })
-        
-        municipios_casos = casos["municipio"].nunique() if not casos.empty and "municipio" in casos.columns else 0
-        municipios_epi = epizootias["municipio"].nunique() if not epizootias.empty and "municipio" in epizootias.columns else 0
-        
-        summary_rows.append({
-            "Categoría": "GEOGRÁFICO",
-            "Indicador": "Municipios con Casos",
-            "Valor": municipios_casos,
-            "Observaciones": "Municipios afectados por casos humanos"
-        })
-        
-        summary_rows.append({
-            "Categoría": "GEOGRÁFICO",
-            "Indicador": "Municipios con Epizootias",
-            "Valor": municipios_epi,
-            "Observaciones": "Municipios con epizootias confirmadas"
-        })
-        
-        summary_rows.append({
-            "Categoría": "METADATA",
-            "Indicador": "Fecha de Exportación",
-            "Valor": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "Observaciones": "Fecha y hora de generación del reporte"
-        })
-        
-        return pd.DataFrame(summary_rows)
-    
-    except Exception:
-        return None
-
-
-def create_metadata_for_export(casos, epizootias):
-    """Crea metadatos para exportación."""
+def create_export_metadata(casos, epizootias):
+    """Crea metadatos para la exportación."""
     metadata_rows = []
     
     metadata_rows.append({
-        "Categoría": "CASOS",
-        "Campo": "Total Registros",
-        "Valor": len(casos),
-        "Descripción": "Número total de casos en el dataset"
-    })
-    
-    if not casos.empty:
-        metadata_rows.append({
-            "Categoría": "CASOS",
-            "Campo": "Columnas Disponibles",
-            "Valor": len(casos.columns),
-            "Descripción": ", ".join(casos.columns.tolist())
-        })
-    
-    metadata_rows.append({
-        "Categoría": "EPIZOOTIAS",
-        "Campo": "Total Registros",
-        "Valor": len(epizootias),
-        "Descripción": "Número total de epizootias en el dataset"
-    })
-    
-    if not epizootias.empty:
-        metadata_rows.append({
-            "Categoría": "EPIZOOTIAS",
-            "Campo": "Columnas Disponibles",
-            "Valor": len(epizootias.columns),
-            "Descripción": ", ".join(epizootias.columns.tolist())
-        })
-    
-    metadata_rows.append({
-        "Categoría": "REPORTE",
-        "Campo": "Dashboard Versión",
-        "Valor": "3.1",
-        "Descripción": "Versión del dashboard de Fiebre Amarilla"
-    })
-    
-    metadata_rows.append({
-        "Categoría": "REPORTE",
-        "Campo": "Generado",
+        "Campo": "Fecha de Exportación",
         "Valor": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "Descripción": "Fecha y hora de generación del reporte"
+        "Descripción": "Fecha y hora de generación del archivo"
+    })
+    
+    metadata_rows.append({
+        "Campo": "Total Casos",
+        "Valor": len(casos),
+        "Descripción": "Número total de casos humanos incluidos"
+    })
+    
+    metadata_rows.append({
+        "Campo": "Total Epizootias",
+        "Valor": len(epizootias),
+        "Descripción": "Número total de epizootias incluidas (positivas + en estudio)"
+    })
+    
+    if not epizootias.empty and "descripcion" in epizootias.columns:
+        positivas = len(epizootias[epizootias["descripcion"] == "POSITIVO FA"])
+        en_estudio = len(epizootias[epizootias["descripcion"] == "EN ESTUDIO"])
+        
+        metadata_rows.append({
+            "Campo": "Epizootias Positivas",
+            "Valor": positivas,
+            "Descripción": "Epizootias confirmadas positivas para fiebre amarilla"
+        })
+        
+        metadata_rows.append({
+            "Campo": "Epizootias En Estudio",
+            "Valor": en_estudio,
+            "Descripción": "Epizootias con resultado en proceso de análisis"
+        })
+    
+    metadata_rows.append({
+        "Campo": "Dashboard Versión",
+        "Valor": "3.2",
+        "Descripción": "Versión del dashboard de Fiebre Amarilla"
     })
     
     return pd.DataFrame(metadata_rows)

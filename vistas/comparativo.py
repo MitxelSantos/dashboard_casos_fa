@@ -108,15 +108,21 @@ def create_temporal_analysis_descriptive(casos, epizootias):
 
             if "condicion_final" in casos_mes.columns:
                 fallecidos_periodo = (casos_mes["condicion_final"] == "Fallecido").sum()
-
-        # Ya son solo las epizootias positivas
+                
+        # Epizootias (positivas + en estudio)
         epizootias_periodo = 0
+        positivas_periodo = 0
+        en_estudio_periodo = 0
         if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
             epi_mes = epizootias[
                 (epizootias["fecha_recoleccion"] >= periodo)
                 & (epizootias["fecha_recoleccion"] <= fin_periodo)
             ]
             epizootias_periodo = len(epi_mes)
+            
+            if "descripcion" in epi_mes.columns:
+                positivas_periodo = (epi_mes["descripcion"] == "POSITIVO FA").sum()
+                en_estudio_periodo = (epi_mes["descripcion"] == "EN ESTUDIO").sum()
 
         temporal_data.append(
             {
@@ -125,6 +131,8 @@ def create_temporal_analysis_descriptive(casos, epizootias):
                 "casos": casos_periodo,
                 "fallecidos": fallecidos_periodo,
                 "epizootias": epizootias_periodo,
+                "epizootias_positivas": positivas_periodo,  # NUEVO
+                "epizootias_en_estudio": en_estudio_periodo,  # NUEVO
                 "actividad_total": casos_periodo + epizootias_periodo,
                 "categoria_actividad": categorize_activity_level(casos_periodo, epizootias_periodo),
             }
@@ -260,7 +268,7 @@ def show_temporal_metrics_descriptive(temporal_data, casos, epizootias, colors):
             label="Períodos con Epizootias",
             value=f"{periodos_con_epizootias}",
             delta=f"de {total_periodos} meses",
-            help="Meses con al menos una epizootia confirmada",
+            help="Meses con al menos una epizootia (positiva o en estudio)",
         )
 
     with col3:
@@ -290,15 +298,24 @@ def show_temporal_metrics_descriptive(temporal_data, casos, epizootias, colors):
             delta=f"{(periodos_ambos/total_periodos*100):.1f}%" if total_periodos > 0 else "0%",
             help="Meses con casos humanos Y epizootias"
         )
-    
+        
     with col2:
-        # Promedio de actividad por período
-        actividad_promedio = temporal_data["actividad_total"].mean()
-        st.metric(
-            label="Actividad Promedio",
-            value=f"{actividad_promedio:.1f}",
-            help="Promedio de eventos por mes"
-        )
+        # Desglose de epizootias si hay datos disponibles
+        if "epizootias_positivas" in temporal_data.columns:
+            total_positivas = temporal_data["epizootias_positivas"].sum()
+            total_en_estudio = temporal_data["epizootias_en_estudio"].sum()
+            st.metric(
+                label="Positivas/En Estudio",
+                value=f"{total_positivas}/{total_en_estudio}",
+                help="Total epizootias positivas vs en estudio en el período"
+            )
+        else:
+            actividad_promedio = temporal_data["actividad_total"].mean()
+            st.metric(
+                label="Actividad Promedio",
+                value=f"{actividad_promedio:.1f}",
+                help="Promedio de eventos por mes"
+            )
     
     with col3:
         # Distribución de actividad
@@ -341,6 +358,25 @@ def show_additional_charts_descriptive(temporal_data, colors):
                 marker_color=colors["warning"],
                 opacity=0.8
             ))
+            
+            # Barras de epizootias positivas
+            fig_bars.add_trace(go.Bar(
+                x=temporal_data["año_mes"],
+                y=temporal_data["epizootias_positivas"] if "epizootias_positivas" in temporal_data.columns else temporal_data["epizootias"],
+                name="Epizootias Positivas",
+                marker_color=colors["danger"],
+                opacity=0.8
+            ))
+
+            # Barras de epizootias en estudio (si hay datos)
+            if "epizootias_en_estudio" in temporal_data.columns:
+                fig_bars.add_trace(go.Bar(
+                    x=temporal_data["año_mes"],
+                    y=temporal_data["epizootias_en_estudio"],
+                    name="En Estudio",
+                    marker_color=colors["info"],
+                    opacity=0.8
+                ))
             
             fig_bars.update_layout(
                 title="Distribución Mensual - Eventos Confirmados",
@@ -385,10 +421,13 @@ def show_additional_charts_descriptive(temporal_data, colors):
     st.subheader("📋 Resumen Mensual")
     
     if not temporal_data.empty:
-        # Crear tabla resumen mejorada
-        resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias", "actividad_total", "categoria_actividad"]].copy()
-        resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Epizootias", "Actividad Total", "Nivel de Actividad"]
-        
+        # Incluir desglose de epizootias si está disponible
+        if "epizootias_positivas" in temporal_data.columns:
+            resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias_positivas", "epizootias_en_estudio", "epizootias", "categoria_actividad"]].copy()
+            resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Positivas", "En Estudio", "Total Epizootias", "Nivel de Actividad"]
+        else:
+            resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias", "actividad_total", "categoria_actividad"]].copy()
+            resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Epizootias", "Actividad Total", "Nivel de Actividad"]
         # Ordenar por mes descendente
         resumen_tabla = resumen_tabla.sort_values("Mes", ascending=False)
         
@@ -409,9 +448,9 @@ def show_additional_charts_descriptive(temporal_data, colors):
         f"""
         <div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 5px solid {colors['info']};">
             <h5 style="color: {colors['info']}; margin-top: 0;">💡 Interpretación para Vigilancia Epidemiológica</h5>
-            <p><strong>Función de las Epizootias:</strong> Cada epizootia confirmada positiva documenta 
-            la presencia del virus en primates no humanos, proporcionando información valiosa sobre 
-            la circulación viral en el ecosistema.</p>
+            <p><strong>Función de las Epizootias:</strong> Las epizootias positivas confirman la presencia del virus, 
+            mientras que las "en estudio" representan muestras en proceso de análisis laboratorial que contribuyen 
+            al sistema de vigilancia epidemiológica temprana.</p>
             <p><strong>Seguimiento Temporal:</strong> El análisis permite observar:</p>
             <ul style="margin-left: 20px;">
                 <li>📊 Patrones estacionales de actividad</li>
