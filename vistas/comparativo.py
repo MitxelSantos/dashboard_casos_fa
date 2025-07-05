@@ -23,7 +23,6 @@ def show(data_filtered, filters, colors):
         filters (dict): Filtros aplicados
         colors (dict): Colores institucionales
     """
-    st.subheader("📈 Seguimiento Temporal")
 
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]  # Ya solo son positivas
@@ -31,20 +30,6 @@ def show(data_filtered, filters, colors):
     if casos.empty and epizootias.empty:
         st.warning("No hay datos disponibles para el seguimiento temporal.")
         return
-
-    # **INFORMACIÓN DESCRIPTIVA sobre las epizootias**
-    st.markdown(
-        f"""
-        <div style="background-color: #f8f9fa; padding: 15px; border-radius: 8px; border-left: 5px solid {colors['primary']}; margin-bottom: 20px;">
-            <h4 style="color: {colors['primary']}; margin-top: 0;">🐒 Epizootias como Indicadores de Vigilancia</h4>
-            <p>Las epizootias <strong>confirmadas positivas</strong> en primates no humanos representan 
-            eventos de circulación viral documentados en el ecosistema.</p>
-            <p><strong>Función:</strong> Proporcionan información sobre la presencia del virus en fauna silvestre, 
-            complementando la vigilancia epidemiológica.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # Crear análisis temporal
     temporal_data = create_temporal_analysis_descriptive(casos, epizootias)
@@ -441,69 +426,6 @@ def show_additional_charts_descriptive(temporal_data, colors):
             file_name=f"analisis_temporal_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
             mime="text/csv",
         )
-
-    # **INTERPRETACIÓN DESCRIPTIVA**
-    st.markdown("---")
-    st.markdown(
-        f"""
-        <div style="background-color: #e8f4fd; padding: 15px; border-radius: 8px; border-left: 5px solid {colors['info']};">
-            <h5 style="color: {colors['info']}; margin-top: 0;">💡 Interpretación para Vigilancia Epidemiológica</h5>
-            <p><strong>Función de las Epizootias:</strong> Las epizootias positivas confirman la presencia del virus, 
-            mientras que las "en estudio" representan muestras en proceso de análisis laboratorial que contribuyen 
-            al sistema de vigilancia epidemiológica temprana.</p>
-            <p><strong>Seguimiento Temporal:</strong> El análisis permite observar:</p>
-            <ul style="margin-left: 20px;">
-                <li>📊 Patrones estacionales de actividad</li>
-                <li>📈 Tendencias en la detección de eventos</li>
-                <li>🔄 Correlaciones temporales entre casos y epizootias</li>
-                <li>📅 Distribución cronológica de eventos</li>
-            </ul>
-            <p><strong>Interpretación Temporal:</strong> Los períodos con actividad documentada 
-            proporcionan información sobre la dinámica de transmisión del virus.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Correlación entre eventos (SIN análisis de riesgo)
-    if not temporal_data.empty and len(temporal_data) > 1:
-        correlacion = temporal_data["casos"].corr(temporal_data["epizootias"])
-        
-        st.markdown("---")
-        st.markdown("### 🔗 Análisis de Correlación")
-        
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            st.metric(
-                label="Correlación Casos-Epizootias",
-                value=f"{correlacion:.3f}",
-                help="Correlación temporal entre casos humanos y epizootias (-1 a 1)"
-            )
-        
-        with col2:
-            # Interpretación descriptiva de la correlación
-            if correlacion > 0.7:
-                interpretacion = "🔴 Correlación muy alta - Patrones temporales similares"
-                color_corr = colors["danger"]
-            elif correlacion > 0.4:
-                interpretacion = "🟡 Correlación moderada - Cierta sincronía temporal"
-                color_corr = colors["warning"]
-            elif correlacion > 0.1:
-                interpretacion = "🟢 Correlación baja - Patrones temporales diferentes"
-                color_corr = colors["success"]
-            else:
-                interpretacion = "🔵 Sin correlación temporal aparente"
-                color_corr = colors["info"]
-            
-            st.markdown(
-                f"""
-                <div style="background: {color_corr}; color: white; padding: 10px; border-radius: 6px; font-weight: 600;">
-                    {interpretacion}
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
 
     # **ESTADÍSTICAS ADICIONALES DESCRIPTIVAS**
     st.markdown("---")

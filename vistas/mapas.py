@@ -43,12 +43,6 @@ def show(data_filtered, filters, colors):
     
     # CSS para las nuevas tarjetas mejoradas
     apply_enhanced_cards_css(colors)
-    
-    # Título principal (SIN espacio excesivo)
-    st.markdown(
-        '<h1 class="maps-title">🗺️ Mapas Interactivos</h1>',
-        unsafe_allow_html=True,
-    )
 
     if not MAPS_AVAILABLE:
         show_maps_not_available()
@@ -73,12 +67,9 @@ def show(data_filtered, filters, colors):
     col_mapa, col_tarjetas = st.columns([3, 2])  # 60% mapa, 40% tarjetas
     
     with col_mapa:
-        st.markdown("### 🗺️ Mapa del Tolima")
         create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered)
     
     with col_tarjetas:
-        st.markdown("### 📊 Información Detallada")
-        # **TARJETAS SUPER MEJORADAS**: Con toda la información solicitada
         create_beautiful_information_cards(casos, epizootias, filters, colors)
 
 
@@ -200,9 +191,6 @@ def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
         )
         
         geojson.add_to(m)
-    
-    # **INSTRUCCIONES MEJORADAS**
-    st.info("💡 **Interacciones:** Pase el cursor sobre un municipio para ver información básica • Haga clic para filtrar y ver detalles en las tarjetas →")
     
     # Renderizar mapa con detección de clicks (SIN popups)
     map_data = st_folium(
@@ -356,9 +344,6 @@ def create_beautiful_information_cards(casos, epizootias, filters, colors):
     create_enhanced_epizootias_card(metrics, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # **TARJETA DE UBICACIÓN Y FILTROS**
-    create_enhanced_location_card(filters, colors)
 
 
 def create_enhanced_cases_card(metrics, colors):
@@ -398,7 +383,7 @@ def create_enhanced_cases_card(metrics, colors):
         <div class="super-enhanced-card cases-card">
             <div class="card-header">
                 <div class="card-icon">🦠</div>
-                <div class="card-title">CASOS HUMANOS</div>
+                <div class="card-title">CASOS FIEBRE AMARILLA</div>
                 <div class="card-subtitle">Vigilancia epidemiológica</div>
             </div>
             <div class="card-body">
@@ -481,83 +466,13 @@ def create_enhanced_epizootias_card(metrics, colors):
                         <div class="metric-number info">{en_estudio}</div>
                         <div class="metric-label">En Estudio</div>
                     </div>
-                    <div class="main-metric laboratory">
-                        <div class="metric-number primary">{positivas + en_estudio}</div>
-                        <div class="metric-label">Vigilancia</div>
-                    </div>
                 </div>
                 {ultimo_info}
             </div>
         </div>
         """,
         unsafe_allow_html=True,
-    )
-
-
-def create_enhanced_location_card(filters, colors):
-    """
-    NUEVA: Tarjeta de ubicación y filtros activos.
-    """
-    # Información de ubicación actual
-    ubicacion_actual = get_current_location_info(filters)
-    filtros_activos = filters.get("active_filters", [])
-    
-    # Información de navegación
-    current_level = determine_map_level(filters)
-    level_info = {
-        "departamento": {"icon": "🏛️", "name": "Vista Departamental", "color": colors["primary"]},
-        "municipio": {"icon": "🏘️", "name": "Vista Municipal", "color": colors["secondary"]}, 
-        "vereda": {"icon": "📍", "name": "Vista de Vereda", "color": colors["accent"]}
-    }
-    
-    level = level_info[current_level]
-    
-    filtros_html = ""
-    if filtros_activos:
-        filtros_list = "<br>".join([f"• {filtro}" for filtro in filtros_activos[:3]])
-        if len(filtros_activos) > 3:
-            filtros_list += f"<br>• ... y {len(filtros_activos) - 3} más"
-        
-        filtros_html = f"""
-        <div class="filters-section">
-            <div class="filters-title">🎯 Filtros Activos</div>
-            <div class="filters-list">{filtros_list}</div>
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card location-card">
-            <div class="card-header">
-                <div class="card-icon">🗺️</div>
-                <div class="card-title">UBICACIÓN</div>
-                <div class="card-subtitle">Navegación y filtros</div>
-            </div>
-            <div class="card-body">
-                <div class="location-info">
-                    <div class="current-location">
-                        <div class="location-icon" style="color: {level['color']};">{level['icon']}</div>
-                        <div class="location-details">
-                            <div class="location-name">{ubicacion_actual}</div>
-                            <div class="location-level">{level['name']}</div>
-                        </div>
-                    </div>
-                </div>
-                {filtros_html}
-                <div class="navigation-help">
-                    <div class="help-title">💡 Navegación</div>
-                    <div class="help-text">
-                        • Pase el cursor sobre el mapa para ver información<br>
-                        • Haga clic para filtrar por ubicación<br>
-                        • Use los botones de navegación para cambiar vista
-                    </div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+    )  
 
 def apply_enhanced_cards_css(colors):
     """
@@ -1091,26 +1006,8 @@ def create_navigation_controls(current_level, filters, colors):
     
     current_info = level_info[current_level]
     
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {colors['primary']}, {colors['secondary']});
-            color: white;
-            padding: 12px 20px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            text-align: center;
-            font-weight: 600;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-        ">
-            {current_info}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
     # Botones de navegación
-    cols = st.columns([1, 1, 1])
+    cols = st.columns([1, 1])
     
     with cols[0]:
         if current_level != "departamento":
@@ -1125,9 +1022,6 @@ def create_navigation_controls(current_level, filters, colors):
                 reset_vereda_filter_only()
                 st.rerun()
     
-    with cols[2]:
-        if st.button("🔄 Actualizar", key="refresh_map_enhanced", use_container_width=True):
-            st.rerun()
 
 
 def show_filter_indicator(filters, colors):
