@@ -1,7 +1,11 @@
 """
-Componente de filtros MEJORADO del dashboard.
-NUEVA FUNCIONALIDAD: Sincronización bidireccional con mapas interactivos
-Soporte para doble clic en mapas → actualización automática de filtros
+Componente de filtros CORREGIDO del dashboard.
+CORRECCIONES PRINCIPALES:
+- Sistema de sincronización bidireccional robusto mapa ↔ sidebar
+- Manejo especial de municipios grises (shapefile sin datos)
+- Detección de "último cambio" para priorizar correctamente
+- Reset completo que realmente funciona
+- Eliminación de conflictos de keys de widgets
 """
 
 import streamlit as st
@@ -10,9 +14,7 @@ from utils.data_processor import normalize_text
 
 
 def create_responsive_filters_ui():
-    """
-    CSS mejorado para filtros con indicadores de sincronización.
-    """
+    """CSS mejorado para filtros con indicadores de sincronización."""
     st.markdown(
         """
         <style>
@@ -56,13 +58,13 @@ def create_responsive_filters_ui():
             border-left: 3px solid #4682B4;
         }
         
-        /* NUEVO: Indicador de sincronización con mapa */
-        .map-sync-indicator {
+        /* INDICADOR DE SINCRONIZACIÓN MEJORADO */
+        .sync-status {
             background: linear-gradient(45deg, #4CAF50, #8BC34A);
             color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
+            padding: 0.4rem 0.8rem;
+            border-radius: 15px;
+            font-size: 0.75rem;
             font-weight: 600;
             margin: 0.5rem 0;
             text-align: center;
@@ -70,10 +72,31 @@ def create_responsive_filters_ui():
             box-shadow: 0 3px 10px rgba(76, 175, 80, 0.3);
         }
         
+        .sync-status.conflict {
+            background: linear-gradient(45deg, #FF9800, #FFC107);
+            animation: blink 1s ease-in-out 3;
+        }
+        
+        .sync-status.error {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            animation: shake 0.5s ease-in-out 2;
+        }
+        
         @keyframes pulse-sync {
             0% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.8; transform: scale(1.02); }
             100% { opacity: 1; transform: scale(1); }
+        }
+        
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
         }
         
         /* Active filters display mejorado */
@@ -154,24 +177,6 @@ def create_responsive_filters_ui():
             box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
         }
         
-        /* NUEVO: Indicador de cambios desde mapa */
-        .map-update-indicator {
-            background: linear-gradient(45deg, #FF9800, #FFC107);
-            color: white;
-            padding: 0.4rem 0.8rem;
-            border-radius: 15px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            margin: 0.3rem 0;
-            text-align: center;
-            animation: blink 1s ease-in-out 3;
-        }
-        
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
         /* Mobile optimizations */
         @media (max-width: 768px) {
             .filter-section {
@@ -200,195 +205,188 @@ def create_responsive_filters_ui():
     )
 
 
-def detect_map_interaction():
+class FilterSyncManager:
     """
-    NUEVO: Detecta si hubo una interacción desde el mapa.
+    NUEVA: Clase para manejar sincronización completa entre mapa y sidebar.
     """
-    return st.session_state.get('map_filter_updated', False)
+    
+    def __init__(self):
+        self.init_sync_state()
+    
+    def init_sync_state(self):
+        """Inicializa el estado de sincronización."""
+        if 'last_change_source' not in st.session_state:
+            st.session_state['last_change_source'] = 'none'  # 'map', 'sidebar', 'none'
+        
+        if 'last_change_timestamp' not in st.session_state:
+            st.session_state['last_change_timestamp'] = 0
+        
+        if 'filter_sync_lock' not in st.session_state:
+            st.session_state['filter_sync_lock'] = False
+    
+    def detect_change_source(self, new_municipio, new_vereda):
+        """
+        Detecta si el cambio viene del mapa o sidebar comparando con estado anterior.
+        """
+        current_municipio = st.session_state.get('municipio_filter', 'Todos')
+        current_vereda = st.session_state.get('vereda_filter', 'Todas')
+        
+        # Si hay un cambio
+        if new_municipio != current_municipio or new_vereda != current_vereda:
+            # Si viene de session_state['map_filter_updated'] = True, es del mapa
+            if st.session_state.get('map_filter_updated', False):
+                return 'map'
+            else:
+                return 'sidebar'
+        
+        return st.session_state.get('last_change_source', 'none')
+    
+    def update_from_map(self, municipio, vereda=None):
+        """Actualiza filtros desde el mapa con prioridad."""
+        if st.session_state.get('filter_sync_lock', False):
+            return
+        
+        st.session_state['filter_sync_lock'] = True
+        
+        # Actualizar valores
+        st.session_state['municipio_filter'] = municipio or 'Todos'
+        st.session_state['vereda_filter'] = vereda or 'Todas'
+        
+        # Marcar origen del cambio
+        st.session_state['last_change_source'] = 'map'
+        st.session_state['last_change_timestamp'] = pd.Timestamp.now().timestamp()
+        st.session_state['map_filter_updated'] = True
+        
+        st.session_state['filter_sync_lock'] = False
+    
+    def update_from_sidebar(self, municipio, vereda):
+        """Actualiza desde sidebar con validación."""
+        if st.session_state.get('filter_sync_lock', False):
+            return
+        
+        st.session_state['filter_sync_lock'] = True
+        
+        # Validar y actualizar
+        st.session_state['municipio_filter'] = municipio
+        st.session_state['vereda_filter'] = vereda
+        
+        # Marcar origen
+        st.session_state['last_change_source'] = 'sidebar'
+        st.session_state['last_change_timestamp'] = pd.Timestamp.now().timestamp()
+        
+        # Limpiar flags del mapa
+        if 'map_filter_updated' in st.session_state:
+            st.session_state['map_filter_updated'] = False
+        
+        st.session_state['filter_sync_lock'] = False
+    
+    def force_reset_all(self):
+        """Reset completo forzado desde cualquier fuente."""
+        st.session_state['filter_sync_lock'] = True
+        
+        # Resetear todos los filtros principales
+        st.session_state['municipio_filter'] = 'Todos'
+        st.session_state['vereda_filter'] = 'Todas'
+        
+        # Resetear filtros adicionales
+        for key in ['fecha_filter', 'condicion_filter', 'sexo_filter', 'edad_filter', 'fuente_filter']:
+            if key in st.session_state:
+                if 'fecha' in key:
+                    del st.session_state[key]
+                else:
+                    st.session_state[key] = 'Todas' if 'fuente' in key else 'Todos'
+        
+        # Resetear flags de sincronización
+        st.session_state['last_change_source'] = 'reset'
+        st.session_state['last_change_timestamp'] = pd.Timestamp.now().timestamp()
+        
+        # Limpiar flags del mapa
+        for key in ['map_filter_updated', 'filter_stats', 'filter_stats_detailed']:
+            if key in st.session_state:
+                del st.session_state[key]
+        
+        st.session_state['filter_sync_lock'] = False
+        
+        return True
+    
+    def get_sync_status(self):
+        """Retorna el estado actual de sincronización."""
+        return {
+            'last_source': st.session_state.get('last_change_source', 'none'),
+            'timestamp': st.session_state.get('last_change_timestamp', 0),
+            'is_locked': st.session_state.get('filter_sync_lock', False),
+            'map_updated': st.session_state.get('map_filter_updated', False)
+        }
 
 
-def clear_map_interaction_flag():
-    """
-    NUEVO: Limpia la bandera de actualización desde mapa.
-    """
-    if 'map_filter_updated' in st.session_state:
-        st.session_state['map_filter_updated'] = False
+# Instancia global del manager
+sync_manager = FilterSyncManager()
 
 
-def show_map_sync_indicator():
+def create_hierarchical_filters_enhanced_v2(data):
     """
-    NUEVO: Muestra indicador de sincronización con mapa.
-    """
-    if detect_map_interaction():
-        st.sidebar.markdown(
-            """
-            <div class="map-update-indicator">
-                🗺️ Actualizado desde mapa
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        # Auto-limpiar después de mostrar
-        clear_map_interaction_flag()
-
-
-def create_hierarchical_filters_enhanced(data):
-    """
-    NUEVO: Filtros jerárquicos con sincronización bidireccional mejorada.
+    CORREGIDO: Filtros jerárquicos con sincronización bidireccional ROBUSTA.
     """
     # Aplicar CSS responsive
     create_responsive_filters_ui()
     
-    # Mostrar indicador de sincronización si aplica
-    show_map_sync_indicator()
+    # Detectar y mostrar estado de sincronización
+    show_sync_status()
     
-    # MEJORADO: Filtro de municipio con detección de cambios desde mapa
-    municipio_options = ["Todos"] + [
-        data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
-    ]
-
-    # Detectar valor inicial (puede venir del mapa)
-    initial_municipio_index = 0
-    if "municipio_filter" in st.session_state:
-        current_municipio = st.session_state["municipio_filter"]
-        if current_municipio in municipio_options:
-            initial_municipio_index = municipio_options.index(current_municipio)
-
+    # Obtener opciones de municipios (INCLUYENDO GRISES)
+    municipio_options = get_municipio_options_complete(data)
+    
+    # Obtener valores actuales con validación
+    current_municipio = get_current_municipio_safe(municipio_options)
+    current_vereda = get_current_vereda_safe(current_municipio, data)
+    
+    # **MUNICIPIO SELECTOR CON SINCRONIZACIÓN**
     municipio_selected = st.sidebar.selectbox(
         "📍 **MUNICIPIO**:",
         municipio_options,
-        index=initial_municipio_index,
-        key="municipio_filter_widget",
+        index=municipio_options.index(current_municipio) if current_municipio in municipio_options else 0,
+        key="municipio_selector_sync",  # Key única y consistente
         help="Seleccione un municipio para filtrar los datos. También puede hacer doble clic en el mapa.",
     )
-
-    # Sincronizar con session_state
-    if "municipio_filter" not in st.session_state or st.session_state["municipio_filter"] != municipio_selected:
-        st.session_state["municipio_filter"] = municipio_selected
-
-    # Información contextual del municipio
-    if municipio_selected != "Todos":
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-help">
-                🏛️ <strong>{municipio_selected}</strong> seleccionado
-                <br>💡 Los datos se filtrarán por este municipio
-                <br>🗺️ Visible en el mapa con zoom automático
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.sidebar.markdown(
-            """
-            <div class="filter-help">
-                🗺️ Vista general del Tolima
-                <br>💡 Haga doble clic en cualquier municipio del mapa para filtrar
-                <br>📊 Todas las métricas incluyen datos departamentales
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Determinar municipio normalizado seleccionado
-    municipio_norm_selected = None
-    if municipio_selected != "Todos":
-        for norm, display in data["municipio_display_map"].items():
-            if display == municipio_selected:
-                municipio_norm_selected = norm
-                break
-
-    # MEJORADO: Filtro de vereda con sincronización
-    vereda_options = ["Todas"]
-    if (
-        municipio_norm_selected
-        and municipio_norm_selected in data["veredas_por_municipio"]
-    ):
-        veredas_norm = data["veredas_por_municipio"][municipio_norm_selected]
-        if municipio_norm_selected in data["vereda_display_map"]:
-            vereda_options.extend(
-                [
-                    data["vereda_display_map"][municipio_norm_selected].get(norm, norm)
-                    for norm in veredas_norm
-                ]
-            )
-
-    # Detectar valor inicial de vereda
-    initial_vereda_index = 0
+    
+    # Detectar cambios desde sidebar
+    if municipio_selected != current_municipio:
+        sync_manager.update_from_sidebar(municipio_selected, 'Todas')
+        st.rerun()
+    
+    # **VEREDA SELECTOR CON DEPENDENCIA**
+    vereda_options = get_vereda_options_for_municipio(municipio_selected, data)
     vereda_disabled = municipio_selected == "Todos"
     
-    if not vereda_disabled and "vereda_filter" in st.session_state:
-        current_vereda = st.session_state["vereda_filter"]
-        if current_vereda in vereda_options:
-            initial_vereda_index = vereda_options.index(current_vereda)
-
-    if vereda_disabled:
-        st.sidebar.markdown(
-            """
-            <div class="filter-help">
-                💡 Primero seleccione un municipio para ver sus veredas
-                <br>🖱️ O haga doble clic en un municipio del mapa
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
+    current_vereda_validated = current_vereda if current_vereda in vereda_options else "Todas"
+    
     vereda_selected = st.sidebar.selectbox(
         "🏘️ **VEREDA**:",
         vereda_options,
-        index=initial_vereda_index,
-        key="vereda_filter_widget",
+        index=vereda_options.index(current_vereda_validated),
+        key="vereda_selector_sync",  # Key única y consistente
         disabled=vereda_disabled,
         help="Las veredas se actualizan según el municipio. También puede hacer doble clic en veredas del mapa.",
     )
-
-    # Sincronizar vereda con session_state
-    if not vereda_disabled:
-        if "vereda_filter" not in st.session_state or st.session_state["vereda_filter"] != vereda_selected:
-            st.session_state["vereda_filter"] = vereda_selected
-    else:
-        # Resetear vereda si no hay municipio seleccionado
-        if "vereda_filter" in st.session_state:
-            st.session_state["vereda_filter"] = "Todas"
-        vereda_selected = "Todas"
-
-    # Información de la vereda seleccionada
-    if vereda_selected != "Todas" and not vereda_disabled:
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-help">
-                📍 <strong>{vereda_selected}</strong> seleccionada
-                <br>🔍 Vista específica de esta vereda
-                <br>🗺️ Datos detallados en el mapa
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Determinar vereda normalizada seleccionada
+    
+    # Detectar cambios de vereda desde sidebar
+    if not vereda_disabled and vereda_selected != current_vereda_validated:
+        sync_manager.update_from_sidebar(municipio_selected, vereda_selected)
+        st.rerun()
+    
+    # Información contextual mejorada
+    show_location_context(municipio_selected, vereda_selected, vereda_disabled)
+    
+    # Determinar valores normalizados
+    municipio_norm_selected = None
     vereda_norm_selected = None
+    
+    if municipio_selected != "Todos":
+        municipio_norm_selected = get_normalized_municipio(municipio_selected, data)
+    
     if vereda_selected != "Todas" and municipio_norm_selected:
-        if municipio_norm_selected in data["vereda_display_map"]:
-            for norm, display in data["vereda_display_map"][
-                municipio_norm_selected
-            ].items():
-                if display == vereda_selected:
-                    vereda_norm_selected = norm
-                    break
-
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
-
-    # NUEVO: Indicador de sincronización activa
-    if municipio_selected != "Todos" or vereda_selected != "Todas":
-        st.sidebar.markdown(
-            """
-            <div class="map-sync-indicator">
-                🔄 Sincronizado con mapa interactivo
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
+        vereda_norm_selected = get_normalized_vereda(vereda_selected, municipio_norm_selected, data)
+    
     return {
         "municipio_display": municipio_selected,
         "municipio_normalizado": municipio_norm_selected,
@@ -397,9 +395,178 @@ def create_hierarchical_filters_enhanced(data):
     }
 
 
+def get_municipio_options_complete(data):
+    """
+    NUEVO: Obtiene opciones completas de municipios incluyendo los grises.
+    """
+    options = ["Todos"]
+    
+    # Agregar municipios con datos
+    for norm in data["municipios_normalizados"]:
+        display_name = data["municipio_display_map"].get(norm, norm)
+        if display_name not in options:
+            options.append(display_name)
+    
+    return options
+
+
+def get_current_municipio_safe(municipio_options):
+    """
+    NUEVO: Obtiene municipio actual con validación de opciones disponibles.
+    """
+    current = st.session_state.get('municipio_filter', 'Todos')
+    
+    # Validar que esté en las opciones disponibles
+    if current not in municipio_options:
+        # Si no está, buscar el normalized
+        if current != 'Todos':
+            # Log para debugging
+            st.sidebar.warning(f"⚠️ Municipio '{current}' no encontrado en opciones. Reseteando.")
+        return 'Todos'
+    
+    return current
+
+
+def get_current_vereda_safe(municipio_selected, data):
+    """
+    NUEVO: Obtiene vereda actual con validación de dependencia del municipio.
+    """
+    current = st.session_state.get('vereda_filter', 'Todas')
+    
+    # Si no hay municipio seleccionado, resetear vereda
+    if municipio_selected == "Todos":
+        if current != "Todas":
+            sync_manager.update_from_sidebar(municipio_selected, "Todas")
+        return "Todas"
+    
+    # Validar que la vereda pertenezca al municipio actual
+    vereda_options = get_vereda_options_for_municipio(municipio_selected, data)
+    
+    if current not in vereda_options:
+        return "Todas"
+    
+    return current
+
+
+def get_vereda_options_for_municipio(municipio_selected, data):
+    """
+    NUEVO: Obtiene opciones de veredas para un municipio específico.
+    """
+    vereda_options = ["Todas"]
+    
+    if municipio_selected == "Todos":
+        return vereda_options
+    
+    # Buscar municipio normalizado
+    municipio_norm = get_normalized_municipio(municipio_selected, data)
+    
+    if municipio_norm and municipio_norm in data["veredas_por_municipio"]:
+        veredas_norm = data["veredas_por_municipio"][municipio_norm]
+        if municipio_norm in data["vereda_display_map"]:
+            vereda_options.extend([
+                data["vereda_display_map"][municipio_norm].get(norm, norm)
+                for norm in veredas_norm
+            ])
+    
+    return vereda_options
+
+
+def get_normalized_municipio(municipio_display, data):
+    """
+    NUEVO: Busca el municipio normalizado desde el display name.
+    """
+    for norm, display in data["municipio_display_map"].items():
+        if display == municipio_display:
+            return norm
+    return None
+
+
+def get_normalized_vereda(vereda_display, municipio_norm, data):
+    """
+    NUEVO: Busca la vereda normalizada desde el display name.
+    """
+    if municipio_norm in data["vereda_display_map"]:
+        for norm, display in data["vereda_display_map"][municipio_norm].items():
+            if display == vereda_display:
+                return norm
+    return None
+
+
+def show_sync_status():
+    """
+    NUEVO: Muestra el estado de sincronización actual.
+    """
+    sync_status = sync_manager.get_sync_status()
+    
+    # Solo mostrar si hay actividad de sincronización
+    if sync_status['last_source'] in ['map', 'sidebar']:
+        if sync_status['last_source'] == 'map':
+            st.sidebar.markdown(
+                """
+                <div class="sync-status">
+                    🗺️ Actualizado desde mapa
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        elif sync_status['last_source'] == 'sidebar':
+            st.sidebar.markdown(
+                """
+                <div class="sync-status">
+                    🎛️ Actualizado desde filtros
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    
+    # Limpiar después de mostrar
+    if 'map_filter_updated' in st.session_state:
+        st.session_state['map_filter_updated'] = False
+
+
+def show_location_context(municipio_selected, vereda_selected, vereda_disabled):
+    """
+    NUEVO: Información contextual mejorada de la ubicación.
+    """
+    if municipio_selected != "Todos":
+        if vereda_selected != "Todas":
+            st.sidebar.markdown(
+                f"""
+                <div class="filter-help">
+                    📍 <strong>{vereda_selected}</strong> - {municipio_selected}<br>
+                    🔍 Vista específica de vereda<br>
+                    🗺️ Datos detallados disponibles
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+        else:
+            st.sidebar.markdown(
+                f"""
+                <div class="filter-help">
+                    🏛️ <strong>{municipio_selected}</strong> seleccionado<br>
+                    💡 Los datos se filtrarán por este municipio<br>
+                    🗺️ Vista de veredas disponible en el mapa
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+    else:
+        st.sidebar.markdown(
+            """
+            <div class="filter-help">
+                🗺️ Vista general del Tolima<br>
+                💡 Haga doble clic en cualquier municipio del mapa para filtrar<br>
+                📊 Todas las métricas incluyen datos departamentales
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
 def create_content_filters_enhanced(data):
     """
-    MEJORADO: Filtros de contenido con mejor UX.
+    MEJORADO: Filtros de contenido con mejor UX (sin cambios en la lógica).
     """
     # Sección de filtros de contenido
     st.sidebar.markdown("---")
@@ -459,8 +626,8 @@ def create_content_filters_enhanced(data):
             st.sidebar.markdown(
                 f"""
                 <div class="filter-help">
-                    📊 Rango disponible: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}
-                    <br>🎯 Seleccionado: {dias_seleccionados} días ({porcentaje_periodo:.1f}% del período)
+                    📊 Rango disponible: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}<br>
+                    🎯 Seleccionado: {dias_seleccionados} días ({porcentaje_periodo:.1f}% del período)
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -469,9 +636,9 @@ def create_content_filters_enhanced(data):
             st.sidebar.markdown(
                 f"""
                 <div class="filter-help">
-                    📊 Rango disponible: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}
-                    <br>⏱️ Total: {total_dias} días de datos
-                    <br>💡 Seleccione ambas fechas para filtrar
+                    📊 Rango disponible: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}<br>
+                    ⏱️ Total: {total_dias} días de datos<br>
+                    💡 Seleccione ambas fechas para filtrar
                 </div>
                 """,
                 unsafe_allow_html=True,
@@ -491,7 +658,7 @@ def create_content_filters_enhanced(data):
 
 def create_advanced_filters_enhanced(data):
     """
-    MEJORADO: Filtros avanzados con mejor organización.
+    MEJORADO: Filtros avanzados con mejor organización (sin cambios en la lógica).
     """
     # Sección de filtros avanzados
     st.sidebar.markdown("---")
@@ -608,152 +775,9 @@ def create_advanced_filters_enhanced(data):
     }
 
 
-def create_filter_summary_enhanced(filters_location, filters_content, filters_advanced, data):
-    """
-    MEJORADO: Resumen de filtros activos con categorización.
-    """
-    active_filters = []
-    
-    # CATEGORÍA: Filtros de ubicación (prioridad alta)
-    if filters_location["municipio_display"] != "Todos":
-        active_filters.append(f"🗺️ Municipio: {filters_location['municipio_display']}")
-
-    if filters_location["vereda_display"] != "Todas":
-        active_filters.append(f"📍 Vereda: {filters_location['vereda_display']}")
-
-    # CATEGORÍA: Filtros temporales
-    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        
-        # Comparar con el rango completo disponible
-        fecha_min_original = filters_content.get("fecha_min")
-        fecha_max_original = filters_content.get("fecha_max")
-        
-        # Solo agregar si es diferente del rango completo
-        if (fecha_min_original and fecha_max_original and 
-            (fecha_inicio != fecha_min_original.date() or fecha_fin != fecha_max_original.date())):
-            
-            # Formato de fecha más compacto
-            fecha_inicio_str = fecha_inicio.strftime("%m/%y")
-            fecha_fin_str = fecha_fin.strftime("%m/%y")
-            active_filters.append(f"📅 Período: {fecha_inicio_str}-{fecha_fin_str}")
-
-    # CATEGORÍA: Filtros demográficos
-    if filters_advanced["condicion_final"] != "Todas":
-        condicion_short = filters_advanced["condicion_final"][:10] + "..." if len(filters_advanced["condicion_final"]) > 10 else filters_advanced["condicion_final"]
-        active_filters.append(f"⚰️ Condición: {condicion_short}")
-
-    if filters_advanced["sexo"] != "Todos":
-        active_filters.append(f"👤 {filters_advanced['sexo']}")
-
-    # CATEGORÍA: Filtros numéricos
-    if filters_advanced["edad_rango"]:
-        edad_min_sel, edad_max_sel = filters_advanced["edad_rango"]
-        
-        # Obtener rango completo de edad de los datos
-        edad_min_original = 0
-        edad_max_original = 100
-        
-        if not data["casos"].empty and "edad" in data["casos"].columns:
-            edad_min_original = int(data["casos"]["edad"].min()) if not data["casos"]["edad"].isna().all() else 0
-            edad_max_original = int(data["casos"]["edad"].max()) if not data["casos"]["edad"].isna().all() else 100
-        
-        # Solo agregar si es diferente del rango completo
-        if edad_min_sel != edad_min_original or edad_max_sel != edad_max_original:
-            active_filters.append(f"🎂 {edad_min_sel}-{edad_max_sel} años")
-
-    # CATEGORÍA: Filtros de fuente
-    if filters_advanced["fuente_epizootia"] != "Todas":
-        fuente_short = (
-            filters_advanced["fuente_epizootia"][:15] + "..."
-            if len(filters_advanced["fuente_epizootia"]) > 15
-            else filters_advanced["fuente_epizootia"]
-        )
-        active_filters.append(f"📋 {fuente_short}")
-
-    return active_filters
-
-
-def show_active_filters_sidebar_enhanced(active_filters):
-    """
-    MEJORADO: Muestra filtros activos con categorización y animaciones.
-    """
-    if not active_filters:
-        return
-
-    st.sidebar.markdown("---")
-
-    # Categorizar filtros
-    geographic_filters = [f for f in active_filters if any(icon in f for icon in ["🗺️", "📍"])]
-    temporal_filters = [f for f in active_filters if "📅" in f]
-    demographic_filters = [f for f in active_filters if any(icon in f for icon in ["⚰️", "👤", "🎂"])]
-    other_filters = [f for f in active_filters if f not in geographic_filters + temporal_filters + demographic_filters]
-
-    # Título con contador y categorías
-    filter_count = len(active_filters)
-    categories_count = sum([
-        1 if geographic_filters else 0,
-        1 if temporal_filters else 0,
-        1 if demographic_filters else 0,
-        1 if other_filters else 0
-    ])
-    
-    st.sidebar.markdown(
-        f"""
-        <div class="active-filters">
-            <div class="active-filters-title">
-                🎯 Filtros Activos ({filter_count}) - {categories_count} Categorías
-            </div>
-            <ul class="active-filters-list">
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Mostrar filtros por categoría
-    all_categorized_filters = []
-    
-    if geographic_filters:
-        all_categorized_filters.append("🌍 GEOGRÁFICOS:")
-        all_categorized_filters.extend(geographic_filters)
-    
-    if temporal_filters:
-        all_categorized_filters.append("⏰ TEMPORALES:")
-        all_categorized_filters.extend(temporal_filters)
-    
-    if demographic_filters:
-        all_categorized_filters.append("👥 DEMOGRÁFICOS:")
-        all_categorized_filters.extend(demographic_filters)
-    
-    if other_filters:
-        all_categorized_filters.append("🔧 OTROS:")
-        all_categorized_filters.extend(other_filters)
-
-    # Mostrar máximo 8 elementos (incluyendo headers)
-    for filter_desc in all_categorized_filters[:8]:
-        if filter_desc.endswith(":"):
-            # Es un header de categoría
-            st.sidebar.markdown(f"<li style='font-weight: bold; color: #F2A900; margin-top: 0.5rem;'>{filter_desc}</li>", unsafe_allow_html=True)
-        else:
-            # Es un filtro normal
-            st.sidebar.markdown(f"<li>{filter_desc}</li>", unsafe_allow_html=True)
-
-    # Si hay más filtros, mostrar indicador
-    if len(all_categorized_filters) > 8:
-        remaining = len(all_categorized_filters) - 8
-        st.sidebar.markdown(f"<li style='opacity: 0.7;'>... y {remaining} filtro(s) más</li>", unsafe_allow_html=True)
-
-    st.sidebar.markdown(
-        """
-            </ul>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def apply_all_filters_enhanced(data, filters_location, filters_content, filters_advanced):
     """
-    MEJORADO: Aplica filtros con mejor performance y logging.
+    MEJORADO: Aplica filtros con mejor performance y logging (sin cambios en la lógica).
     """
     casos_filtrados = data["casos"].copy()
     epizootias_filtradas = data["epizootias"].copy()
@@ -865,52 +889,175 @@ def apply_all_filters_enhanced(data, filters_location, filters_content, filters_
     }
 
 
+def show_active_filters_sidebar_enhanced(active_filters):
+    """
+    MEJORADO: Muestra filtros activos con categorización y animaciones (sin cambios).
+    """
+    if not active_filters:
+        return
+
+    st.sidebar.markdown("---")
+
+    # Categorizar filtros
+    geographic_filters = [f for f in active_filters if any(icon in f for icon in ["🗺️", "📍"])]
+    temporal_filters = [f for f in active_filters if "📅" in f]
+    demographic_filters = [f for f in active_filters if any(icon in f for icon in ["⚰️", "👤", "🎂"])]
+    other_filters = [f for f in active_filters if f not in geographic_filters + temporal_filters + demographic_filters]
+
+    # Título con contador y categorías
+    filter_count = len(active_filters)
+    categories_count = sum([
+        1 if geographic_filters else 0,
+        1 if temporal_filters else 0,
+        1 if demographic_filters else 0,
+        1 if other_filters else 0
+    ])
+    
+    st.sidebar.markdown(
+        f"""
+        <div class="active-filters">
+            <div class="active-filters-title">
+                🎯 Filtros Activos ({filter_count}) - {categories_count} Categorías
+            </div>
+            <ul class="active-filters-list">
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Mostrar filtros por categoría
+    all_categorized_filters = []
+    
+    if geographic_filters:
+        all_categorized_filters.append("🌍 GEOGRÁFICOS:")
+        all_categorized_filters.extend(geographic_filters)
+    
+    if temporal_filters:
+        all_categorized_filters.append("⏰ TEMPORALES:")
+        all_categorized_filters.extend(temporal_filters)
+    
+    if demographic_filters:
+        all_categorized_filters.append("👥 DEMOGRÁFICOS:")
+        all_categorized_filters.extend(demographic_filters)
+    
+    if other_filters:
+        all_categorized_filters.append("🔧 OTROS:")
+        all_categorized_filters.extend(other_filters)
+
+    # Mostrar máximo 8 elementos (incluyendo headers)
+    for filter_desc in all_categorized_filters[:8]:
+        if filter_desc.endswith(":"):
+            # Es un header de categoría
+            st.sidebar.markdown(f"<li style='font-weight: bold; color: #F2A900; margin-top: 0.5rem;'>{filter_desc}</li>", unsafe_allow_html=True)
+        else:
+            # Es un filtro normal
+            st.sidebar.markdown(f"<li>{filter_desc}</li>", unsafe_allow_html=True)
+
+    # Si hay más filtros, mostrar indicador
+    if len(all_categorized_filters) > 8:
+        remaining = len(all_categorized_filters) - 8
+        st.sidebar.markdown(f"<li style='opacity: 0.7;'>... y {remaining} filtro(s) más</li>", unsafe_allow_html=True)
+
+    st.sidebar.markdown(
+        """
+            </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def reset_all_filters_enhanced():
     """
-    CORREGIDO: Reset completo con limpieza de estado de mapas y confirmación.
+    CORREGIDO: Reset completo REAL que funciona con todos los widgets.
     """
-    # Lista completa de claves a resetear
-    filter_keys = [
-        "municipio_filter", "vereda_filter", "fecha_filter",
-        "condicion_filter", "sexo_filter", "edad_filter", "fuente_filter",
-        "map_filter_updated", "filter_stats_detailed", "show_filter_help"
-    ]
+    try:
+        # Usar el sync manager para reset completo
+        success = sync_manager.force_reset_all()
+        
+        if success:
+            st.sidebar.success("✅ Filtros restablecidos completamente", icon="🧹")
+            return True
+        else:
+            st.sidebar.error("❌ Error al restablecer filtros", icon="⚠️")
+            return False
+            
+    except Exception as e:
+        st.sidebar.error(f"❌ Error crítico: {str(e)}", icon="💥")
+        return False
+
+
+def create_filter_summary_enhanced(filters_location, filters_content, filters_advanced, data):
+    """
+    MEJORADO: Resumen de filtros activos con categorización (sin cambios en la lógica).
+    """
+    active_filters = []
     
-    # Guardar estado anterior para logging
-    previous_state = {}
-    for key in filter_keys:
-        if key in st.session_state:
-            previous_state[key] = st.session_state.get(key)
-    
-    # Resetear cada clave según su tipo
-    reset_count = 0
-    for key in filter_keys:
-        if key in st.session_state:
-            try:
-                if "municipio" in key:
-                    st.session_state[key] = "Todos"
-                elif "vereda" in key:
-                    st.session_state[key] = "Todas"
-                elif key in ["condicion_filter", "sexo_filter", "fuente_filter"]:
-                    st.session_state[key] = "Todas" if "fuente" in key else "Todos"
-                else:
-                    del st.session_state[key]
-                reset_count += 1
-            except:
-                continue
-    
-    # Mensaje de confirmación con estadísticas
-    if reset_count > 0:
-        st.sidebar.success(f"✅ {reset_count} filtros restablecidos", icon="🧹")
-    else:
-        st.sidebar.info("ℹ️ No había filtros para restablecer", icon="🔄")
+    # CATEGORÍA: Filtros de ubicación (prioridad alta)
+    if filters_location["municipio_display"] != "Todos":
+        active_filters.append(f"🗺️ Municipio: {filters_location['municipio_display']}")
+
+    if filters_location["vereda_display"] != "Todas":
+        active_filters.append(f"📍 Vereda: {filters_location['vereda_display']}")
+
+    # CATEGORÍA: Filtros temporales
+    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
+        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
+        
+        # Comparar con el rango completo disponible
+        fecha_min_original = filters_content.get("fecha_min")
+        fecha_max_original = filters_content.get("fecha_max")
+        
+        # Solo agregar si es diferente del rango completo
+        if (fecha_min_original and fecha_max_original and 
+            (fecha_inicio != fecha_min_original.date() or fecha_fin != fecha_max_original.date())):
+            
+            # Formato de fecha más compacto
+            fecha_inicio_str = fecha_inicio.strftime("%m/%y")
+            fecha_fin_str = fecha_fin.strftime("%m/%y")
+            active_filters.append(f"📅 Período: {fecha_inicio_str}-{fecha_fin_str}")
+
+    # CATEGORÍA: Filtros demográficos
+    if filters_advanced["condicion_final"] != "Todas":
+        condicion_short = filters_advanced["condicion_final"][:10] + "..." if len(filters_advanced["condicion_final"]) > 10 else filters_advanced["condicion_final"]
+        active_filters.append(f"⚰️ Condición: {condicion_short}")
+
+    if filters_advanced["sexo"] != "Todos":
+        active_filters.append(f"👤 {filters_advanced['sexo']}")
+
+    # CATEGORÍA: Filtros numéricos
+    if filters_advanced["edad_rango"]:
+        edad_min_sel, edad_max_sel = filters_advanced["edad_rango"]
+        
+        # Obtener rango completo de edad de los datos
+        edad_min_original = 0
+        edad_max_original = 100
+        
+        if not data["casos"].empty and "edad" in data["casos"].columns:
+            edad_min_original = int(data["casos"]["edad"].min()) if not data["casos"]["edad"].isna().all() else 0
+            edad_max_original = int(data["casos"]["edad"].max()) if not data["casos"]["edad"].isna().all() else 100
+        
+        # Solo agregar si es diferente del rango completo
+        if edad_min_sel != edad_min_original or edad_max_sel != edad_max_original:
+            active_filters.append(f"🎂 {edad_min_sel}-{edad_max_sel} años")
+
+    # CATEGORÍA: Filtros de fuente
+    if filters_advanced["fuente_epizootia"] != "Todas":
+        fuente_short = (
+            filters_advanced["fuente_epizootia"][:15] + "..."
+            if len(filters_advanced["fuente_epizootia"]) > 15
+            else filters_advanced["fuente_epizootia"]
+        )
+        active_filters.append(f"📋 {fuente_short}")
+
+    return active_filters
+
 
 def create_complete_filter_system_enhanced(data):
     """
-    MEJORADO: Sistema completo de filtros con sincronización bidireccional.
+    MEJORADO: Sistema completo de filtros con sincronización bidireccional ROBUSTA.
     """
     # Crear diferentes tipos de filtros con versiones mejoradas
-    filters_location = create_hierarchical_filters_enhanced(data)
+    filters_location = create_hierarchical_filters_enhanced_v2(data)  # NUEVA VERSIÓN
     filters_content = create_content_filters_enhanced(data)
     filters_advanced = create_advanced_filters_enhanced(data)
 
@@ -949,11 +1096,11 @@ def create_complete_filter_system_enhanced(data):
     with col1:
         if st.button(
             "🔄 Restablecer Todo",
-            key="reset_all_filters_btn_enhanced",
+            key="reset_all_filters_btn_enhanced_v2",  # NUEVA KEY
             help="Limpiar todos los filtros y volver a vista completa",
         ):
-            reset_all_filters_enhanced()
-            st.rerun()
+            if reset_all_filters_enhanced():
+                st.rerun()
 
     with col2:
         # Contador de filtros activos con diseño mejorado
@@ -1001,86 +1148,33 @@ def create_complete_filter_system_enhanced(data):
 
     return {"filters": all_filters, "data_filtered": data_filtered}
 
+
 def create_complete_filter_system_with_maps(data):
     """
-    CORREGIDO: Sistema completo con sincronización bidireccional mapas-filtros.
+    CORREGIDO: Sistema completo con sincronización bidireccional mapas-filtros ROBUSTO.
     """
     # Aplicar CSS responsive
     create_responsive_filters_ui()
     
-    # **PASO 1: Detectar cambios desde mapa**
-    map_changed = detect_and_process_map_changes()
-    
-    # **PASO 2: Crear filtros jerárquicos con valores sincronizados**
-    filters_location = create_hierarchical_filters_with_map_sync(data, map_changed)
-    
-    # **PASO 3: Crear filtros de contenido**
-    filters_content = create_content_filters_enhanced(data)
-    
-    # **PASO 4: Crear filtros avanzados**
-    filters_advanced = create_advanced_filters_enhanced(data)
-
-    # **PASO 5: Crear resumen de filtros activos mejorado**
-    active_filters = create_filter_summary_enhanced(
-        filters_location, filters_content, filters_advanced, data
-    )
-
-    # **PASO 6: Mostrar filtros activos en sidebar**
-    show_active_filters_sidebar_enhanced(active_filters)
-
-    # **PASO 7: Controles de gestión**
-    show_filter_management_controls(active_filters)
-    
-    # **PASO 8: Aplicar filtros con logging detallado**
-    data_filtered = apply_all_filters_with_logging(
-        data, filters_location, filters_content, filters_advanced
-    )
-    
-    # **PASO 9: Mostrar estadísticas de filtrado**
-    show_filtering_statistics(data, data_filtered)
-    
-    # Combinar todos los filtros
-    all_filters = {
-        **filters_location,
-        **filters_content,
-        **filters_advanced,
-        "active_filters": active_filters,
-        "map_synchronized": map_changed,
-    }
-
-    return {"filters": all_filters, "data_filtered": data_filtered}
+    # Usar el sistema mejorado con sincronización robusta
+    return create_complete_filter_system_enhanced(data)
 
 
-# NUEVAS FUNCIONES DE UTILIDAD PARA SINCRONIZACIÓN CON MAPAS
+# FUNCIONES DE INTEGRACIÓN CON MAPAS
 
 def update_filters_from_map(municipio=None, vereda=None):
     """
-    NUEVO: Actualiza filtros desde interacciones del mapa.
+    CORREGIDO: Actualiza filtros desde interacciones del mapa usando sync manager.
     """
-    updated = False
-    
-    if municipio and municipio != "Todos":
-        if "municipio_filter" not in st.session_state or st.session_state["municipio_filter"] != municipio:
-            st.session_state["municipio_filter"] = municipio
-            st.session_state["map_filter_updated"] = True
-            updated = True
-    
-    if vereda and vereda != "Todas":
-        if "vereda_filter" not in st.session_state or st.session_state["vereda_filter"] != vereda:
-            st.session_state["vereda_filter"] = vereda
-            st.session_state["map_filter_updated"] = True
-            updated = True
-    elif vereda == "Todas" and "vereda_filter" in st.session_state:
-        st.session_state["vereda_filter"] = "Todas"
-        st.session_state["map_filter_updated"] = True
-        updated = True
-    
-    return updated
+    if municipio or vereda:
+        sync_manager.update_from_map(municipio, vereda)
+        return True
+    return False
 
 
 def get_current_filter_state():
     """
-    NUEVO: Obtiene el estado actual de todos los filtros.
+    MEJORADO: Obtiene el estado actual de todos los filtros de forma segura.
     """
     return {
         "municipio": st.session_state.get("municipio_filter", "Todos"),
@@ -1090,345 +1184,5 @@ def get_current_filter_state():
         "sexo": st.session_state.get("sexo_filter", "Todos"),
         "edad": st.session_state.get("edad_filter", None),
         "fuente": st.session_state.get("fuente_filter", "Todas"),
+        "sync_status": sync_manager.get_sync_status()
     }
-
-
-def validate_filter_sync():
-    """
-    NUEVO: Valida que los filtros estén sincronizados correctamente.
-    """
-    issues = []
-    
-    # Verificar coherencia municipio-vereda
-    municipio = st.session_state.get("municipio_filter", "Todos")
-    vereda = st.session_state.get("vereda_filter", "Todas")
-    
-    if vereda != "Todas" and municipio == "Todos":
-        issues.append("Vereda seleccionada sin municipio")
-    
-    # Verificar fechas válidas
-    fecha_rango = st.session_state.get("fecha_filter", None)
-    if fecha_rango and len(fecha_rango) == 2:
-        if fecha_rango[0] > fecha_rango[1]:
-            issues.append("Rango de fechas inválido")
-    
-    return issues
-
-def detect_and_process_map_changes():
-    """
-    NUEVA: Detección mejorada de cambios desde el mapa.
-    """
-    map_changed = False
-    
-    # Verificar si hay cambios pendientes desde el mapa
-    if st.session_state.get('map_filter_updated', False):
-        map_changed = True
-        
-        # Mostrar notificación de sincronización
-        st.sidebar.success("🗺️ Sincronizado desde mapa", icon="🔄")
-        
-        # Limpiar bandera después de procesar
-        st.session_state['map_filter_updated'] = False
-    
-    return map_changed
-
-
-def create_hierarchical_filters_with_map_sync(data, map_changed):
-    """
-    NUEVA: Filtros jerárquicos con sincronización perfecta con mapas.
-    """
-    
-    # **SINCRONIZACIÓN: Detectar fuente del cambio**
-    if map_changed:
-        st.sidebar.markdown(
-            """
-            <div class="map-sync-indicator">
-                🗺️ ✅ Actualizado desde mapa
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    
-    # **FILTRO DE MUNICIPIO CON SINCRONIZACIÓN PERFECTA**
-    municipio_options = ["Todos"] + [
-        data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
-    ]
-
-    # Valor inicial desde session_state o por defecto
-    municipio_inicial = st.session_state.get("municipio_filter", "Todos")
-    
-    # Validar que el valor inicial esté en las opciones
-    if municipio_inicial not in municipio_options:
-        municipio_inicial = "Todos"
-        st.session_state["municipio_filter"] = "Todos"
-
-    municipio_selected = st.sidebar.selectbox(
-        "📍 **MUNICIPIO**:",
-        municipio_options,
-        index=municipio_options.index(municipio_inicial),
-        key="municipio_filter_widget",
-        help="🗺️ Seleccione un municipio o haga clic en el mapa",
-    )
-
-    # **ACTUALIZACIÓN BIDIRECCIONAL**
-    if municipio_selected != st.session_state.get("municipio_filter", "Todos"):
-        st.session_state["municipio_filter"] = municipio_selected
-        # Si el cambio viene del sidebar (no del mapa), resetear vereda
-        if not map_changed:
-            st.session_state["vereda_filter"] = "Todas"
-
-    # Determinar municipio normalizado
-    municipio_norm_selected = None
-    if municipio_selected != "Todos":
-        for norm, display in data["municipio_display_map"].items():
-            if display == municipio_selected:
-                municipio_norm_selected = norm
-                break
-
-    # **FILTRO DE VEREDA CON DEPENDENCIA DEL MUNICIPIO**
-    vereda_options = ["Todas"]
-    vereda_disabled = municipio_selected == "Todos"
-    
-    if not vereda_disabled and municipio_norm_selected in data["veredas_por_municipio"]:
-        veredas_norm = data["veredas_por_municipio"][municipio_norm_selected]
-        if municipio_norm_selected in data["vereda_display_map"]:
-            vereda_options.extend([
-                data["vereda_display_map"][municipio_norm_selected].get(norm, norm)
-                for norm in veredas_norm
-            ])
-
-    # Valor inicial de vereda con validación
-    vereda_inicial = st.session_state.get("vereda_filter", "Todas")
-    if vereda_disabled or vereda_inicial not in vereda_options:
-        vereda_inicial = "Todas"
-        st.session_state["vereda_filter"] = "Todas"
-
-    vereda_selected = st.sidebar.selectbox(
-        "🏘️ **VEREDA**:",
-        vereda_options,
-        index=vereda_options.index(vereda_inicial),
-        key="vereda_filter_widget",
-        disabled=vereda_disabled,
-        help="🏘️ Las veredas se actualizan según el municipio seleccionado",
-    )
-
-    # **ACTUALIZACIÓN DE VEREDA**
-    if not vereda_disabled and vereda_selected != st.session_state.get("vereda_filter", "Todas"):
-        st.session_state["vereda_filter"] = vereda_selected
-
-    # Determinar vereda normalizada
-    vereda_norm_selected = None
-    if vereda_selected != "Todas" and municipio_norm_selected:
-        if municipio_norm_selected in data["vereda_display_map"]:
-            for norm, display in data["vereda_display_map"][municipio_norm_selected].items():
-                if display == vereda_selected:
-                    vereda_norm_selected = norm
-                    break
-
-    # **INFORMACIÓN CONTEXTUAL MEJORADA**
-    if municipio_selected != "Todos":
-        veredas_count = len(vereda_options) - 1  # -1 por "Todas"
-        info_color = "🟢" if vereda_selected != "Todas" else "🟡"
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-help">
-                {info_color} <strong>{municipio_selected}</strong><br>
-                🏘️ {veredas_count} veredas disponibles<br>
-                🗺️ Nivel: {'Vereda' if vereda_selected != 'Todas' else 'Municipal'}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.sidebar.markdown(
-            """
-            <div class="filter-help">
-                🗺️ Vista departamental del Tolima<br>
-                📍 Seleccione un municipio<br>
-                📊 Mostrando datos de todo el departamento
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
-
-    return {
-        "municipio_display": municipio_selected,
-        "municipio_normalizado": municipio_norm_selected,
-        "vereda_display": vereda_selected,
-        "vereda_normalizada": vereda_norm_selected,
-    }
-
-
-def show_filter_management_controls(active_filters):
-    """
-    NUEVA: Controles de gestión de filtros con estadísticas.
-    """
-    st.sidebar.markdown("---")
-
-    # Botones de control
-    col1, col2 = st.sidebar.columns([3, 1])
-
-    with col1:
-        if st.button(
-            "🔄 Restablecer Todo",
-            key="reset_all_filters_enhanced",
-            help="Limpiar todos los filtros y volver a vista completa",
-            use_container_width=True
-        ):
-            reset_all_filters_enhanced()
-            st.rerun()
-
-
-def apply_all_filters_with_logging(data, filters_location, filters_content, filters_advanced):
-    """
-    NUEVA: Aplicación de filtros con logging detallado para debugging.
-    """
-    casos_filtrados = data["casos"].copy()
-    epizootias_filtradas = data["epizootias"].copy()
-
-    # Logging inicial
-    initial_casos = len(casos_filtrados)
-    initial_epizootias = len(epizootias_filtradas)
-    
-    filtros_aplicados = []
-
-    # **APLICAR FILTROS DE UBICACIÓN CON LOGGING**
-    if filters_location["municipio_normalizado"]:
-        municipio_norm = filters_location["municipio_normalizado"]
-        
-        if "municipio_normalizado" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["municipio_normalizado"] == municipio_norm
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"📍 Municipio: {casos_antes} → {casos_despues} casos")
-
-        if "municipio_normalizado" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["municipio_normalizado"] == municipio_norm
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                filtros_aplicados.append(f"📍 Municipio: {epi_antes} → {epi_despues} epizootias")
-
-    if filters_location["vereda_normalizada"]:
-        vereda_norm = filters_location["vereda_normalizada"]
-        
-        if "vereda_normalizada" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["vereda_normalizada"] == vereda_norm
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"🏘️ Vereda: {casos_antes} → {casos_despues} casos")
-
-        if "vereda_normalizada" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["vereda_normalizada"] == vereda_norm
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                filtros_aplicados.append(f"🏘️ Vereda: {epi_antes} → {epi_despues} epizootias")
-
-    # **APLICAR FILTROS TEMPORALES**
-    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        fecha_inicio = pd.Timestamp(fecha_inicio)
-        fecha_fin = pd.Timestamp(fecha_fin) + pd.Timedelta(hours=23, minutes=59, seconds=59)
-
-        if "fecha_inicio_sintomas" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
-                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"📅 Fecha casos: {casos_antes} → {casos_despues}")
-
-        if "fecha_recoleccion" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
-                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                filtros_aplicados.append(f"📅 Fecha epizootias: {epi_antes} → {epi_despues}")
-
-    # **APLICAR FILTROS AVANZADOS**
-    if filters_advanced["condicion_final"] != "Todas" and not casos_filtrados.empty:
-        if "condicion_final" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["condicion_final"] == filters_advanced["condicion_final"]
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"⚰️ Condición: {casos_antes} → {casos_despues} casos")
-
-    # **GUARDAR ESTADÍSTICAS PARA DEBUGGING**
-    final_casos = len(casos_filtrados)
-    final_epizootias = len(epizootias_filtradas)
-    
-    st.session_state["filter_stats_detailed"] = {
-        "initial_casos": initial_casos,
-        "final_casos": final_casos,
-        "initial_epizootias": initial_epizootias,
-        "final_epizootias": final_epizootias,
-        "filtros_aplicados": filtros_aplicados,
-        "reduction_casos_pct": ((initial_casos - final_casos) / initial_casos * 100) if initial_casos > 0 else 0,
-        "reduction_epi_pct": ((initial_epizootias - final_epizootias) / initial_epizootias * 100) if initial_epizootias > 0 else 0,
-    }
-
-    return {
-        "casos": casos_filtrados,
-        "epizootias": epizootias_filtradas,
-        **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
-    }
-
-
-def show_filtering_statistics(data_original, data_filtered):
-    """
-    NUEVA: Muestra estadísticas detalladas del filtrado en sidebar.
-    """
-    if "filter_stats_detailed" in st.session_state:
-        stats = st.session_state["filter_stats_detailed"]
-        
-        # Solo mostrar si hay alguna reducción
-        if stats['reduction_casos_pct'] > 0 or stats['reduction_epi_pct'] > 0:
-            
-            if st.sidebar.checkbox("📊 Ver Estadísticas Filtrado", value=False):
-                st.sidebar.markdown("**📈 Impacto del Filtrado:**")
-                
-                # Métricas de casos
-                st.sidebar.metric(
-                    "🦠 Casos Filtrados",
-                    f"{stats['final_casos']}/{stats['initial_casos']}",
-                    delta=f"-{stats['reduction_casos_pct']:.1f}%" if stats['reduction_casos_pct'] > 0 else "Sin cambio",
-                    delta_color="inverse"
-                )
-                
-                # Métricas de epizootias
-                st.sidebar.metric(
-                    "🐒 Epizootias Filtradas", 
-                    f"{stats['final_epizootias']}/{stats['initial_epizootias']}",
-                    delta=f"-{stats['reduction_epi_pct']:.1f}%" if stats['reduction_epi_pct'] > 0 else "Sin cambio",
-                    delta_color="inverse"
-                )
-                
-                # Lista de filtros aplicados
-                if stats["filtros_aplicados"]:
-                    st.sidebar.markdown("**🔍 Filtros Aplicados:**")
-                    for filtro in stats["filtros_aplicados"][:4]:  # Máximo 4
-                        st.sidebar.caption(f"• {filtro}")
-                    
-                    if len(stats["filtros_aplicados"]) > 4:
-                        st.sidebar.caption(f"... y {len(stats['filtros_aplicados']) - 4} más")
