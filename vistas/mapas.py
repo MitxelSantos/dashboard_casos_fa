@@ -339,31 +339,39 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     handle_vereda_click_enhanced(map_data, veredas_data, filters)
 
 
+"""
+Vista de mapas CORREGIDA - Sección de tarjetas con componentes nativos de Streamlit
+CORRECIONES:
+- Reemplazado HTML complejo por st.metric() y containers nativos
+- Manejo correcto de clics en mapas
+- Filtrado automático funcionando
+"""
+
 def create_beautiful_information_cards(casos, epizootias, filters, colors):
     """
-    NUEVAS: Tarjetas súper mejoradas con toda la información solicitada.
+    CORREGIDO: Tarjetas usando componentes nativos de Streamlit en lugar de HTML complejo.
     """
     
     # Calcular métricas completas
     metrics = calculate_basic_metrics(casos, epizootias)
     
-    # **TARJETA DE CASOS MEJORADA** con porcentaje de mortalidad y último caso
-    create_enhanced_cases_card(metrics, colors)
+    # **TARJETA DE CASOS CORREGIDA** - Usando componentes nativos
+    create_native_cases_card(metrics, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # **TARJETA DE EPIZOOTIAS MEJORADA** con positivas + en estudio y último caso positivo
-    create_enhanced_epizootias_card(metrics, colors)
+    # **TARJETA DE EPIZOOTIAS CORREGIDA** - Usando componentes nativos
+    create_native_epizootias_card(metrics, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # **TARJETA DE UBICACIÓN Y FILTROS**
-    create_enhanced_location_card(filters, colors)
+    # **TARJETA DE UBICACIÓN CORREGIDA** - Usando componentes nativos
+    create_native_location_card(filters, colors)
 
 
-def create_enhanced_cases_card(metrics, colors):
+def create_native_cases_card(metrics, colors):
     """
-    NUEVA: Tarjeta súper mejorada para casos con toda la información solicitada.
+    CORREGIDO: Tarjeta de casos usando solo componentes nativos de Streamlit.
     """
     total_casos = metrics["total_casos"]
     vivos = metrics["vivos"]
@@ -371,194 +379,283 @@ def create_enhanced_cases_card(metrics, colors):
     letalidad = metrics["letalidad"]
     ultimo_caso = metrics["ultimo_caso"]
     
-    # Información del último caso
-    if ultimo_caso["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso</div>
-            <div class="last-event-details">
-                <strong>{ultimo_caso["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
+    # Contenedor con estilo simple
+    with st.container():
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #fff5f5, #ffffff);
+                border-radius: 12px;
+                padding: 20px;
+                border-left: 5px solid {colors['danger']};
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            ">
+                <h4 style="color: {colors['danger']}; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                    🦠 CASOS HUMANOS
+                </h4>
             </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin casos registrados</span>
-            </div>
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card cases-card">
-            <div class="card-header">
-                <div class="card-icon">🦠</div>
-                <div class="card-title">CASOS HUMANOS</div>
-                <div class="card-subtitle">Vigilancia epidemiológica</div>
-            </div>
-            <div class="card-body">
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number primary">{total_casos}</div>
-                        <div class="metric-label">Total Casos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number success">{vivos}</div>
-                        <div class="metric-label">Vivos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{fallecidos}</div>
-                        <div class="metric-label">Fallecidos</div>
-                    </div>
-                    <div class="main-metric mortality">
-                        <div class="metric-number warning">{letalidad:.1f}%</div>
-                        <div class="metric-label">Mortalidad</div>
-                    </div>
-                </div>
-                {ultimo_info}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+        
+        # **MÉTRICAS USANDO st.metric() NATIVO**
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                label="Total Casos",
+                value=total_casos,
+                help="Casos humanos confirmados"
+            )
+        
+        with col2:
+            st.metric(
+                label="Vivos",
+                value=vivos,
+                delta=f"{vivos}/{total_casos}" if total_casos > 0 else "0/0"
+            )
+        
+        with col3:
+            st.metric(
+                label="Fallecidos",
+                value=fallecidos,
+                delta=f"-{fallecidos}" if fallecidos > 0 else "0",
+                delta_color="inverse"
+            )
+        
+        with col4:
+            st.metric(
+                label="Mortalidad",
+                value=f"{letalidad:.1f}%",
+                help="Tasa de letalidad"
+            )
+        
+        # **INFORMACIÓN DEL ÚLTIMO CASO** - Usando st.info nativo
+        if ultimo_caso["existe"]:
+            st.info(
+                f"""
+                📍 **Último Caso Registrado:**  
+                **Ubicación:** {ultimo_caso["ubicacion"]}  
+                **Fecha:** {ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}  
+                **Hace:** {ultimo_caso["tiempo_transcurrido"]}
+                """,
+                icon="🦠"
+            )
+        else:
+            st.warning("📭 No hay casos registrados con los filtros actuales", icon="⚠️")
 
 
-def create_enhanced_epizootias_card(metrics, colors):
+def create_native_epizootias_card(metrics, colors):
     """
-    NUEVA: Tarjeta súper mejorada para epizootias con positivas + en estudio.
+    CORREGIDO: Tarjeta de epizootias usando componentes nativos.
     """
     total_epizootias = metrics["total_epizootias"]
     positivas = metrics["epizootias_positivas"]
     en_estudio = metrics["epizootias_en_estudio"]
     ultima_epizootia = metrics["ultima_epizootia_positiva"]
     
-    # Información de la última epizootia positiva
-    if ultima_epizootia["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo</div>
-            <div class="last-event-details">
-                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
+    # Contenedor con estilo simple
+    with st.container():
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #fff8e1, #ffffff);
+                border-radius: 12px;
+                padding: 20px;
+                border-left: 5px solid {colors['warning']};
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            ">
+                <h4 style="color: {colors['warning']}; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                    🐒 EPIZOOTIAS
+                </h4>
             </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin epizootias positivas</span>
-            </div>
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card epizootias-card">
-            <div class="card-header">
-                <div class="card-icon">🐒</div>
-                <div class="card-title">EPIZOOTIAS</div>
-                <div class="card-subtitle">Vigilancia en fauna silvestre</div>
-            </div>
-            <div class="card-body">
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number warning">{total_epizootias}</div>
-                        <div class="metric-label">Total</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{positivas}</div>
-                        <div class="metric-label">Positivas</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number info">{en_estudio}</div>
-                        <div class="metric-label">En Estudio</div>
-                    </div>
-                    <div class="main-metric laboratory">
-                        <div class="metric-number primary">{positivas + en_estudio}</div>
-                        <div class="metric-label">Vigilancia</div>
-                    </div>
-                </div>
-                {ultimo_info}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+        
+        # **MÉTRICAS USANDO st.metric() NATIVO**
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                label="Total",
+                value=total_epizootias,
+                help="Total de epizootias (positivas + en estudio)"
+            )
+        
+        with col2:
+            st.metric(
+                label="Positivas",
+                value=positivas,
+                delta=f"{positivas}/{total_epizootias}" if total_epizootias > 0 else "0/0",
+                delta_color="inverse"
+            )
+        
+        with col3:
+            st.metric(
+                label="En Estudio",
+                value=en_estudio,
+                help="Muestras en proceso de análisis"
+            )
+        
+        with col4:
+            vigilancia_total = positivas + en_estudio
+            st.metric(
+                label="Vigilancia",
+                value=vigilancia_total,
+                help="Total en vigilancia epidemiológica"
+            )
+        
+        # **INFORMACIÓN DE LA ÚLTIMA EPIZOOTIA POSITIVA**
+        if ultima_epizootia["existe"]:
+            st.error(
+                f"""
+                🔴 **Última Epizootia Positiva:**  
+                **Ubicación:** {ultima_epizootia["ubicacion"]}  
+                **Fecha:** {ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}  
+                **Hace:** {ultima_epizootia["tiempo_transcurrido"]}
+                """,
+                icon="🐒"
+            )
+        else:
+            st.success("✅ Sin epizootias positivas registradas con los filtros actuales", icon="🔵")
 
 
-def create_enhanced_location_card(filters, colors):
+def create_native_location_card(filters, colors):
     """
-    NUEVA: Tarjeta de ubicación y filtros activos.
+    CORREGIDO: Tarjeta de ubicación usando componentes nativos.
     """
-    # Información de ubicación actual
     ubicacion_actual = get_current_location_info(filters)
     filtros_activos = filters.get("active_filters", [])
+    current_level = determine_map_level(filters)
     
     # Información de navegación
-    current_level = determine_map_level(filters)
     level_info = {
-        "departamento": {"icon": "🏛️", "name": "Vista Departamental", "color": colors["primary"]},
-        "municipio": {"icon": "🏘️", "name": "Vista Municipal", "color": colors["secondary"]}, 
-        "vereda": {"icon": "📍", "name": "Vista de Vereda", "color": colors["accent"]}
+        "departamento": {"icon": "🏛️", "name": "Vista Departamental"},
+        "municipio": {"icon": "🏘️", "name": "Vista Municipal"}, 
+        "vereda": {"icon": "📍", "name": "Vista de Vereda"}
     }
     
     level = level_info[current_level]
     
-    filtros_html = ""
-    if filtros_activos:
-        filtros_list = "<br>".join([f"• {filtro}" for filtro in filtros_activos[:3]])
-        if len(filtros_activos) > 3:
-            filtros_list += f"<br>• ... y {len(filtros_activos) - 3} más"
+    # Contenedor con estilo simple
+    with st.container():
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg, #e3f2fd, #ffffff);
+                border-radius: 12px;
+                padding: 20px;
+                border-left: 5px solid {colors['info']};
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            ">
+                <h4 style="color: {colors['info']}; margin: 0 0 15px 0; display: flex; align-items: center; gap: 10px;">
+                    🗺️ UBICACIÓN Y NAVEGACIÓN
+                </h4>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         
-        filtros_html = f"""
-        <div class="filters-section">
-            <div class="filters-title">🎯 Filtros Activos</div>
-            <div class="filters-list">{filtros_list}</div>
-        </div>
-        """
+        # **UBICACIÓN ACTUAL**
+        st.markdown(f"**{level['icon']} {level['name']}**")
+        st.markdown(f"📍 **{ubicacion_actual}**")
+        
+        # **FILTROS ACTIVOS** - Usando st.info si hay filtros
+        if filtros_activos:
+            filtros_text = " • ".join(filtros_activos[:3])
+            if len(filtros_activos) > 3:
+                filtros_text += f" • +{len(filtros_activos) - 3} más"
+            
+            st.info(f"🎯 **Filtros activos:** {filtros_text}", icon="🔄")
+        
+        # **AYUDA DE NAVEGACIÓN** - Usando st.help nativo
+        st.markdown("---")
+        st.markdown("**💡 Navegación:**")
+        st.markdown(
+            """
+            • **Hover:** Pase el cursor sobre el mapa para ver información  
+            • **Clic:** Haga clic para filtrar por ubicación  
+            • **Botones:** Use los botones de navegación para cambiar vista
+            """,
+            help="Instrucciones de uso del mapa interactivo"
+        )
+
+
+def handle_enhanced_click_interactions(map_data, municipios_data):
+    """
+    CORREGIDO: Manejo de clics mejorado con debugging y rerun forzado.
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
     
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card location-card">
-            <div class="card-header">
-                <div class="card-icon">🗺️</div>
-                <div class="card-title">UBICACIÓN</div>
-                <div class="card-subtitle">Navegación y filtros</div>
-            </div>
-            <div class="card-body">
-                <div class="location-info">
-                    <div class="current-location">
-                        <div class="location-icon" style="color: {level['color']};">{level['icon']}</div>
-                        <div class="location-details">
-                            <div class="location-name">{ubicacion_actual}</div>
-                            <div class="location-level">{level['name']}</div>
-                        </div>
-                    </div>
-                </div>
-                {filtros_html}
-                <div class="navigation-help">
-                    <div class="help-title">💡 Navegación</div>
-                    <div class="help-text">
-                        • Pase el cursor sobre el mapa para ver información<br>
-                        • Haga clic para filtrar por ubicación<br>
-                        • Use los botones de navegación para cambiar vista
-                    </div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        # **DEBUG: Mostrar qué se está clicando**
+        st.sidebar.markdown("**🔍 Debug Click:**")
+        st.sidebar.json(clicked_object)
+        
+        # Verificar si es un click válido con coordenadas
+        if isinstance(clicked_object, dict) and 'lat' in clicked_object and 'lng' in clicked_object:
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar el municipio más cercano al punto clicado
+                min_distance = float('inf')
+                municipio_clicked = None
+                municipio_data = None
+                
+                for idx, row in municipios_data.iterrows():
+                    # Calcular el centroide del municipio
+                    try:
+                        centroid = row['geometry'].centroid
+                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            municipio_clicked = row['MpNombre']
+                            municipio_data = row
+                    except Exception as e:
+                        continue
+                
+                if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
+                    # **APLICAR FILTROS INMEDIATAMENTE**
+                    st.session_state['municipio_filter'] = municipio_clicked
+                    st.session_state['vereda_filter'] = 'Todas'  # Resetear vereda
+                    
+                    # **MOSTRAR MENSAJE DE CONFIRMACIÓN**
+                    casos_count = municipio_data['casos'] if municipio_data is not None else 0
+                    epi_count = municipio_data['epizootias'] if municipio_data is not None else 0
+                    
+                    if casos_count > 0 or epi_count > 0:
+                        st.success(
+                            f"✅ **Filtrado por:** {municipio_clicked}  \n"
+                            f"📊 **Datos:** {casos_count} casos, {epi_count} epizootias"
+                        )
+                    else:
+                        st.info(f"📍 **Filtrado por:** {municipio_clicked} (sin datos registrados)")
+                    
+                    # **FORZAR ACTUALIZACIÓN INMEDIATA**
+                    st.rerun()
+                else:
+                    st.warning(f"🔍 Clic detectado pero sin municipio cercano (distancia: {min_distance:.3f})")
+        
+        # **MANEJO ALTERNATIVO: Si tiene propiedades directas**
+        elif isinstance(clicked_object, dict) and 'properties' in clicked_object:
+            properties = clicked_object['properties']
+            if 'MpNombre' in properties:
+                municipio_name = properties['MpNombre']
+                st.session_state['municipio_filter'] = municipio_name
+                st.session_state['vereda_filter'] = 'Todas'
+                st.success(f"✅ Filtrado por: **{municipio_name}**")
+                st.rerun()
+                    
+    except Exception as e:
+        st.error(f"❌ Error procesando clic: {str(e)}")
+        st.sidebar.markdown(f"**Error:** {str(e)}")
+        
 def apply_enhanced_cards_css(colors):
     """
     CSS súper mejorado para tarjetas hermosas y funcionales.
