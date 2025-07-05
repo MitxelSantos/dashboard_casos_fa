@@ -1260,6 +1260,187 @@ def create_hierarchical_filters_with_map_sync(data, map_changed):
         "vereda_normalizada": vereda_norm_selected,
     }
 
+def create_hierarchical_filters_with_map_sync_enhanced(data, map_changed):
+    """
+    CORREGIDO: Filtros jerárquicos con sincronización perfecta mejorada.
+    """
+    
+    # **PREVENIR LOOPS INFINITOS**: Detectar fuente del cambio
+    if map_changed:
+        st.sidebar.markdown(
+            """
+            <div class="map-sync-indicator">
+                🗺️ ✅ Actualizado desde mapa
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        # Limpiar bandera inmediatamente para prevenir loops
+        if 'map_filter_updated' in st.session_state:
+            st.session_state['map_filter_updated'] = False
+    
+    # **FILTRO DE MUNICIPIO CON SINCRONIZACIÓN ROBUSTA**
+    municipio_options = ["Todos"] + [
+        data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
+    ]
+
+    # Valor inicial desde session_state con validación
+    municipio_inicial = st.session_state.get("municipio_filter", "Todos")
+    
+    # VALIDACIÓN CRÍTICA: Asegurar que el valor esté en las opciones
+    if municipio_inicial not in municipio_options:
+        municipio_inicial = "Todos"
+        st.session_state["municipio_filter"] = "Todos"
+        logger.warning(f"⚠️ Municipio '{municipio_inicial}' no encontrado en opciones, reseteando a 'Todos'")
+
+    # Widget con key único para evitar conflictos
+    municipio_selected = st.sidebar.selectbox(
+        "📍 **MUNICIPIO**:",
+        municipio_options,
+        index=municipio_options.index(municipio_inicial),
+        key="municipio_filter_widget_main",  # Key único
+        help="🗺️ Seleccione un municipio o haga doble clic en el mapa",
+    )
+
+    # **SINCRONIZACIÓN BIDIRECCIONAL MEJORADA**
+    # Solo actualizar si hay cambio real y no viene del mapa
+    if municipio_selected != st.session_state.get("municipio_filter", "Todos"):
+        if not map_changed:  # Solo si NO viene del mapa
+            st.session_state["municipio_filter"] = municipio_selected
+            # Si el cambio viene del sidebar, resetear vereda
+            st.session_state["vereda_filter"] = "Todas"
+            logger.info(f"🔄 Municipio actualizado desde sidebar: {municipio_selected}")
+
+    # Determinar municipio normalizado
+    municipio_norm_selected = None
+    if municipio_selected != "Todos":
+        for norm, display in data["municipio_display_map"].items():
+            if display == municipio_selected:
+                municipio_norm_selected = norm
+                break
+
+    # **FILTRO DE VEREDA CON VALIDACIÓN MEJORADA**
+    vereda_options = ["Todas"]
+    vereda_disabled = municipio_selected == "Todos"
+    
+    if not vereda_disabled and municipio_norm_selected in data["veredas_por_municipio"]:
+        veredas_norm = data["veredas_por_municipio"][municipio_norm_selected]
+        if municipio_norm_selected in data["vereda_display_map"]:
+            vereda_options.extend([
+                data["vereda_display_map"][municipio_norm_selected].get(norm, norm)
+                for norm in veredas_norm
+            ])
+
+    # Valor inicial de vereda con validación robusta
+    vereda_inicial = st.session_state.get("vereda_filter", "Todas")
+    if vereda_disabled:
+        vereda_inicial = "Todas"
+        st.session_state["vereda_filter"] = "Todas"
+    elif vereda_inicial not in vereda_options:
+        vereda_inicial = "Todas"
+        st.session_state["vereda_filter"] = "Todas"
+        logger.warning(f"⚠️ Vereda '{vereda_inicial}' no encontrada en opciones del municipio, reseteando")
+
+    vereda_selected = st.sidebar.selectbox(
+        "🏘️ **VEREDA**:",
+        vereda_options,
+        index=vereda_options.index(vereda_inicial),
+        key="vereda_filter_widget_main",  # Key único
+        disabled=vereda_disabled,
+        help="🏘️ Las veredas se actualizan según el municipio seleccionado",
+    )
+
+    # **SINCRONIZACIÓN DE VEREDA**
+    if not vereda_disabled and vereda_selected != st.session_state.get("vereda_filter", "Todas"):
+        if not map_changed:  # Solo si NO viene del mapa
+            st.session_state["vereda_filter"] = vereda_selected
+            logger.info(f"🔄 Vereda actualizada desde sidebar: {vereda_selected}")
+
+    # Determinar vereda normalizada
+    vereda_norm_selected = None
+    if vereda_selected != "Todas" and municipio_norm_selected:
+        if municipio_norm_selected in data["vereda_display_map"]:
+            for norm, display in data["vereda_display_map"][municipio_norm_selected].items():
+                if display == vereda_selected:
+                    vereda_norm_selected = norm
+                    break
+
+    # **INFORMACIÓN CONTEXTUAL DETALLADA**
+    if municipio_selected != "Todos":
+        veredas_count = len(vereda_options) - 1  # -1 por "Todas"
+        info_color = "🟢" if vereda_selected != "Todas" else "🟡"
+        st.sidebar.markdown(
+            f"""
+            <div class="filter-help">
+                {info_color} <strong>{municipio_selected}</strong><br>
+                🏘️ {veredas_count} veredas disponibles<br>
+                🗺️ Nivel: {'Vereda específica' if vereda_selected != 'Todas' else 'Vista municipal'}<br>
+                🔄 Sincronizado con mapa interactivo
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    else:
+        st.sidebar.markdown(
+            """
+            <div class="filter-help">
+                🗺️ Vista departamental completa del Tolima<br>
+                📍 Seleccione un municipio para ver sus veredas<br>
+                🖱️ O haga clic en cualquier municipio del mapa<br>
+                📊 Mostrando datos de todo el departamento
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # **BOTÓN DE DEBUG** (opcional, solo en desarrollo)
+    if st.sidebar.checkbox("🔧 Modo Debug", value=False, key="debug_mode_checkbox"):
+        st.session_state['debug_mode'] = True
+        st.sidebar.markdown("**🔧 Estado de Filtros:**")
+        st.sidebar.code(f"""
+        municipio_filter: {st.session_state.get('municipio_filter')}
+        vereda_filter: {st.session_state.get('vereda_filter')}
+        map_changed: {map_changed}
+        municipio_selected: {municipio_selected}
+        vereda_selected: {vereda_selected}
+                """)
+    else:
+        st.session_state['debug_mode'] = False
+
+    return {
+        "municipio_display": municipio_selected,
+        "municipio_normalizado": municipio_norm_selected,
+        "vereda_display": vereda_selected,
+        "vereda_normalizada": vereda_norm_selected,
+    }
+    
+def verify_filter_sync():
+    """
+    NUEVA: Función de utilidad para verificar que la sincronización funcione.
+    Usar solo para debugging.
+    """
+    if st.session_state.get('debug_mode', False):
+        st.sidebar.markdown("---")
+        st.sidebar.markdown("**🔍 Verificación de Sincronización:**")
+        
+        # Obtener todos los valores relacionados con filtros
+        filters_state = {}
+        for key in st.session_state.keys():
+            if 'filter' in key.lower():
+                filters_state[key] = st.session_state[key]
+        
+        if filters_state:
+            st.sidebar.json(filters_state)
+        else:
+            st.sidebar.info("No hay filtros activos")
+        
+        # Botón para limpiar todo (para testing)
+        if st.sidebar.button("🧹 Limpiar Todo (Testing)", key="clear_all_debug"):
+            keys_to_clear = [key for key in st.session_state.keys() if 'filter' in key.lower()]
+            for key in keys_to_clear:
+                del st.session_state[key]
+            st.sidebar.success("✅ Todos los filtros limpiados")
+            st.rerun()
 
 def show_filter_management_controls(active_filters):
     """
