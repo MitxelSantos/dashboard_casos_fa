@@ -403,16 +403,6 @@ def create_content_filters_enhanced(data):
     """
     # Sección de filtros de contenido
     st.sidebar.markdown("---")
-    
-    st.sidebar.markdown(
-        """
-        <div class="filter-section">
-            <div class="filter-header">
-                📅 Filtros Temporales
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # Filtro de rango de fechas con información contextual mejorada
     fechas_disponibles = []
@@ -470,7 +460,6 @@ def create_content_filters_enhanced(data):
                 f"""
                 <div class="filter-help">
                     📊 Rango disponible: {fecha_min.strftime('%d/%m/%Y')} - {fecha_max.strftime('%d/%m/%Y')}
-                    <br>⏱️ Total: {total_dias} días de datos
                     <br>🎯 Seleccionado: {dias_seleccionados} días ({porcentaje_periodo:.1f}% del período)
                 </div>
                 """,
@@ -1141,15 +1130,6 @@ def detect_and_process_map_changes():
         # Limpiar bandera después de procesar
         st.session_state['map_filter_updated'] = False
     
-    # **DEBUGGING: Mostrar estado de session_state relacionado con mapas**
-    if st.sidebar.checkbox("🔍 Debug Filtros-Mapa", value=False):
-        st.sidebar.markdown("**🗺️ Estado de Filtros de Mapa:**")
-        map_keys = ['municipio_filter', 'vereda_filter', 'map_filter_updated']
-        for key in map_keys:
-            value = st.session_state.get(key, "❌ No definido")
-            color = "🟢" if value != "❌ No definido" else "🔴"
-            st.sidebar.markdown(f"{color} **{key}:** `{value}`")
-    
     return map_changed
 
 
@@ -1157,15 +1137,6 @@ def create_hierarchical_filters_with_map_sync(data, map_changed):
     """
     NUEVA: Filtros jerárquicos con sincronización perfecta con mapas.
     """
-    st.sidebar.markdown(
-        """
-        <div class="filter-section">
-            <div class="filter-header">
-                🎯 Filtros Principales
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
     
     # **SINCRONIZACIÓN: Detectar fuente del cambio**
     if map_changed:
@@ -1273,7 +1244,7 @@ def create_hierarchical_filters_with_map_sync(data, map_changed):
             """
             <div class="filter-help">
                 🗺️ Vista departamental del Tolima<br>
-                📍 Haga clic en un municipio del mapa<br>
+                📍 Seleccione un municipio<br>
                 📊 Mostrando datos de todo el departamento
             </div>
             """,
@@ -1295,28 +1266,6 @@ def show_filter_management_controls(active_filters):
     NUEVA: Controles de gestión de filtros con estadísticas.
     """
     st.sidebar.markdown("---")
-    
-    # Información de estado actual con diseño mejorado
-    filter_count = len(active_filters)
-    
-    if filter_count > 0:
-        st.sidebar.markdown(
-            f"""
-            <div style="
-                background: linear-gradient(45deg, #4682B4, #7D0F2B);
-                color: white;
-                padding: 12px;
-                border-radius: 10px;
-                text-align: center;
-                margin-bottom: 15px;
-                font-weight: 600;
-                box-shadow: 0 3px 10px rgba(0,0,0,0.2);
-            ">
-                🎯 {filter_count} filtro{'s' if filter_count > 1 else ''} activo{'s' if filter_count > 1 else ''}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
     # Botones de control
     col1, col2 = st.sidebar.columns([3, 1])
@@ -1330,26 +1279,6 @@ def show_filter_management_controls(active_filters):
         ):
             reset_all_filters_enhanced()
             st.rerun()
-
-    with col2:
-        # Botón de ayuda expandible
-        if st.button("❓", help="Ayuda sobre filtros", use_container_width=True):
-            st.session_state["show_filter_help"] = not st.session_state.get("show_filter_help", False)
-    
-    # Mostrar ayuda si está activada
-    if st.session_state.get("show_filter_help", False):
-        st.sidebar.info(
-            """
-            **🔍 Cómo usar los filtros:**
-            
-            • **🗺️ Mapas**: Haga clic en municipios/veredas
-            • **📱 Sidebar**: Use los selectores
-            • **🔄 Sincronización**: Automática bidireccional  
-            • **🧹 Reset**: Botón para limpiar todo
-            • **🔍 Debug**: Checkboxes para monitoreo
-            """,
-            icon="💡"
-        )
 
 
 def apply_all_filters_with_logging(data, filters_location, filters_content, filters_advanced):

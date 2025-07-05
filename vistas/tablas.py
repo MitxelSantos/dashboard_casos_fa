@@ -29,49 +29,17 @@ def show(data_filtered, filters, colors):
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]  # Ya contiene positivas + en estudio
 
-    # Título principal
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {colors['info']}, {colors['secondary']});
-            color: white;
-            padding: 20px;
-            border-radius: 15px;
-            margin-bottom: 25px;
-            text-align: center;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
-        ">
-            <h2 style="margin: 0; font-size: 1.8rem; font-weight: 700;">📊 Análisis Epidemiológico Detallado</h2>
-            <p style="margin: 8px 0 0 0; opacity: 0.95; font-size: 1rem;">
-                📋 Tablas detalladas • 📈 Análisis visual • 📥 Exportación avanzada
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
     # CSS para tablas mejoradas
     apply_enhanced_tables_css(colors)
-
-    # Sección 1: Información general
-    show_general_information_section(casos, epizootias, colors)
-
-    st.markdown("---")
 
     # Sección 2: Tablas detalladas tipo Excel
     show_detailed_excel_tables(casos, epizootias, colors)
 
-    st.markdown("---")
-
     # Sección 3: Tabla resumen estética
     show_aesthetic_summary_table(casos, epizootias, colors)
 
-    st.markdown("---")
-
     # Sección 4: Análisis visual simplificado
     show_simplified_visual_analysis(casos, epizootias, colors)
-
-    st.markdown("---")
 
     # Sección 5: Exportación avanzada
     show_comprehensive_export_section(casos, epizootias, colors)
@@ -247,125 +215,6 @@ def apply_enhanced_tables_css(colors):
         """,
         unsafe_allow_html=True,
     )
-
-
-def show_general_information_section(casos, epizootias, colors):
-    """Sección de información general con métricas rápidas."""
-    st.markdown(
-        """
-        <div class="analysis-section">
-            <div class="section-header">
-                📋 Información General
-            </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    # Calcular métricas generales
-    metrics = calculate_basic_metrics(casos, epizootias)
-
-    # Métricas rápidas en grid
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.markdown(
-            f"""
-            <div class="quick-metric municipio-casos">
-                <div class="quick-metric-value">{metrics['total_casos']}</div>
-                <div class="quick-metric-label">Casos Humanos</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col2:
-        st.markdown(
-            f"""
-            <div class="quick-metric municipio-epizootias">
-                <div class="quick-metric-value">{metrics['total_epizootias']}</div>
-                <div class="quick-metric-label">Epizootias Total</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col3:
-        st.markdown(
-            f"""
-            <div class="quick-metric municipio-casos">
-                <div class="quick-metric-value">{metrics['epizootias_positivas']}</div>
-                <div class="quick-metric-label">Positivas</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    with col4:
-        st.markdown(
-            f"""
-            <div class="quick-metric municipio-mixto">
-                <div class="quick-metric-value">{metrics['epizootias_en_estudio']}</div>
-                <div class="quick-metric-label">En Estudio</div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Información del último caso y epizootia
-    col1, col2 = st.columns(2)
-
-    with col1:
-        ultimo_caso = metrics["ultimo_caso"]
-        if ultimo_caso["existe"]:
-            st.markdown(
-                f"""
-                <div class="info-box">
-                    <div class="info-box-title">🦠 Último Caso Registrado</div>
-                    <strong>Ubicación:</strong> {ultimo_caso["ubicacion"]}<br>
-                    <strong>Fecha:</strong> {ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}<br>
-                    <strong>Tiempo transcurrido:</strong> {ultimo_caso["tiempo_transcurrido"]}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-                <div class="info-box">
-                    <div class="info-box-title">🦠 Último Caso Registrado</div>
-                    No hay casos registrados con los filtros actuales
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    with col2:
-        ultima_epizootia = metrics["ultima_epizootia_positiva"]
-        if ultima_epizootia["existe"]:
-            st.markdown(
-                f"""
-                <div class="info-box">
-                    <div class="info-box-title">🔴 Última Epizootia Positiva</div>
-                    <strong>Ubicación:</strong> {ultima_epizootia["ubicacion"]}<br>
-                    <strong>Fecha:</strong> {ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}<br>
-                    <strong>Tiempo transcurrido:</strong> {ultima_epizootia["tiempo_transcurrido"]}
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                """
-                <div class="info-box">
-                    <div class="info-box-title">🔴 Última Epizootia Positiva</div>
-                    No hay epizootias positivas registradas con los filtros actuales
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
 
 def show_detailed_excel_tables(casos, epizootias, colors):
     """Tablas detalladas tipo Excel con todas las columnas."""

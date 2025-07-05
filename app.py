@@ -705,39 +705,6 @@ def create_empty_data_structure():
         "data_source": "error",
     }
 
-def show_epizootias_debug_info():
-    """
-    NUEVA: Función para mostrar información de debug de epizootias en el sidebar.
-    """
-    if "epizootias_debug" in st.session_state:
-        debug_info = st.session_state["epizootias_debug"]
-        
-        with st.sidebar.expander("🔍 Debug Epizootias", expanded=False):
-            st.markdown("**📊 Estadísticas de Filtrado:**")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Original", debug_info['total_original'])
-                st.metric("Positivas", debug_info['positivas'])
-            with col2:
-                st.metric("Filtradas", debug_info['total_filtradas'])
-                st.metric("En Estudio", debug_info['en_estudio'])
-            
-            st.markdown("**🔍 Valores Encontrados (Raw):**")
-            for i, val in enumerate(debug_info.get('valores_originales', [])[:5]):
-                st.code(f"{i+1}. '{val}'")
-            
-            if len(debug_info.get('valores_originales', [])) > 5:
-                st.caption(f"... y {len(debug_info['valores_originales']) - 5} más")
-            
-            st.markdown("**✅ Valores Normalizados:**")
-            for i, val in enumerate(debug_info.get('valores_normalizados', [])[:5]):
-                st.code(f"{i+1}. '{val}'")
-            
-            st.markdown("**🎯 Patrones de Búsqueda:**")
-            patrones = debug_info.get('patrones_usados', {})
-            st.json(patrones)
-
 def create_filters_responsive_with_maps_enhanced(data):
     """Crea sistema de filtros MEJORADO con sincronización bidireccional completa."""
     # Importar el sistema de filtros mejorado
@@ -906,33 +873,6 @@ def handle_map_interactions(data_filtered, filters, colors):
         if 'map_interaction_data' in st.session_state:
             del st.session_state['map_interaction_data']
 
-def show_module_debug_info():
-    """
-    NUEVO: Muestra información de debug sobre el estado de los módulos.
-    """
-    if st.sidebar.checkbox("🔧 Debug Módulos", value=False):
-        st.sidebar.markdown("**📦 Estado de Módulos de Vistas:**")
-        
-        for module_name, module in vistas_modules.items():
-            if module:
-                status = "✅ Importado"
-                has_show = "✅" if hasattr(module, 'show') else "❌"
-                color = "green"
-            else:
-                status = "❌ Error"
-                has_show = "❌"
-                color = "red"
-                
-            st.sidebar.markdown(f"<span style='color: {color};'>**{module_name}:** {status}</span>", unsafe_allow_html=True)
-            st.sidebar.markdown(f"   función show(): {has_show}")
-        
-        # Mostrar dependencias
-        st.sidebar.markdown("**📚 Dependencias:**")
-        deps = check_module_dependencies()
-        for dep, status in deps.items():
-            status_text = "✅ OK" if status else "❌ Error"
-            st.sidebar.markdown(f"   {dep}: {status_text}")
-
 def main():
     """
     Aplicación principal del dashboard v3.3 CORREGIDA con debugging mejorado.
@@ -950,13 +890,8 @@ def main():
         with st.sidebar:
             st.title("Dashboard Tolima v3.3")
 
-    # NUEVO: Mostrar debug de módulos en desarrollo
-    show_module_debug_info()
-
     # Cargar datos con indicadores responsive (POSITIVAS + EN ESTUDIO)
     data = load_enhanced_datasets()
-    
-    show_epizootias_debug_info()
 
     if data["casos"].empty and data["epizootias"].empty:
         # Error responsive con instrucciones claras
@@ -975,12 +910,6 @@ def main():
 
     # Manejar interacciones del mapa
     handle_map_interactions(data_filtered, filters, COLORS)
-
-    # **TÍTULO PRINCIPAL CORREGIDO** - Sin espaciado excesivo
-    st.markdown(
-        '<h1 class="main-title">🗺️ Dashboard Fiebre Amarilla</h1>',
-        unsafe_allow_html=True,
-    )
 
     # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.3
     tab1, tab2, tab3 = st.tabs(
@@ -1064,7 +993,7 @@ def main():
     st.markdown(
         f"""
         <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0; margin-top: 0.5rem;">
-            Dashboard Fiebre Amarilla v3.3 • CORRECCIÓN: Debugging mejorado<br>
+            Dashboard Fiebre Amarilla v1.0<br>
             Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
         </div>
         """,
