@@ -7,6 +7,7 @@ CORRECCIONES:
 """
 
 import os
+import time
 import logging
 from datetime import datetime
 import streamlit as st
@@ -62,10 +63,9 @@ except ImportError as e:
 
 try:
     from utils.data_processor import (
-        normalize_text,
         excel_date_to_datetime,
-        capitalize_names,
-        create_intelligent_vereda_mapping,
+        calculate_basic_metrics,
+        get_latest_case_info,
     )
     logger.info("✅ Utilidades de procesamiento de datos importadas correctamente")
 except ImportError as e:
@@ -203,319 +203,143 @@ for module_name, module in vistas_modules.items():
 
 def load_enhanced_datasets():
     """
-    Carga datasets con epizootias positivas + en estudio y mapeo inteligente de veredas.
+    Carga datasets SIMPLIFICADA - usa nombres directos de shapefiles.
+    ELIMINADA toda la lógica de normalización y mapeo complejo.
     """
     try:
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("🔄 Inicializando carga de datos v3.3...")
+        status_text.text("🔄 Cargando datos simplificados...")
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
         casos_filename = "BD_positivos.xlsx"
         epizootias_filename = "Información_Datos_FA.xlsx"
 
-        # Rutas primarias (carpeta data) - RECOMENDADA
         data_casos_path = DATA_DIR / casos_filename
         data_epizootias_path = DATA_DIR / epizootias_filename
-
-        # Rutas de respaldo (directorio raíz)
         root_casos_path = ROOT_DIR / casos_filename
         root_epizootias_path = ROOT_DIR / epizootias_filename
 
         progress_bar.progress(10)
-        status_text.text("📁 Verificando disponibilidad de archivos...")
+        status_text.text("📁 Cargando archivos...")
 
-        # ==================== ESTRATEGIA DE CARGA INTELIGENTE ====================
+        # ==================== CARGA SIMPLIFICADA ====================
         casos_df = None
         epizootias_df = None
         data_source = None
 
-        # Estrategia 1: Intentar cargar desde carpeta data/
+        # Estrategia 1: Carpeta data/
         if data_casos_path.exists() and data_epizootias_path.exists():
             try:
-                status_text.text("📂 Cargando desde carpeta data/...")
-                casos_df = pd.read_excel(
-                    data_casos_path, sheet_name="ACUMU", engine="openpyxl"
-                )
-                epizootias_df = pd.read_excel(
-                    data_epizootias_path, sheet_name="Base de Datos", engine="openpyxl"
-                )
+                casos_df = pd.read_excel(data_casos_path, sheet_name="ACUMU", engine="openpyxl")
+                epizootias_df = pd.read_excel(data_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
                 data_source = "data_folder"
-                logger.info("✅ Datos cargados exitosamente desde carpeta data/")
+                logger.info("✅ Datos cargados desde carpeta data/")
             except Exception as e:
-                logger.warning(f"⚠️ Error al cargar desde carpeta data/: {str(e)}")
+                logger.warning(f"⚠️ Error cargando desde data/: {str(e)}")
                 casos_df = None
                 epizootias_df = None
 
-        # Estrategia 2: Intentar cargar desde directorio raíz
-        if (
-            casos_df is None
-            and root_casos_path.exists()
-            and root_epizootias_path.exists()
-        ):
+        # Estrategia 2: Directorio raíz
+        if casos_df is None and root_casos_path.exists() and root_epizootias_path.exists():
             try:
-                status_text.text("📁 Cargando desde directorio raíz...")
-                casos_df = pd.read_excel(
-                    root_casos_path, sheet_name="ACUMU", engine="openpyxl"
-                )
-                epizootias_df = pd.read_excel(
-                    root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl"
-                )
+                casos_df = pd.read_excel(root_casos_path, sheet_name="ACUMU", engine="openpyxl")
+                epizootias_df = pd.read_excel(root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
                 data_source = "root_folder"
-                logger.info("✅ Datos cargados exitosamente desde directorio raíz")
+                logger.info("✅ Datos cargados desde directorio raíz")
             except Exception as e:
-                logger.warning(f"⚠️ Error al cargar desde directorio raíz: {str(e)}")
+                logger.warning(f"⚠️ Error cargando desde raíz: {str(e)}")
                 casos_df = None
                 epizootias_df = None
 
-        # Estrategia 3: Intentar cargar desde Google Drive (FALLBACK)
-        if casos_df is None:
-            try:
-                from gdrive_utils import (
-                    get_file_from_drive,
-                    check_google_drive_availability,
-                )
-
-                if check_google_drive_availability():
-                    status_text.text("☁️ Intentando cargar desde Google Drive...")
-                    progress_bar.progress(20)
-
-                    if hasattr(st.secrets, "drive_files"):
-                        drive_files = st.secrets.drive_files
-
-                        # Cargar casos desde Google Drive
-                        if "casos_confirmados" in drive_files:
-                            casos_path = get_file_from_drive(
-                                drive_files["casos_confirmados"], casos_filename
-                            )
-                            if casos_path and Path(casos_path).exists():
-                                casos_df = pd.read_excel(
-                                    casos_path, sheet_name="ACUMU", engine="openpyxl"
-                                )
-                                logger.info("✅ Casos cargados desde Google Drive")
-
-                        # Cargar epizootias desde Google Drive
-                        if "epizootias" in drive_files:
-                            epi_path = get_file_from_drive(
-                                drive_files["epizootias"], epizootias_filename
-                            )
-                            if epi_path and Path(epi_path).exists():
-                                epizootias_df = pd.read_excel(
-                                    epi_path,
-                                    sheet_name="Base de Datos",
-                                    engine="openpyxl",
-                                )
-                                logger.info("✅ Epizootias cargadas desde Google Drive")
-
-                        if casos_df is not None and epizootias_df is not None:
-                            data_source = "google_drive"
-
-            except ImportError:
-                pass
-            except Exception as e:
-                logger.error(f"❌ Error al cargar desde Google Drive: {str(e)}")
-
-        # ==================== VALIDACIÓN Y MENSAJE DE ERROR ====================
         if casos_df is None or epizootias_df is None:
             st.error("❌ No se pudieron cargar los archivos de datos")
             return create_empty_data_structure()
 
         progress_bar.progress(30)
-        status_text.text("🔧 Procesando datos para mapas interactivos...")
+        status_text.text("🔧 Procesando datos...")
+        
+        # Limpiar columnas problemáticas
+        if 'Unnamed: 16' in casos_df.columns:
+            casos_df = casos_df.drop('Unnamed: 16', axis=1)
+        if 'Unnamed: 16' in epizootias_df.columns:
+            epizootias_df = epizootias_df.drop('Unnamed: 16', axis=1)
 
-        # ==================== PROCESAMIENTO DE DATOS MEJORADO ====================
-        # Limpiar datos de casos
+        # Eliminar todas las columnas "Unnamed"
+        casos_df = casos_df.loc[:, ~casos_df.columns.str.contains('^Unnamed')]
+        epizootias_df = epizootias_df.loc[:, ~epizootias_df.columns.str.contains('^Unnamed')]
+
+        # ==================== LIMPIEZA BÁSICA ====================
         casos_df = casos_df.dropna(how="all")
+        epizootias_df = epizootias_df.dropna(how="all")
 
-        # Mapear columnas de casos
+        # ==================== MAPEO DE COLUMNAS DIRECTO ====================
         casos_columns_map = {
             "edad_": "edad",
             "sexo_": "sexo",
-            "vereda_": "vereda",
-            "nmun_proce": "municipio",
+            "vereda_": "vereda",           # Ahora coincide con vereda_nor del shapefile
+            "nmun_proce": "municipio",     # Ahora coincide con municipi_1 del shapefile
             "cod_ase_": "eps",
             "Condición Final": "condicion_final",
             "Inicio de sintomas": "fecha_inicio_sintomas",
         }
 
-        # Renombrar columnas existentes
-        existing_casos_columns = {
-            k: v for k, v in casos_columns_map.items() if k in casos_df.columns
-        }
-        casos_df = casos_df.rename(columns=existing_casos_columns)
-
-        # Normalizar municipios y veredas en casos
-        if "municipio" in casos_df.columns:
-            casos_df["municipio_normalizado"] = casos_df["municipio"].apply(
-                normalize_text
-            )
-            casos_df["municipio"] = casos_df["municipio"].apply(capitalize_names)
-        if "vereda" in casos_df.columns:
-            casos_df["vereda_normalizada"] = casos_df["vereda"].apply(normalize_text)
-            casos_df["vereda"] = casos_df["vereda"].apply(capitalize_names)
-
-        # Convertir fechas de casos
-        if "fecha_inicio_sintomas" in casos_df.columns:
-            casos_df["fecha_inicio_sintomas"] = casos_df["fecha_inicio_sintomas"].apply(
-                excel_date_to_datetime
-            )
-
-        progress_bar.progress(50)
-        status_text.text("🔵 Procesando epizootias: positivas + en estudio...")
-
-        # ==================== NUEVO: PROCESAR EPIZOOTIAS (POSITIVAS + EN ESTUDIO) ====================
-        # Limpiar datos de epizootias
-        epizootias_df = epizootias_df.dropna(how="all")
-
-        # Mapear columnas de epizootias
         epizootias_columns_map = {
-            "MUNICIPIO": "municipio",
-            "VEREDA": "vereda",
+            "MUNICIPIO": "municipio",      # Ahora coincide con municipi_1 del shapefile
+            "VEREDA": "vereda",           # Ahora coincide con vereda_nor del shapefile
             "FECHA RECOLECCIÓN ": "fecha_recoleccion",
             "PROVENIENTE ": "proveniente",
             "DESCRIPCIÓN": "descripcion",
         }
 
         # Renombrar columnas existentes
-        existing_epi_columns = {
-            k: v
-            for k, v in epizootias_columns_map.items()
-            if k in epizootias_df.columns
-        }
+        existing_casos_columns = {k: v for k, v in casos_columns_map.items() if k in casos_df.columns}
+        casos_df = casos_df.rename(columns=existing_casos_columns)
+
+        existing_epi_columns = {k: v for k, v in epizootias_columns_map.items() if k in epizootias_df.columns}
         epizootias_df = epizootias_df.rename(columns=existing_epi_columns)
 
+        # ==================== PROCESAMIENTO DE FECHAS ====================
+        if "fecha_inicio_sintomas" in casos_df.columns:
+            logger.info("📅 Procesando fechas de casos...")
+            casos_df["fecha_inicio_sintomas"] = casos_df["fecha_inicio_sintomas"].apply(excel_date_to_datetime)
+
+        if "fecha_recoleccion" in epizootias_df.columns:
+            logger.info("📅 Procesando fechas de epizootias...")
+            epizootias_df["fecha_recoleccion"] = epizootias_df["fecha_recoleccion"].apply(excel_date_to_datetime)
+
+        progress_bar.progress(50)
+        status_text.text("🔵 Filtrando epizootias positivas + en estudio...")
+
+        # ==================== FILTRO DE EPIZOOTIAS SIMPLIFICADO ====================
         if "descripcion" in epizootias_df.columns:
-            # **DEBUG: Mostrar valores únicos ANTES del filtrado**
-            unique_descriptions = epizootias_df["descripcion"].dropna().unique()
-            logger.info("🔍 DEBUG - Valores únicos en 'descripcion' (RAW):")
-            for desc in unique_descriptions:
-                logger.info(f"   '{desc}' (tipo: {type(desc)})")
-            
-            # **NORMALIZACIÓN MEJORADA** - Más robusta
-            epizootias_df["descripcion"] = (
-                epizootias_df["descripcion"]
-                .astype(str)
-                .str.upper()
-                .str.strip()
-                .str.replace(r'\s+', ' ', regex=True)  # Normalizar espacios múltiples
-            )
-            
-            # **DEBUG: Después de normalización**
-            unique_descriptions_norm = epizootias_df["descripcion"].dropna().unique()
-            logger.info("🔍 DEBUG - Valores únicos en 'descripcion' (NORMALIZADO):")
-            for desc in unique_descriptions_norm:
-                logger.info(f"   '{desc}'")
-            
-            # **FILTRADO MÁS FLEXIBLE** - Múltiples patrones
             total_original = len(epizootias_df)
             
-            # Patrones flexibles para coincidencias
-            patrones_positivo = ["POSITIVO FA", "POSITIVO", "POSITIVA FA", "POSITIVA"]
-            patrones_estudio = ["EN ESTUDIO", "ESTUDIO", "EN ANALISIS", "ANALISIS"]
+            # Filtro directo sin normalización
+            epizootias_df = epizootias_df[
+                epizootias_df["descripcion"].isin(["POSITIVO FA", "EN ESTUDIO"])
+            ]
             
-            # Crear máscara de filtrado
-            mask_positivo = epizootias_df["descripcion"].isin(patrones_positivo)
-            mask_estudio = epizootias_df["descripcion"].isin(patrones_estudio)
-            
-            # **FILTRADO POR CONTENIDO** si no hay coincidencias exactas
-            if not mask_positivo.any():
-                logger.info("⚠️ Sin coincidencias exactas para POSITIVO, probando por contenido...")
-                mask_positivo = epizootias_df["descripcion"].str.contains("POSITIV", na=False)
-            
-            if not mask_estudio.any():
-                logger.info("⚠️ Sin coincidencias exactas para ESTUDIO, probando por contenido...")
-                mask_estudio = epizootias_df["descripcion"].str.contains("ESTUDIO", na=False)
-            
-            # Combinar máscaras
-            mask_final = mask_positivo | mask_estudio
-            
-            # Aplicar filtro
-            epizootias_df = epizootias_df[mask_final]
             total_filtradas = len(epizootias_df)
+            positivas_count = len(epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"])
+            en_estudio_count = len(epizootias_df[epizootias_df["descripcion"] == "EN ESTUDIO"])
             
-            # **CONTEO DETALLADO**
-            positivas_count = mask_positivo.sum()
-            en_estudio_count = mask_estudio.sum()
-            
-            # **LOG DETALLADO**
-            logger.info(f"🔵 FILTRO EPIZOOTIAS APLICADO:")
-            logger.info(f"   📊 Total original: {total_original}")
-            logger.info(f"   ✅ Total filtradas: {total_filtradas}")
+            logger.info(f"🔵 Epizootias filtradas: {total_filtradas} de {total_original}")
             logger.info(f"   🔴 Positivas: {positivas_count}")
             logger.info(f"   🔵 En estudio: {en_estudio_count}")
             
             status_text.text(f"🔵 Epizootias procesadas: {total_filtradas} ({positivas_count} positivas + {en_estudio_count} en estudio)")
-            
-            # **GUARDAR PARA DEBUGGING**
-            st.session_state["epizootias_debug"] = {
-                "total_original": total_original,
-                "total_filtradas": total_filtradas,
-                "positivas": positivas_count,
-                "en_estudio": en_estudio_count,
-                "valores_originales": unique_descriptions.tolist(),
-                "valores_normalizados": unique_descriptions_norm.tolist(),
-                "patrones_usados": {
-                    "positivo": patrones_positivo,
-                    "estudio": patrones_estudio
-                }
-            }
-            
-            # **VALIDACIÓN FINAL**
-            if total_filtradas == 0:
-                logger.warning("⚠️ ADVERTENCIA: Después del filtrado no quedaron epizootias")
-                status_text.text("⚠️ Sin epizootias después del filtrado - verificar datos")
-
-        # Normalizar municipios y veredas en epizootias (solo las filtradas)
-        if "municipio" in epizootias_df.columns:
-            epizootias_df["municipio_normalizado"] = epizootias_df["municipio"].apply(
-                normalize_text
-            )
-            epizootias_df["municipio"] = epizootias_df["municipio"].apply(
-                capitalize_names
-            )
-        if "vereda" in epizootias_df.columns:
-            epizootias_df["vereda_normalizada"] = epizootias_df["vereda"].apply(
-                normalize_text
-            )
-            epizootias_df["vereda"] = epizootias_df["vereda"].apply(capitalize_names)
-
-        # Convertir fechas de epizootias
-        if "fecha_recoleccion" in epizootias_df.columns:
-            epizootias_df["fecha_recoleccion"] = epizootias_df[
-                "fecha_recoleccion"
-            ].apply(excel_date_to_datetime)
 
         progress_bar.progress(70)
-        status_text.text("🗺️ Creando mapeos maestros con sistema inteligente...")
+        status_text.text("🗺️ Creando listas de ubicaciones...")
 
-        # ==================== NUEVO: SISTEMA INTELIGENTE DE MAPEO DE VEREDAS ====================
-        # Crear mapeo inteligente de veredas
-        try:
-            vereda_mapping = create_intelligent_vereda_mapping(casos_df, epizootias_df)
-            logger.info(f"✅ Sistema de mapeo inteligente creado: {len(vereda_mapping)} mapeos")
-        except Exception as e:
-            logger.warning(f"⚠️ Error en mapeo inteligente: {str(e)}")
-            vereda_mapping = {}
-            
-        # ==================== APLICAR MAPEO INTELIGENTE ====================
-        # Aplicar mapeo a casos
-        if vereda_mapping and not casos_df.empty and "vereda" in casos_df.columns:
-            from utils.data_processor import apply_vereda_mapping
-            casos_df = apply_vereda_mapping(casos_df, "vereda", vereda_mapping)
-            logger.info("✅ Mapeo aplicado a casos")
+        # ==================== LISTAS DIRECTAS (SIN NORMALIZACIÓN) ====================
+        # Obtener municipios únicos DIRECTAMENTE de los datos
+        municipios_casos = set(casos_df["municipio"].dropna()) if "municipio" in casos_df.columns else set()
+        municipios_epizootias = set(epizootias_df["municipio"].dropna()) if "municipio" in epizootias_df.columns else set()
+        municipios_con_datos = sorted(municipios_casos.union(municipios_epizootias))
 
-        # Aplicar mapeo a epizootias  
-        if vereda_mapping and not epizootias_df.empty and "vereda" in epizootias_df.columns:
-            from utils.data_processor import apply_vereda_mapping
-            epizootias_df = apply_vereda_mapping(epizootias_df, "vereda", vereda_mapping)
-            logger.info("✅ Mapeo aplicado a epizootias")
-
-        # Obtener todos los municipios únicos (normalizados)
-        municipios_casos = set(casos_df["municipio_normalizado"].dropna()) if not casos_df.empty else set()
-        municipios_epizootias = set(epizootias_df["municipio_normalizado"].dropna()) if not epizootias_df.empty else set()
-        municipios_normalizados = sorted(municipios_casos.union(municipios_epizootias))
-
-        # NUEVO: Crear lista completa de municipios del Tolima para manejar clics en grises
+        # Lista completa de municipios del Tolima (para manejar clics en grises)
         municipios_tolima_completos = [
             "IBAGUE", "ALPUJARRA", "ALVARADO", "AMBALEMA", "ANZOATEGUI",
             "ARMERO", "ATACO", "CAJAMARCA", "CARMEN DE APICALA", "CASABIANCA",
@@ -529,167 +353,82 @@ def load_enhanced_datasets():
             "VENADILLO", "VILLAHERMOSA", "VILLARRICA"
         ]
 
-        # Agregar municipios sin datos a la lista (para manejar clics en grises)
+        # Combinar municipios con y sin datos
+        todos_municipios = list(municipios_con_datos)
         for municipio_tolima in municipios_tolima_completos:
-            if municipio_tolima not in municipios_normalizados:
-                municipios_normalizados.append(municipio_tolima)
+            if municipio_tolima not in todos_municipios:
+                todos_municipios.append(municipio_tolima)
 
-        municipios_normalizados = sorted(municipios_normalizados)
+        todos_municipios = sorted(todos_municipios)
 
-        # Crear mapeo de municipios (normalizado -> original más común)
-        municipio_display_map = {}
-        for municipio_norm in municipios_normalizados:
-            # Buscar la versión original más común para mostrar
-            opciones_casos = (
-                casos_df[casos_df["municipio_normalizado"] == municipio_norm][
-                    "municipio"
-                ]
-                .dropna()
-                .unique()
-            ) if not casos_df.empty else []
-            opciones_epi = (
-                epizootias_df[epizootias_df["municipio_normalizado"] == municipio_norm][
-                    "municipio"
-                ]
-                .dropna()
-                .unique()
-            ) if not epizootias_df.empty else []
-
-            todas_opciones = list(opciones_casos) + list(opciones_epi)
-            if todas_opciones:
-                municipio_display_map[municipio_norm] = todas_opciones[0]
-            else:
-                # Para municipios sin datos, usar versión capitalizada
-                municipio_display_map[municipio_norm] = capitalize_names(municipio_norm)
-
-        # Crear diccionario de veredas por municipio (normalizado)
+        # ==================== VEREDAS POR MUNICIPIO (DIRECTAS) ====================
         veredas_por_municipio = {}
-        for municipio_norm in municipios_normalizados:
-            # Obtener veredas de casos
-            veredas_casos = (
-                casos_df[casos_df["municipio_normalizado"] == municipio_norm][
-                    "vereda_normalizada"
-                ]
-                .dropna()
-                .unique()
-            ) if not casos_df.empty else []
-            # Obtener veredas de epizootias (positivas + en estudio)
-            veredas_epi = (
-                epizootias_df[epizootias_df["municipio_normalizado"] == municipio_norm][
-                    "vereda_normalizada"
-                ]
-                .dropna()
-                .unique()
-            ) if not epizootias_df.empty else []
-
-            # Combinar y ordenar
-            todas_veredas = sorted(set(list(veredas_casos) + list(veredas_epi)))
-            veredas_por_municipio[municipio_norm] = todas_veredas
-
-        # Crear mapeo de veredas para display
-        vereda_display_map = {}
-        for municipio_norm in municipios_normalizados:
-            vereda_display_map[municipio_norm] = {}
-            for vereda_norm in veredas_por_municipio[municipio_norm]:
-                # Buscar versión original de la vereda
-                opciones_casos = (
-                    casos_df[
-                        (casos_df["municipio_normalizado"] == municipio_norm)
-                        & (casos_df["vereda_normalizada"] == vereda_norm)
-                    ]["vereda"]
-                    .dropna()
-                    .unique()
-                ) if not casos_df.empty else []
-
-                opciones_epi = (
-                    epizootias_df[
-                        (epizootias_df["municipio_normalizado"] == municipio_norm)
-                        & (epizootias_df["vereda_normalizada"] == vereda_norm)
-                    ]["vereda"]
-                    .dropna()
-                    .unique()
-                ) if not epizootias_df.empty else []
-
-                todas_opciones = list(opciones_casos) + list(opciones_epi)
-                if todas_opciones:
-                    vereda_display_map[municipio_norm][vereda_norm] = todas_opciones[0]
-                else:
-                    vereda_display_map[municipio_norm][vereda_norm] = vereda_norm
+        for municipio in todos_municipios:
+            veredas = set()
+            
+            # Veredas de casos
+            if "vereda" in casos_df.columns:
+                veredas_casos = casos_df[casos_df["municipio"] == municipio]["vereda"].dropna().unique()
+                veredas.update(veredas_casos)
+            
+            # Veredas de epizootias
+            if "vereda" in epizootias_df.columns:
+                veredas_epi = epizootias_df[epizootias_df["municipio"] == municipio]["vereda"].dropna().unique()
+                veredas.update(veredas_epi)
+            
+            veredas_por_municipio[municipio] = sorted(list(veredas))
 
         progress_bar.progress(90)
-        status_text.text("📊 Finalizando carga con mapeos de interacción...")
+        status_text.text("📊 Finalizando...")
 
-        # ==================== MAPEOS DE VALORES ACTUALIZADOS ====================
+        # ==================== MAPEOS DIRECTOS (SIN NORMALIZACIÓN) ====================
+        # Mapeo directo municipio -> municipio (sin transformaciones)
+        municipio_display_map = {municipio: municipio for municipio in todos_municipios}
 
-        # Mapeo de condición final
+        # Mapeo directo vereda -> vereda (sin transformaciones)
+        vereda_display_map = {}
+        for municipio in todos_municipios:
+            vereda_display_map[municipio] = {vereda: vereda for vereda in veredas_por_municipio[municipio]}
+
+        # Mapeos de valores (sin cambios)
         condicion_map = {
-            "Fallecido": {
-                "color": COLORS["danger"],
-                "icon": "⚰️",
-                "categoria": "Fallecido",
-            },
+            "Fallecido": {"color": COLORS["danger"], "icon": "⚰️", "categoria": "Fallecido"},
             "Vivo": {"color": COLORS["success"], "icon": "💚", "categoria": "Vivo"},
         }
 
-        # NUEVO: Mapeo de descripción (positivas + en estudio)
         descripcion_map = {
-            "POSITIVO FA": {
-                "color": COLORS["danger"],
-                "icon": "🔴",
-                "categoria": "Positivo",
-                "descripcion": "Confirma circulación viral activa"
-            },
-            "EN ESTUDIO": {
-                "color": COLORS["info"],
-                "icon": "🔵",
-                "categoria": "En Estudio",
-                "descripcion": "Muestra en proceso de análisis laboratorial"
-            },
+            "POSITIVO FA": {"color": COLORS["danger"], "icon": "🔴", "categoria": "Positivo"},
+            "EN ESTUDIO": {"color": COLORS["info"], "icon": "🔵", "categoria": "En Estudio"},
         }
 
         progress_bar.progress(100)
-
-        # Limpiar elementos de UI con delay para legibilidad
-        import time
         time.sleep(1.5)
         status_text.empty()
         progress_bar.empty()
 
-        # Inicializar sistema de interacciones de mapa si está disponible
-        if MAP_INTERACTIONS_AVAILABLE:
-            interaction_manager = get_interaction_manager()
-            bounds_manager = get_bounds_manager()
-            logger.info("✅ Sistema de interacciones de mapa inicializado")
-
-        # Log final con estadísticas ACTUALIZADAS
-        logger.info(f"✅ Datos cargados exitosamente desde: {data_source}")
+        # Log final
+        logger.info(f"✅ Datos cargados desde: {data_source}")
         logger.info(f"📊 Casos cargados: {len(casos_df)}")
-        
-        # Estadísticas detalladas de epizootias
-        positivas_count = len(epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"]) if not epizootias_df.empty else 0
-        en_estudio_count = len(epizootias_df[epizootias_df["descripcion"] == "EN ESTUDIO"]) if not epizootias_df.empty else 0
-        logger.info(f"🔵 Epizootias cargadas: {len(epizootias_df)} total ({positivas_count} positivas + {en_estudio_count} en estudio)")
-        logger.info(f"🗺️ Municipios únicos: {len(municipios_normalizados)} (incluyendo {len(municipios_tolima_completos)} del Tolima)")
+        logger.info(f"🔵 Epizootias cargadas: {len(epizootias_df)}")
+        logger.info(f"🗺️ Municipios totales: {len(todos_municipios)} ({len(municipios_con_datos)} con datos)")
 
         return {
             "casos": casos_df,
-            "epizootias": epizootias_df,  # Ahora contiene positivas + en estudio
-            "municipios_normalizados": municipios_normalizados,
+            "epizootias": epizootias_df,
+            "municipios_normalizados": todos_municipios,  # Mantener nombre por compatibilidad
             "municipio_display_map": municipio_display_map,
             "veredas_por_municipio": veredas_por_municipio,
             "vereda_display_map": vereda_display_map,
             "condicion_map": condicion_map,
             "descripcion_map": descripcion_map,
-            "vereda_mapping": vereda_mapping,  # NUEVO
             "data_source": data_source,
         }
 
     except Exception as e:
         logger.error(f"💥 Error crítico al cargar los datos: {str(e)}")
-        st.error(f"❌ Error crítico al cargar los datos: {str(e)}")
+        st.error(f"❌ Error crítico: {str(e)}")
         return create_empty_data_structure()
-
-
+    
 def create_empty_data_structure():
     """Crea estructura de datos vacía para casos de error."""
     return {

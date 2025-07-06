@@ -6,7 +6,6 @@ Soporte para doble clic en mapas → actualización automática de filtros
 
 import streamlit as st
 import pandas as pd
-from utils.data_processor import normalize_text
 
 
 def create_responsive_filters_ui():
@@ -231,10 +230,10 @@ def show_map_sync_indicator():
         # Auto-limpiar después de mostrar
         clear_map_interaction_flag()
 
-
 def create_hierarchical_filters_enhanced(data):
     """
-    NUEVO: Filtros jerárquicos con sincronización bidireccional mejorada.
+    SIMPLIFICADO: Filtros jerárquicos usando nombres directos de shapefiles.
+    ELIMINADA toda la lógica de normalización.
     """
     # Aplicar CSS responsive
     create_responsive_filters_ui()
@@ -242,12 +241,10 @@ def create_hierarchical_filters_enhanced(data):
     # Mostrar indicador de sincronización si aplica
     show_map_sync_indicator()
     
-    # MEJORADO: Filtro de municipio con detección de cambios desde mapa
-    municipio_options = ["Todos"] + [
-        data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
-    ]
+    # FILTRO DE MUNICIPIO SIMPLIFICADO
+    municipio_options = ["Todos"] + list(data["municipios_normalizados"])  # Nombres directos
 
-    # Detectar valor inicial (puede venir del mapa)
+    # Detectar valor inicial
     initial_municipio_index = 0
     if "municipio_filter" in st.session_state:
         current_municipio = st.session_state["municipio_filter"]
@@ -266,57 +263,16 @@ def create_hierarchical_filters_enhanced(data):
     if "municipio_filter" not in st.session_state or st.session_state["municipio_filter"] != municipio_selected:
         st.session_state["municipio_filter"] = municipio_selected
 
-    # Información contextual del municipio
-    if municipio_selected != "Todos":
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-help">
-                🏛️ <strong>{municipio_selected}</strong> seleccionado
-                <br>💡 Los datos se filtrarán por este municipio
-                <br>🗺️ Visible en el mapa con zoom automático
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.sidebar.markdown(
-            """
-            <div class="filter-help">
-                🗺️ Vista general del Tolima
-                <br>💡 Haga doble clic en cualquier municipio del mapa para filtrar
-                <br>📊 Todas las métricas incluyen datos departamentales
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # Determinar municipio normalizado seleccionado
-    municipio_norm_selected = None
-    if municipio_selected != "Todos":
-        for norm, display in data["municipio_display_map"].items():
-            if display == municipio_selected:
-                municipio_norm_selected = norm
-                break
-
-    # MEJORADO: Filtro de vereda con sincronización
+    # FILTRO DE VEREDA SIMPLIFICADO
     vereda_options = ["Todas"]
-    if (
-        municipio_norm_selected
-        and municipio_norm_selected in data["veredas_por_municipio"]
-    ):
-        veredas_norm = data["veredas_por_municipio"][municipio_norm_selected]
-        if municipio_norm_selected in data["vereda_display_map"]:
-            vereda_options.extend(
-                [
-                    data["vereda_display_map"][municipio_norm_selected].get(norm, norm)
-                    for norm in veredas_norm
-                ]
-            )
+    vereda_disabled = municipio_selected == "Todos"
+    
+    if not vereda_disabled and municipio_selected in data["veredas_por_municipio"]:
+        veredas_disponibles = data["veredas_por_municipio"][municipio_selected]
+        vereda_options.extend(veredas_disponibles)
 
     # Detectar valor inicial de vereda
     initial_vereda_index = 0
-    vereda_disabled = municipio_selected == "Todos"
-    
     if not vereda_disabled and "vereda_filter" in st.session_state:
         current_vereda = st.session_state["vereda_filter"]
         if current_vereda in vereda_options:
@@ -352,38 +308,27 @@ def create_hierarchical_filters_enhanced(data):
             st.session_state["vereda_filter"] = "Todas"
         vereda_selected = "Todas"
 
-    # Información de la vereda seleccionada
-    if vereda_selected != "Todas" and not vereda_disabled:
+    # Información contextual
+    if municipio_selected != "Todos":
+        veredas_count = len(vereda_options) - 1  # -1 por "Todas"
+        info_color = "🟢" if vereda_selected != "Todas" else "🟡"
         st.sidebar.markdown(
             f"""
             <div class="filter-help">
-                📍 <strong>{vereda_selected}</strong> seleccionada
-                <br>🔍 Vista específica de esta vereda
-                <br>🗺️ Datos detallados en el mapa
+                {info_color} <strong>{municipio_selected}</strong><br>
+                🏘️ {veredas_count} veredas disponibles<br>
+                🗺️ Nivel: {'Vereda específica' if vereda_selected != 'Todas' else 'Vista municipal'}
             </div>
             """,
             unsafe_allow_html=True,
         )
-
-    # Determinar vereda normalizada seleccionada
-    vereda_norm_selected = None
-    if vereda_selected != "Todas" and municipio_norm_selected:
-        if municipio_norm_selected in data["vereda_display_map"]:
-            for norm, display in data["vereda_display_map"][
-                municipio_norm_selected
-            ].items():
-                if display == vereda_selected:
-                    vereda_norm_selected = norm
-                    break
-
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
-
-    # NUEVO: Indicador de sincronización activa
-    if municipio_selected != "Todos" or vereda_selected != "Todas":
+    else:
         st.sidebar.markdown(
             """
-            <div class="map-sync-indicator">
-                🔄 Sincronizado con mapa interactivo
+            <div class="filter-help">
+                🗺️ Vista departamental del Tolima<br>
+                📍 Seleccione un municipio para ver sus veredas<br>
+                📊 Mostrando datos de todo el departamento
             </div>
             """,
             unsafe_allow_html=True,
@@ -391,11 +336,134 @@ def create_hierarchical_filters_enhanced(data):
 
     return {
         "municipio_display": municipio_selected,
-        "municipio_normalizado": municipio_norm_selected,
+        "municipio_normalizado": municipio_selected,  # Ahora es lo mismo
         "vereda_display": vereda_selected,
-        "vereda_normalizada": vereda_norm_selected,
+        "vereda_normalizada": vereda_selected,  # Ahora es lo mismo
     }
 
+
+def apply_all_filters_enhanced(data, filters_location, filters_content, filters_advanced):
+    """
+    SIMPLIFICADO: Aplica filtros usando nombres directos sin normalización.
+    """
+    casos_filtrados = data["casos"].copy()
+    epizootias_filtradas = data["epizootias"].copy()
+
+    # Contador de registros para logging
+    initial_casos = len(casos_filtrados)
+    initial_epizootias = len(epizootias_filtradas)
+
+    # PASO 1: Aplicar filtros de ubicación DIRECTOS
+    if filters_location["municipio_display"] != "Todos":
+        municipio_selected = filters_location["municipio_display"]
+
+        if "municipio" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[casos_filtrados["municipio"] == municipio_selected]
+
+        if "municipio" in epizootias_filtradas.columns:
+            epizootias_filtradas = epizootias_filtradas[epizootias_filtradas["municipio"] == municipio_selected]
+
+    if filters_location["vereda_display"] != "Todas":
+        vereda_selected = filters_location["vereda_display"]
+
+        if "vereda" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[casos_filtrados["vereda"] == vereda_selected]
+
+        if "vereda" in epizootias_filtradas.columns:
+            epizootias_filtradas = epizootias_filtradas[epizootias_filtradas["vereda"] == vereda_selected]
+
+    # PASO 2: Aplicar filtros de contenido (temporales) - SIN CAMBIOS
+    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
+        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
+        fecha_inicio = pd.Timestamp(fecha_inicio)
+        fecha_fin = pd.Timestamp(fecha_fin) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+
+        # Filtrar casos por fecha de inicio de síntomas
+        if "fecha_inicio_sintomas" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[
+                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
+                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
+            ]
+
+        # Filtrar epizootias por fecha de recolección
+        if "fecha_recoleccion" in epizootias_filtradas.columns:
+            epizootias_filtradas = epizootias_filtradas[
+                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
+                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
+            ]
+
+    # PASO 3: Aplicar filtros avanzados para casos - SIN CAMBIOS
+    if filters_advanced["condicion_final"] != "Todas":
+        if "condicion_final" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["condicion_final"] == filters_advanced["condicion_final"]
+            ]
+
+    if filters_advanced["sexo"] != "Todos":
+        if "sexo" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["sexo"] == filters_advanced["sexo"]
+            ]
+
+    if filters_advanced["edad_rango"]:
+        edad_min, edad_max = filters_advanced["edad_rango"]
+        if "edad" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[
+                (casos_filtrados["edad"] >= edad_min)
+                & (casos_filtrados["edad"] <= edad_max)
+            ]
+
+    # PASO 4: Aplicar filtros avanzados para epizootias - SIN CAMBIOS
+    if filters_advanced["fuente_epizootia"] != "Todas":
+        if "proveniente" in epizootias_filtradas.columns:
+            epizootias_filtradas = epizootias_filtradas[
+                epizootias_filtradas["proveniente"] == filters_advanced["fuente_epizootia"]
+            ]
+
+    # LOGGING: Almacenar estadísticas de filtrado
+    final_casos = len(casos_filtrados)
+    final_epizootias = len(epizootias_filtradas)
+    
+    st.session_state["filter_stats"] = {
+        "initial_casos": initial_casos,
+        "final_casos": final_casos,
+        "casos_filtered_out": initial_casos - final_casos,
+        "initial_epizootias": initial_epizootias,
+        "final_epizootias": final_epizootias,
+        "epizootias_filtered_out": initial_epizootias - final_epizootias,
+    }
+
+    # Retornar datos filtrados con metadatos preservados
+    return {
+        "casos": casos_filtrados,
+        "epizootias": epizootias_filtradas,
+        **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
+    }
+
+
+def update_filters_from_map(municipio=None, vereda=None):
+    """
+    SIMPLIFICADO: Actualiza filtros desde interacciones del mapa usando nombres directos.
+    """
+    updated = False
+    
+    if municipio and municipio != "Todos":
+        if "municipio_filter" not in st.session_state or st.session_state["municipio_filter"] != municipio:
+            st.session_state["municipio_filter"] = municipio
+            st.session_state["map_filter_updated"] = True
+            updated = True
+    
+    if vereda and vereda != "Todas":
+        if "vereda_filter" not in st.session_state or st.session_state["vereda_filter"] != vereda:
+            st.session_state["vereda_filter"] = vereda
+            st.session_state["map_filter_updated"] = True
+            updated = True
+    elif vereda == "Todas" and "vereda_filter" in st.session_state:
+        st.session_state["vereda_filter"] = "Todas"
+        st.session_state["map_filter_updated"] = True
+        updated = True
+    
+    return updated
 
 def create_content_filters_enhanced(data):
     """
@@ -750,121 +818,6 @@ def show_active_filters_sidebar_enhanced(active_filters):
         unsafe_allow_html=True,
     )
 
-
-def apply_all_filters_enhanced(data, filters_location, filters_content, filters_advanced):
-    """
-    MEJORADO: Aplica filtros con mejor performance y logging.
-    """
-    casos_filtrados = data["casos"].copy()
-    epizootias_filtradas = data["epizootias"].copy()
-
-    # Contador de registros para logging
-    initial_casos = len(casos_filtrados)
-    initial_epizootias = len(epizootias_filtradas)
-
-    # PASO 1: Filtrar solo epizootias positivas desde el inicio
-    if not epizootias_filtradas.empty and "descripcion" in epizootias_filtradas.columns:
-        epizootias_filtradas = epizootias_filtradas[epizootias_filtradas["descripcion"] == "POSITIVO FA"]
-
-    # PASO 2: Aplicar filtros de ubicación
-    if filters_location["municipio_normalizado"]:
-        municipio_norm = filters_location["municipio_normalizado"]
-
-        if "municipio_normalizado" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["municipio_normalizado"] == municipio_norm
-            ]
-
-        if "municipio_normalizado" in epizootias_filtradas.columns:
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["municipio_normalizado"] == municipio_norm
-            ]
-
-    if filters_location["vereda_normalizada"]:
-        vereda_norm = filters_location["vereda_normalizada"]
-
-        if "vereda_normalizada" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["vereda_normalizada"] == vereda_norm
-            ]
-
-        if "vereda_normalizada" in epizootias_filtradas.columns:
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["vereda_normalizada"] == vereda_norm
-            ]
-
-    # PASO 3: Aplicar filtros de contenido (temporales)
-    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        fecha_inicio = pd.Timestamp(fecha_inicio)
-        fecha_fin = pd.Timestamp(fecha_fin) + pd.Timedelta(hours=23, minutes=59, seconds=59)  # Incluir todo el día
-
-        # Filtrar casos por fecha de inicio de síntomas
-        if "fecha_inicio_sintomas" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
-                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
-            ]
-
-        # Filtrar epizootias por fecha de recolección
-        if "fecha_recoleccion" in epizootias_filtradas.columns:
-            epizootias_filtradas = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
-                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
-            ]
-
-    # PASO 4: Aplicar filtros avanzados para casos
-    if filters_advanced["condicion_final"] != "Todas":
-        if "condicion_final" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["condicion_final"]
-                == filters_advanced["condicion_final"]
-            ]
-
-    if filters_advanced["sexo"] != "Todos":
-        if "sexo" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["sexo"] == filters_advanced["sexo"]
-            ]
-
-    if filters_advanced["edad_rango"]:
-        edad_min, edad_max = filters_advanced["edad_rango"]
-        if "edad" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["edad"] >= edad_min)
-                & (casos_filtrados["edad"] <= edad_max)
-            ]
-
-    # PASO 5: Aplicar filtros avanzados para epizootias
-    if filters_advanced["fuente_epizootia"] != "Todas":
-        if "proveniente" in epizootias_filtradas.columns:
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["proveniente"]
-                == filters_advanced["fuente_epizootia"]
-            ]
-
-    # LOGGING: Almacenar estadísticas de filtrado
-    final_casos = len(casos_filtrados)
-    final_epizootias = len(epizootias_filtradas)
-    
-    # Guardar estadísticas en session_state para debugging
-    st.session_state["filter_stats"] = {
-        "initial_casos": initial_casos,
-        "final_casos": final_casos,
-        "casos_filtered_out": initial_casos - final_casos,
-        "initial_epizootias": initial_epizootias,
-        "final_epizootias": final_epizootias,
-        "epizootias_filtered_out": initial_epizootias - final_epizootias,
-    }
-
-    # Retornar datos filtrados con metadatos preservados
-    return {
-        "casos": casos_filtrados,
-        "epizootias": epizootias_filtradas,
-        **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
-    }
-
-
 def reset_all_filters_enhanced():
     """
     CORREGIDO: Reset completo con limpieza de estado de mapas y confirmación.
@@ -1049,33 +1002,6 @@ def create_complete_filter_system_with_maps(data):
     }
 
     return {"filters": all_filters, "data_filtered": data_filtered}
-
-
-# NUEVAS FUNCIONES DE UTILIDAD PARA SINCRONIZACIÓN CON MAPAS
-
-def update_filters_from_map(municipio=None, vereda=None):
-    """
-    NUEVO: Actualiza filtros desde interacciones del mapa.
-    """
-    updated = False
-    
-    if municipio and municipio != "Todos":
-        if "municipio_filter" not in st.session_state or st.session_state["municipio_filter"] != municipio:
-            st.session_state["municipio_filter"] = municipio
-            st.session_state["map_filter_updated"] = True
-            updated = True
-    
-    if vereda and vereda != "Todas":
-        if "vereda_filter" not in st.session_state or st.session_state["vereda_filter"] != vereda:
-            st.session_state["vereda_filter"] = vereda
-            st.session_state["map_filter_updated"] = True
-            updated = True
-    elif vereda == "Todas" and "vereda_filter" in st.session_state:
-        st.session_state["vereda_filter"] = "Todas"
-        st.session_state["map_filter_updated"] = True
-        updated = True
-    
-    return updated
 
 
 def get_current_filter_state():

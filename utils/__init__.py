@@ -5,8 +5,6 @@ OPTIMIZADO: Solo exporta las funciones que realmente se usan en el proyecto.
 
 # Solo importar lo que realmente se usa en el proyecto
 from .data_processor import (
-    normalize_text,
-    capitalize_names,
     excel_date_to_datetime,
     format_date_display,
     process_casos_dataframe,
@@ -34,8 +32,6 @@ except ImportError:
 # Lista de exports actualizada - SOLO lo que se usa realmente
 __all__ = [
     # Data processor (usado en app.py y vistas)
-    "normalize_text",
-    "capitalize_names",
     "excel_date_to_datetime",
     "format_date_display",
     "process_casos_dataframe",

@@ -22,11 +22,9 @@ except ImportError:
     MAPS_AVAILABLE = False
 
 from utils.data_processor import (
-    normalize_text, 
     calculate_basic_metrics,
     get_latest_case_info,
-    format_time_elapsed,
-    calculate_days_since
+    excel_date_to_datetime
 )
 
 # Ruta de shapefiles procesados
@@ -96,16 +94,15 @@ def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, dat
 
 def determine_map_level(filters):
     """
-    CORREGIDO: Determina el nivel de zoom del mapa según filtros activos.
-    FIX: Corregidas las claves de los filtros para que funcione correctamente.
+    SIMPLIFICADO: Determina el nivel de zoom del mapa según filtros activos.
+    Usa nombres directos sin normalización.
     """
-    if filters.get("vereda_normalizada"):
+    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
         return "vereda"
-    elif filters.get("municipio_normalizado"):  # ✅ CORREGIDO: era "municipio_normalizada"
+    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
         return "municipio"
     else:
         return "departamento"
-
 
 def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
     """
@@ -218,7 +215,8 @@ def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
 
 def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     """
-    MEJORADO: Mapa municipal con veredas - hover y click sin popup.
+    MEJORADO: Mapa municipal con veredas usando nombres directos.
+    PRINCIPAL CAMBIO: Filtrar veredas usando nombres directos del shapefile.
     """
     
     if 'veredas' not in geo_data:
@@ -226,25 +224,19 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         show_municipal_tabular_view(casos, epizootias, filters, colors)
         return
     
-    municipio_normalizado = filters.get('municipio_normalizado')
-    if not municipio_normalizado:
+    municipio_selected = filters.get('municipio_display')  # Ahora es nombre directo
+    if not municipio_selected or municipio_selected == "Todos":
         st.error("No se pudo determinar el municipio para la vista de veredas")
         return
     
-    # Filtrar veredas del municipio
+    # Filtrar veredas del municipio usando nombres directos
     veredas = geo_data['veredas'].copy()
     
-    # Intentar filtrar por diferentes campos posibles
-    veredas_municipio = pd.DataFrame()
-    for col in ['municipi_1', 'municipio', 'MUNICIPIO', 'Municipio']:
-        if col in veredas.columns:
-            veredas_temp = veredas[veredas[col].str.upper().str.strip() == municipio_normalizado.upper()]
-            if not veredas_temp.empty:
-                veredas_municipio = veredas_temp
-                break
+    # Filtrar por municipi_1 que ahora coincide exactamente con los datos
+    veredas_municipio = veredas[veredas['municipi_1'] == municipio_selected]
     
     if veredas_municipio.empty:
-        st.warning(f"No se encontraron veredas para el municipio {filters.get('municipio_display', 'seleccionado')}")
+        st.warning(f"No se encontraron veredas para el municipio {municipio_selected}")
         show_municipal_tabular_view(casos, epizootias, filters, colors)
         return
     
@@ -276,7 +268,7 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     max_epi_vereda = veredas_data['epizootias'].max() if veredas_data['epizootias'].max() > 0 else 1
     
     for idx, row in veredas_data.iterrows():
-        vereda_name = row.get('NOMBRE_VER', row.get('vereda', f'Vereda_{idx}'))
+        vereda_name = row['vereda_nor']  # Usar nombre directo del shapefile
         casos_count = row['casos']
         epizootias_count = row['epizootias']
         epizootias_positivas = row.get('epizootias_positivas', 0)
@@ -317,8 +309,7 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
                 'fillOpacity': 0.6,
                 'opacity': 1
             },
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),  # **SOLO HOVER**
-            # NO popup
+            tooltip=folium.Tooltip(tooltip_text, sticky=True),
         )
         
         geojson.add_to(m)
@@ -338,7 +329,8 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
 
 def handle_enhanced_click_interactions(map_data, municipios_data):
     """
-    MEJORADO: Maneja clicks incluyendo municipios sin datos (grises).
+    SIMPLIFICADO: Maneja clicks usando nombres directos de shapefiles.
+    ELIMINADA toda la lógica de normalización.
     """
     if not map_data or not map_data.get('last_object_clicked'):
         return
@@ -346,9 +338,7 @@ def handle_enhanced_click_interactions(map_data, municipios_data):
     try:
         clicked_object = map_data['last_object_clicked']
         
-        # Verificar si es un click válido
         if isinstance(clicked_object, dict):
-            # Buscar el municipio clicado en los datos
             clicked_lat = clicked_object.get('lat')
             clicked_lng = clicked_object.get('lng')
             
@@ -364,18 +354,18 @@ def handle_enhanced_click_interactions(map_data, municipios_data):
                     
                     if distance < min_distance:
                         min_distance = distance
-                        municipio_clicked = row['MpNombre']
+                        # Usar el nombre del shapefile directamente
+                        municipio_clicked = row['municipi_1']  # Nombre directo del shapefile
                         
-                
-                if municipio_clicked and min_distance < 0.1:  # Umbral de distancia
+                if municipio_clicked and min_distance < 0.1:
                     # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
                     st.session_state['municipio_filter'] = municipio_clicked
                     
-                    # NUEVO: Resetear vereda cuando se cambia municipio
+                    # Resetear vereda cuando se cambia municipio
                     st.session_state['vereda_filter'] = 'Todas'
                     
-                    # **MENSAJE MEJORADO** según tenga datos o no
-                    row_data = municipios_data[municipios_data['MpNombre'] == municipio_clicked].iloc[0]
+                    # **MENSAJE MEJORADO** 
+                    row_data = municipios_data[municipios_data['municipi_1'] == municipio_clicked].iloc[0]
                     tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
                     
                     if tiene_datos:
@@ -391,10 +381,10 @@ def handle_enhanced_click_interactions(map_data, municipios_data):
     except Exception as e:
         st.warning(f"Error procesando clic en mapa: {str(e)}")
 
-
 def handle_vereda_click_enhanced(map_data, veredas_data, filters):
     """
-    MEJORADO: Maneja clicks en veredas.
+    SIMPLIFICADO: Maneja clicks en veredas usando nombres directos.
+    ELIMINADA toda la lógica de normalización.
     """
     if not map_data or not map_data.get('last_object_clicked'):
         return
@@ -418,10 +408,11 @@ def handle_vereda_click_enhanced(map_data, veredas_data, filters):
                     
                     if distance < min_distance:
                         min_distance = distance
-                        vereda_clicked = row.get('NOMBRE_VER', row.get('vereda', f'Vereda_{idx}'))
+                        # Usar el nombre del shapefile directamente
+                        vereda_clicked = row['vereda_nor']  # Nombre directo del shapefile
                         vereda_data = row
                 
-                if vereda_clicked and min_distance < 0.05:  # Umbral más pequeño para veredas
+                if vereda_clicked and min_distance < 0.05:
                     # **FILTRAR POR VEREDA**
                     st.session_state['vereda_filter'] = vereda_clicked
                     
@@ -439,8 +430,7 @@ def handle_vereda_click_enhanced(map_data, veredas_data, filters):
                     
     except Exception as e:
         st.warning(f"Error procesando clic en vereda: {str(e)}")
-
-
+        
 def create_navigation_controls(current_level, filters, colors):
     """Controles de navegación simplificados."""
     level_info = {
@@ -942,36 +932,37 @@ def apply_enhanced_cards_css(colors):
 
 def prepare_municipal_data_enhanced(casos, epizootias, municipios):
     """
-    MEJORADO: Prepara datos por municipio incluyendo estadísticas de positivas + en estudio.
+    SIMPLIFICADO: Prepara datos por municipio usando nombres directos de shapefiles.
+    ELIMINADA toda la lógica de normalización.
     """
     casos_por_municipio = {}
     fallecidos_por_municipio = {}
     
-    if not casos.empty and 'municipio_normalizado' in casos.columns:
-        casos_counts = casos.groupby('municipio_normalizado').size()
+    if not casos.empty and 'municipio' in casos.columns:
+        casos_counts = casos.groupby('municipio').size()
         casos_por_municipio = casos_counts.to_dict()
         
         if 'condicion_final' in casos.columns:
-            fallecidos_counts = casos[casos['condicion_final'] == 'Fallecido'].groupby('municipio_normalizado').size()
+            fallecidos_counts = casos[casos['condicion_final'] == 'Fallecido'].groupby('municipio').size()
             fallecidos_por_municipio = fallecidos_counts.to_dict()
     
-    # NUEVAS ESTADÍSTICAS: Epizootias por tipo
+    # Epizootias por municipio
     epizootias_por_municipio = {}
     positivas_por_municipio = {}
     en_estudio_por_municipio = {}
     
-    if not epizootias.empty and 'municipio_normalizado' in epizootias.columns:
-        epi_counts = epizootias.groupby('municipio_normalizado').size()
+    if not epizootias.empty and 'municipio' in epizootias.columns:
+        epi_counts = epizootias.groupby('municipio').size()
         epizootias_por_municipio = epi_counts.to_dict()
         
         if 'descripcion' in epizootias.columns:
-            positivas_counts = epizootias[epizootias['descripcion'] == 'POSITIVO FA'].groupby('municipio_normalizado').size()
+            positivas_counts = epizootias[epizootias['descripcion'] == 'POSITIVO FA'].groupby('municipio').size()
             positivas_por_municipio = positivas_counts.to_dict()
             
-            en_estudio_counts = epizootias[epizootias['descripcion'] == 'EN ESTUDIO'].groupby('municipio_normalizado').size()
+            en_estudio_counts = epizootias[epizootias['descripcion'] == 'EN ESTUDIO'].groupby('municipio').size()
             en_estudio_por_municipio = en_estudio_counts.to_dict()
     
-    # Combinar datos con shapefile
+    # Combinar datos con shapefile usando 'municipi_1' (que ahora coincide con los datos)
     municipios_data = municipios.copy()
     
     municipios_data['casos'] = municipios_data['municipi_1'].map(casos_por_municipio).fillna(0).astype(int)
@@ -982,49 +973,40 @@ def prepare_municipal_data_enhanced(casos, epizootias, municipios):
     
     return municipios_data
 
-
 def prepare_vereda_data_enhanced(casos, epizootias, veredas_gdf):
     """
-    MEJORADO: Prepara datos por vereda con estadísticas completas.
+    SIMPLIFICADO: Prepara datos por vereda usando nombres directos de shapefiles.
+    ELIMINADA toda la lógica de normalización.
     """
     casos_por_vereda = {}
     epizootias_por_vereda = {}
     positivas_por_vereda = {}
     en_estudio_por_vereda = {}
     
-    # Contar casos por vereda
-    if not casos.empty and 'vereda_normalizada' in casos.columns:
-        for vereda_norm, group in casos.groupby('vereda_normalizada'):
-            casos_por_vereda[vereda_norm.upper()] = len(group)
+    # Contar casos por vereda (usando nombres directos)
+    if not casos.empty and 'vereda' in casos.columns:
+        for vereda, group in casos.groupby('vereda'):
+            casos_por_vereda[vereda] = len(group)
     
-    # Contar epizootias por vereda (con desglose)
-    if not epizootias.empty and 'vereda_normalizada' in epizootias.columns:
-        for vereda_norm, group in epizootias.groupby('vereda_normalizada'):
-            epizootias_por_vereda[vereda_norm.upper()] = len(group)
+    # Contar epizootias por vereda (usando nombres directos)
+    if not epizootias.empty and 'vereda' in epizootias.columns:
+        for vereda, group in epizootias.groupby('vereda'):
+            epizootias_por_vereda[vereda] = len(group)
             
             if 'descripcion' in group.columns:
-                positivas_por_vereda[vereda_norm.upper()] = len(group[group['descripcion'] == 'POSITIVO FA'])
-                en_estudio_por_vereda[vereda_norm.upper()] = len(group[group['descripcion'] == 'EN ESTUDIO'])
+                positivas_por_vereda[vereda] = len(group[group['descripcion'] == 'POSITIVO FA'])
+                en_estudio_por_vereda[vereda] = len(group[group['descripcion'] == 'EN ESTUDIO'])
     
-    # Combinar con shapefile
+    # Combinar con shapefile usando 'vereda_nor' (que ahora coincide con los datos)
     veredas_data = veredas_gdf.copy()
     
-    # Intentar mapear con diferentes campos
-    for col in ['NOMBRE_VER', 'vereda', 'Vereda']:
-        if col in veredas_data.columns:
-            veredas_data['casos'] = veredas_data[col].str.upper().str.strip().map(casos_por_vereda).fillna(0).astype(int)
-            veredas_data['epizootias'] = veredas_data[col].str.upper().str.strip().map(epizootias_por_vereda).fillna(0).astype(int)
-            veredas_data['epizootias_positivas'] = veredas_data[col].str.upper().str.strip().map(positivas_por_vereda).fillna(0).astype(int)
-            veredas_data['epizootias_en_estudio'] = veredas_data[col].str.upper().str.strip().map(en_estudio_por_vereda).fillna(0).astype(int)
-            break
-    
-    # Si no se pudo mapear, llenar con 0
-    for col in ['casos', 'epizootias', 'epizootias_positivas', 'epizootias_en_estudio']:
-        if col not in veredas_data.columns:
-            veredas_data[col] = 0
+    # Mapear usando vereda_nor del shapefile
+    veredas_data['casos'] = veredas_data['vereda_nor'].map(casos_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias'] = veredas_data['vereda_nor'].map(epizootias_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias_positivas'] = veredas_data['vereda_nor'].map(positivas_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias_en_estudio'] = veredas_data['vereda_nor'].map(en_estudio_por_vereda).fillna(0).astype(int)
     
     return veredas_data
-
 
 def reset_all_location_filters():
     """Resetea todos los filtros de ubicación"""
