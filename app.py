@@ -201,15 +201,16 @@ for module_name, module in vistas_modules.items():
     logger.info(f"   {module_name}: {status}")
 
 
+# Reemplazar las líneas 345-380 en app.py con esta versión corregida:
+
 def load_enhanced_datasets():
     """
-    Carga datasets SIMPLIFICADA - usa nombres directos de shapefiles.
-    ELIMINADA toda la lógica de normalización y mapeo complejo.
+    Carga datasets CORREGIDA - normaliza nombres para evitar duplicados.
     """
     try:
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("🔄 Cargando datos simplificados...")
+        status_text.text("🔄 Cargando datos normalizados...")
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
         casos_filename = "BD_positivos.xlsx"
@@ -223,7 +224,7 @@ def load_enhanced_datasets():
         progress_bar.progress(10)
         status_text.text("📁 Cargando archivos...")
 
-        # ==================== CARGA SIMPLIFICADA ====================
+        # ==================== CARGA DE DATOS ====================
         casos_df = None
         epizootias_df = None
         data_source = None
@@ -257,36 +258,40 @@ def load_enhanced_datasets():
             return create_empty_data_structure()
 
         progress_bar.progress(30)
-        status_text.text("🔧 Procesando datos...")
+        status_text.text("🔧 Procesando y normalizando datos...")
+        
+        # ==================== NORMALIZACIÓN DE NOMBRES ====================
+        def normalize_name(name):
+            """Normaliza nombres para evitar duplicados."""
+            if pd.isna(name) or name == "":
+                return ""
+            return str(name).upper().strip()
         
         # Limpiar columnas problemáticas
-        if 'Unnamed: 16' in casos_df.columns:
-            casos_df = casos_df.drop('Unnamed: 16', axis=1)
-        if 'Unnamed: 16' in epizootias_df.columns:
-            epizootias_df = epizootias_df.drop('Unnamed: 16', axis=1)
+        for df in [casos_df, epizootias_df]:
+            if 'Unnamed: 16' in df.columns:
+                df.drop('Unnamed: 16', axis=1, inplace=True)
+            # Eliminar todas las columnas "Unnamed"
+            df.drop(columns=[col for col in df.columns if 'Unnamed' in col], inplace=True)
 
-        # Eliminar todas las columnas "Unnamed"
-        casos_df = casos_df.loc[:, ~casos_df.columns.str.contains('^Unnamed')]
-        epizootias_df = epizootias_df.loc[:, ~epizootias_df.columns.str.contains('^Unnamed')]
-
-        # ==================== LIMPIEZA BÁSICA ====================
+        # Eliminar filas completamente vacías
         casos_df = casos_df.dropna(how="all")
         epizootias_df = epizootias_df.dropna(how="all")
 
-        # ==================== MAPEO DE COLUMNAS DIRECTO ====================
+        # ==================== MAPEO Y NORMALIZACIÓN DE COLUMNAS ====================
         casos_columns_map = {
             "edad_": "edad",
             "sexo_": "sexo",
-            "vereda_": "vereda",           # Ahora coincide con vereda_nor del shapefile
-            "nmun_proce": "municipio",     # Ahora coincide con municipi_1 del shapefile
+            "vereda_": "vereda",
+            "nmun_proce": "municipio",
             "cod_ase_": "eps",
             "Condición Final": "condicion_final",
             "Inicio de sintomas": "fecha_inicio_sintomas",
         }
 
         epizootias_columns_map = {
-            "MUNICIPIO": "municipio",      # Ahora coincide con municipi_1 del shapefile
-            "VEREDA": "vereda",           # Ahora coincide con vereda_nor del shapefile
+            "MUNICIPIO": "municipio",
+            "VEREDA": "vereda",
             "FECHA RECOLECCIÓN ": "fecha_recoleccion",
             "PROVENIENTE ": "proveniente",
             "DESCRIPCIÓN": "descripcion",
@@ -298,6 +303,20 @@ def load_enhanced_datasets():
 
         existing_epi_columns = {k: v for k, v in epizootias_columns_map.items() if k in epizootias_df.columns}
         epizootias_df = epizootias_df.rename(columns=existing_epi_columns)
+
+        # ==================== NORMALIZACIÓN CRÍTICA ====================
+        # Normalizar nombres de municipios y veredas para evitar duplicados
+        if "municipio" in casos_df.columns:
+            casos_df["municipio"] = casos_df["municipio"].apply(normalize_name)
+            
+        if "vereda" in casos_df.columns:
+            casos_df["vereda"] = casos_df["vereda"].apply(normalize_name)
+            
+        if "municipio" in epizootias_df.columns:
+            epizootias_df["municipio"] = epizootias_df["municipio"].apply(normalize_name)
+            
+        if "vereda" in epizootias_df.columns:
+            epizootias_df["vereda"] = epizootias_df["vereda"].apply(normalize_name)
 
         # ==================== PROCESAMIENTO DE FECHAS ====================
         if "fecha_inicio_sintomas" in casos_df.columns:
@@ -311,11 +330,12 @@ def load_enhanced_datasets():
         progress_bar.progress(50)
         status_text.text("🔵 Filtrando epizootias positivas + en estudio...")
 
-        # ==================== FILTRO DE EPIZOOTIAS SIMPLIFICADO ====================
+        # ==================== FILTRO DE EPIZOOTIAS ====================
         if "descripcion" in epizootias_df.columns:
             total_original = len(epizootias_df)
             
-            # Filtro directo sin normalización
+            # Normalizar descripciones y filtrar
+            epizootias_df["descripcion"] = epizootias_df["descripcion"].apply(normalize_name)
             epizootias_df = epizootias_df[
                 epizootias_df["descripcion"].isin(["POSITIVO FA", "EN ESTUDIO"])
             ]
@@ -327,19 +347,17 @@ def load_enhanced_datasets():
             logger.info(f"🔵 Epizootias filtradas: {total_filtradas} de {total_original}")
             logger.info(f"   🔴 Positivas: {positivas_count}")
             logger.info(f"   🔵 En estudio: {en_estudio_count}")
-            
-            status_text.text(f"🔵 Epizootias procesadas: {total_filtradas} ({positivas_count} positivas + {en_estudio_count} en estudio)")
 
         progress_bar.progress(70)
-        status_text.text("🗺️ Creando listas de ubicaciones...")
+        status_text.text("🗺️ Creando listas de ubicaciones normalizadas...")
 
-        # ==================== LISTAS DIRECTAS (SIN NORMALIZACIÓN) ====================
-        # Obtener municipios únicos DIRECTAMENTE de los datos
+        # ==================== LISTAS NORMALIZADAS ====================
+        # Obtener municipios únicos NORMALIZADOS
         municipios_casos = set(casos_df["municipio"].dropna()) if "municipio" in casos_df.columns else set()
         municipios_epizootias = set(epizootias_df["municipio"].dropna()) if "municipio" in epizootias_df.columns else set()
         municipios_con_datos = sorted(municipios_casos.union(municipios_epizootias))
 
-        # Lista completa de municipios del Tolima (para manejar clics en grises)
+        # Lista completa de municipios del Tolima NORMALIZADOS
         municipios_tolima_completos = [
             "IBAGUE", "ALPUJARRA", "ALVARADO", "AMBALEMA", "ANZOATEGUI",
             "ARMERO", "ATACO", "CAJAMARCA", "CARMEN DE APICALA", "CASABIANCA",
@@ -353,15 +371,11 @@ def load_enhanced_datasets():
             "VENADILLO", "VILLAHERMOSA", "VILLARRICA"
         ]
 
-        # Combinar municipios con y sin datos
-        todos_municipios = list(municipios_con_datos)
-        for municipio_tolima in municipios_tolima_completos:
-            if municipio_tolima not in todos_municipios:
-                todos_municipios.append(municipio_tolima)
-
+        # Combinar municipios eliminando duplicados
+        todos_municipios = list(set(municipios_con_datos + municipios_tolima_completos))
         todos_municipios = sorted(todos_municipios)
 
-        # ==================== VEREDAS POR MUNICIPIO (DIRECTAS) ====================
+        # ==================== VEREDAS POR MUNICIPIO NORMALIZADAS ====================
         veredas_por_municipio = {}
         for municipio in todos_municipios:
             veredas = set()
@@ -376,16 +390,15 @@ def load_enhanced_datasets():
                 veredas_epi = epizootias_df[epizootias_df["municipio"] == municipio]["vereda"].dropna().unique()
                 veredas.update(veredas_epi)
             
-            veredas_por_municipio[municipio] = sorted(list(veredas))
+            # Filtrar veredas vacías y ordenar
+            veredas_filtradas = [v for v in veredas if v and v.strip()]
+            veredas_por_municipio[municipio] = sorted(veredas_filtradas)
 
         progress_bar.progress(90)
         status_text.text("📊 Finalizando...")
 
-        # ==================== MAPEOS DIRECTOS (SIN NORMALIZACIÓN) ====================
-        # Mapeo directo municipio -> municipio (sin transformaciones)
+        # ==================== MAPEOS DIRECTOS ====================
         municipio_display_map = {municipio: municipio for municipio in todos_municipios}
-
-        # Mapeo directo vereda -> vereda (sin transformaciones)
         vereda_display_map = {}
         for municipio in todos_municipios:
             vereda_display_map[municipio] = {vereda: vereda for vereda in veredas_por_municipio[municipio]}
@@ -410,12 +423,12 @@ def load_enhanced_datasets():
         logger.info(f"✅ Datos cargados desde: {data_source}")
         logger.info(f"📊 Casos cargados: {len(casos_df)}")
         logger.info(f"🔵 Epizootias cargadas: {len(epizootias_df)}")
-        logger.info(f"🗺️ Municipios totales: {len(todos_municipios)} ({len(municipios_con_datos)} con datos)")
+        logger.info(f"🗺️ Municipios totales: {len(todos_municipios)} (sin duplicados)")
 
         return {
             "casos": casos_df,
             "epizootias": epizootias_df,
-            "municipios_normalizados": todos_municipios,  # Mantener nombre por compatibilidad
+            "municipios_normalizados": todos_municipios,
             "municipio_display_map": municipio_display_map,
             "veredas_por_municipio": veredas_por_municipio,
             "vereda_display_map": vereda_display_map,

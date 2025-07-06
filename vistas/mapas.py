@@ -11,6 +11,7 @@ import numpy as np
 from pathlib import Path
 import json
 from datetime import datetime
+import logging
 
 # Importaciones opcionales para mapas
 try:
@@ -489,9 +490,39 @@ def show_filter_indicator(filters, colors):
 
 
 def create_vereda_detail_view(casos, epizootias, filters, colors):
-    """Vista detallada de vereda específica."""
+    """
+    CORREGIDO: Vista detallada de vereda específica con filtrado correcto.
+    """
+    def normalize_name(name):
+        """Normaliza nombres para comparación consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
     vereda_display = filters.get('vereda_display', 'Vereda')
     municipio_display = filters.get('municipio_display', 'Municipio')
+    
+    # Normalizar nombres para filtrado
+    vereda_norm = normalize_name(vereda_display)
+    municipio_norm = normalize_name(municipio_display)
+    
+    # FILTRAR DATOS ESPECÍFICAMENTE POR VEREDA
+    casos_vereda = pd.DataFrame()
+    epizootias_vereda = pd.DataFrame()
+    
+    # Filtrar casos por vereda específica
+    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
+        casos_vereda = casos[
+            (casos["vereda"].apply(normalize_name) == vereda_norm) &
+            (casos["municipio"].apply(normalize_name) == municipio_norm)
+        ].copy()
+    
+    # Filtrar epizootias por vereda específica
+    if not epizootias.empty and "vereda" in epizootias.columns and "municipio" in epizootias.columns:
+        epizootias_vereda = epizootias[
+            (epizootias["vereda"].apply(normalize_name) == vereda_norm) &
+            (epizootias["municipio"].apply(normalize_name) == municipio_norm)
+        ].copy()
     
     # Información de la vereda
     st.markdown(
@@ -514,47 +545,162 @@ def create_vereda_detail_view(casos, epizootias, filters, colors):
         unsafe_allow_html=True,
     )
     
-    # Estadísticas de la vereda
-    total_casos = len(casos)
-    total_epizootias = len(epizootias)
+    # Estadísticas específicas de la vereda
+    total_casos = len(casos_vereda)
+    total_epizootias = len(epizootias_vereda)
     
-    col1, col2, col3 = st.columns(3)
+    # Conteos específicos por tipo de epizootia
+    positivas_vereda = 0
+    en_estudio_vereda = 0
+    if not epizootias_vereda.empty and "descripcion" in epizootias_vereda.columns:
+        positivas_vereda = len(epizootias_vereda[epizootias_vereda["descripcion"] == "POSITIVO FA"])
+        en_estudio_vereda = len(epizootias_vereda[epizootias_vereda["descripcion"] == "EN ESTUDIO"])
+    
+    # Métricas específicas de la vereda
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        st.metric("🦠 Casos Humanos", total_casos)
+        st.metric("🦠 Casos Humanos", total_casos, 
+                 help=f"Casos registrados específicamente en {vereda_display}")
     
     with col2:
-        st.metric("🐒 Epizootias", total_epizootias)
+        st.metric("🔴 Epiz. Positivas", positivas_vereda,
+                 help="Epizootias confirmadas positivas para fiebre amarilla")
     
     with col3:
+        st.metric("🔵 En Estudio", en_estudio_vereda,
+                 help="Epizootias con resultado pendiente")
+    
+    with col4:
         actividad_total = total_casos + total_epizootias
-        st.metric("📊 Total Eventos", actividad_total)
+        st.metric("📊 Total Eventos", actividad_total,
+                 help="Total de eventos de vigilancia en esta vereda")
+    
+    # Log para debugging
+    logging.info(f"📍 Vista vereda {vereda_display}: {total_casos} casos, {total_epizootias} epizootias")
     
     # Análisis específico de la vereda
     if total_casos > 0 or total_epizootias > 0:
         st.markdown("---")
-        st.markdown("### 📊 Análisis Específico")
+        st.markdown("### 📊 Análisis Específico de la Vereda")
         
-        # Casos por fecha si hay datos
-        if not casos.empty and "fecha_inicio_sintomas" in casos.columns:
-            casos_fecha = casos.dropna(subset=["fecha_inicio_sintomas"])
+        # Crear dos columnas para casos y epizootias
+        col_casos, col_epi = st.columns(2)
+        
+        with col_casos:
+            st.markdown("#### 🦠 Casos en esta Vereda")
+            
+            if not casos_vereda.empty:
+                # Tabla de casos con todas las columnas relevantes
+                casos_display = casos_vereda.copy()
+                
+                # Preparar columnas para mostrar
+                columnas_mostrar = []
+                if "fecha_inicio_sintomas" in casos_display.columns:
+                    casos_display["Fecha Síntomas"] = casos_display["fecha_inicio_sintomas"].dt.strftime('%d/%m/%Y')
+                    columnas_mostrar.append("Fecha Síntomas")
+                if "edad" in casos_display.columns:
+                    columnas_mostrar.append("edad")
+                if "sexo" in casos_display.columns:
+                    columnas_mostrar.append("sexo")
+                if "condicion_final" in casos_display.columns:
+                    casos_display["Condición"] = casos_display["condicion_final"]
+                    columnas_mostrar.append("Condición")
+                
+                if columnas_mostrar:
+                    st.dataframe(casos_display[columnas_mostrar], use_container_width=True, height=300)
+                else:
+                    st.dataframe(casos_display.head(), use_container_width=True, height=300)
+                
+                # Estadísticas de casos
+                if "condicion_final" in casos_vereda.columns:
+                    fallecidos_vereda = len(casos_vereda[casos_vereda["condicion_final"] == "Fallecido"])
+                    vivos_vereda = len(casos_vereda[casos_vereda["condicion_final"] == "Vivo"])
+                    letalidad_vereda = (fallecidos_vereda / total_casos * 100) if total_casos > 0 else 0
+                    
+                    st.markdown(f"""
+                    **📊 Estadísticas:**
+                    - 💚 Vivos: {vivos_vereda}
+                    - ⚰️ Fallecidos: {fallecidos_vereda}
+                    - 📈 Letalidad: {letalidad_vereda:.1f}%
+                    """)
+            else:
+                st.info("📭 No hay casos registrados en esta vereda")
+        
+        with col_epi:
+            st.markdown("#### 🐒 Epizootias en esta Vereda")
+            
+            if not epizootias_vereda.empty:
+                # Tabla de epizootias
+                epi_display = epizootias_vereda.copy()
+                
+                columnas_epi = []
+                if "fecha_recoleccion" in epi_display.columns:
+                    epi_display["Fecha Recolección"] = epi_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
+                    columnas_epi.append("Fecha Recolección")
+                if "descripcion" in epi_display.columns:
+                    epi_display["Resultado"] = epi_display["descripcion"]
+                    columnas_epi.append("Resultado")
+                if "proveniente" in epi_display.columns:
+                    epi_display["Fuente"] = epi_display["proveniente"].apply(
+                        lambda x: "Vigilancia Com." if "VIGILANCIA" in str(x) else "Incautación" if "INCAUTACIÓN" in str(x) else str(x)[:20]
+                    )
+                    columnas_epi.append("Fuente")
+                
+                if columnas_epi:
+                    st.dataframe(epi_display[columnas_epi], use_container_width=True, height=300)
+                else:
+                    st.dataframe(epi_display.head(), use_container_width=True, height=300)
+                
+                # Estadísticas de epizootias
+                st.markdown(f"""
+                **📊 Estadísticas:**
+                - 🔴 Positivas: {positivas_vereda}
+                - 🔵 En estudio: {en_estudio_vereda}
+                - 📈 Total: {total_epizootias}
+                """)
+            else:
+                st.info("📭 No hay epizootias registradas en esta vereda")
+        
+        # Análisis temporal si hay datos
+        st.markdown("---")
+        st.markdown("#### 📅 Análisis Temporal de la Vereda")
+        
+        if not casos_vereda.empty and "fecha_inicio_sintomas" in casos_vereda.columns:
+            casos_fecha = casos_vereda.dropna(subset=["fecha_inicio_sintomas"])
             if not casos_fecha.empty:
-                st.markdown("**📅 Casos por Fecha**")
+                st.markdown("**📊 Casos por Fecha**")
                 casos_temporal = casos_fecha.groupby(casos_fecha["fecha_inicio_sintomas"].dt.date).size().reset_index()
                 casos_temporal.columns = ["Fecha", "Casos"]
                 st.dataframe(casos_temporal, use_container_width=True, height=200)
         
-        # Epizootias por fecha si hay datos
-        if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
-            epi_fecha = epizootias.dropna(subset=["fecha_recoleccion"])
+        if not epizootias_vereda.empty and "fecha_recoleccion" in epizootias_vereda.columns:
+            epi_fecha = epizootias_vereda.dropna(subset=["fecha_recoleccion"])
             if not epi_fecha.empty:
-                st.markdown("**📅 Epizootias por Fecha**")
+                st.markdown("**📊 Epizootias por Fecha**")
                 epi_temporal = epi_fecha.groupby(epi_fecha["fecha_recoleccion"].dt.date).size().reset_index()
                 epi_temporal.columns = ["Fecha", "Epizootias"]
                 st.dataframe(epi_temporal, use_container_width=True, height=200)
+        
+        # Información de contexto
+        st.markdown("---")
+        st.markdown(f"""
+        ℹ️ **Información de Contexto:**
+        - Esta vista muestra únicamente los datos registrados en la vereda **{vereda_display}**
+        - Los datos incluyen casos humanos confirmados y epizootias (positivas + en estudio)
+        - Use los filtros del sidebar o navegue con los botones para cambiar la vista
+        """)
+        
     else:
-        st.info("📊 No hay eventos registrados en esta vereda con los filtros actuales")
-
+        st.info(f"📊 No hay eventos registrados en la vereda **{vereda_display}** con los filtros actuales")
+        
+        # Sugerir verificar filtros
+        st.markdown("""
+        💡 **Sugerencias:**
+        - Verifique que los filtros de fecha no estén muy restrictivos
+        - Esta vereda puede no tener eventos registrados en el período seleccionado
+        - Use los botones de navegación para volver a la vista municipal o departamental
+        """)
 
 def create_beautiful_information_cards(casos, epizootias, filters, colors):
     """
@@ -932,79 +1078,180 @@ def apply_enhanced_cards_css(colors):
 
 def prepare_municipal_data_enhanced(casos, epizootias, municipios):
     """
-    SIMPLIFICADO: Prepara datos por municipio usando nombres directos de shapefiles.
-    ELIMINADA toda la lógica de normalización.
+    CORREGIDO: Prepara datos por municipio con normalización consistente.
     """
+    def normalize_name(name):
+        """Normaliza nombres para mapeo consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
+    # Normalizar nombres en shapefiles
+    municipios = municipios.copy()
+    municipios['municipi_1_norm'] = municipios['municipi_1'].apply(normalize_name)
+    municipios['MpNombre_norm'] = municipios['MpNombre'].apply(normalize_name)
+    
+    # Preparar conteos de casos por municipio
     casos_por_municipio = {}
     fallecidos_por_municipio = {}
     
     if not casos.empty and 'municipio' in casos.columns:
-        casos_counts = casos.groupby('municipio').size()
+        # Normalizar nombres en casos
+        casos_norm = casos.copy()
+        casos_norm['municipio_norm'] = casos_norm['municipio'].apply(normalize_name)
+        
+        casos_counts = casos_norm.groupby('municipio_norm').size()
         casos_por_municipio = casos_counts.to_dict()
         
-        if 'condicion_final' in casos.columns:
-            fallecidos_counts = casos[casos['condicion_final'] == 'Fallecido'].groupby('municipio').size()
+        if 'condicion_final' in casos_norm.columns:
+            fallecidos_norm = casos_norm[casos_norm['condicion_final'] == 'Fallecido']
+            fallecidos_counts = fallecidos_norm.groupby('municipio_norm').size()
             fallecidos_por_municipio = fallecidos_counts.to_dict()
     
-    # Epizootias por municipio
+    # Preparar conteos de epizootias por municipio
     epizootias_por_municipio = {}
     positivas_por_municipio = {}
     en_estudio_por_municipio = {}
     
     if not epizootias.empty and 'municipio' in epizootias.columns:
-        epi_counts = epizootias.groupby('municipio').size()
+        # Normalizar nombres en epizootias
+        epizootias_norm = epizootias.copy()
+        epizootias_norm['municipio_norm'] = epizootias_norm['municipio'].apply(normalize_name)
+        
+        epi_counts = epizootias_norm.groupby('municipio_norm').size()
         epizootias_por_municipio = epi_counts.to_dict()
         
-        if 'descripcion' in epizootias.columns:
-            positivas_counts = epizootias[epizootias['descripcion'] == 'POSITIVO FA'].groupby('municipio').size()
-            positivas_por_municipio = positivas_counts.to_dict()
+        if 'descripcion' in epizootias_norm.columns:
+            positivas_df = epizootias_norm[epizootias_norm['descripcion'] == 'POSITIVO FA']
+            if not positivas_df.empty:
+                positivas_counts = positivas_df.groupby('municipio_norm').size()
+                positivas_por_municipio = positivas_counts.to_dict()
             
-            en_estudio_counts = epizootias[epizootias['descripcion'] == 'EN ESTUDIO'].groupby('municipio').size()
-            en_estudio_por_municipio = en_estudio_counts.to_dict()
+            en_estudio_df = epizootias_norm[epizootias_norm['descripcion'] == 'EN ESTUDIO']
+            if not en_estudio_df.empty:
+                en_estudio_counts = en_estudio_df.groupby('municipio_norm').size()
+                en_estudio_por_municipio = en_estudio_counts.to_dict()
     
-    # Combinar datos con shapefile usando 'municipi_1' (que ahora coincide con los datos)
+    # Combinar datos con shapefile
     municipios_data = municipios.copy()
     
-    municipios_data['casos'] = municipios_data['municipi_1'].map(casos_por_municipio).fillna(0).astype(int)
-    municipios_data['fallecidos'] = municipios_data['municipi_1'].map(fallecidos_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias'] = municipios_data['municipi_1'].map(epizootias_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias_positivas'] = municipios_data['municipi_1'].map(positivas_por_municipio).fillna(0).astype(int)
-    municipios_data['epizootias_en_estudio'] = municipios_data['municipi_1'].map(en_estudio_por_municipio).fillna(0).astype(int)
+    # Intentar mapeo con municipi_1 primero, luego con MpNombre
+    def safe_map_data(row, data_dict):
+        """Mapea datos de forma segura usando múltiples claves."""
+        # Intentar con municipi_1_norm
+        result = data_dict.get(row['municipi_1_norm'], 0)
+        if result == 0:
+            # Intentar con MpNombre_norm como fallback
+            result = data_dict.get(row['MpNombre_norm'], 0)
+        return result
+    
+    municipios_data['casos'] = municipios_data.apply(
+        lambda row: safe_map_data(row, casos_por_municipio), axis=1
+    )
+    municipios_data['fallecidos'] = municipios_data.apply(
+        lambda row: safe_map_data(row, fallecidos_por_municipio), axis=1
+    )
+    municipios_data['epizootias'] = municipios_data.apply(
+        lambda row: safe_map_data(row, epizootias_por_municipio), axis=1
+    )
+    municipios_data['epizootias_positivas'] = municipios_data.apply(
+        lambda row: safe_map_data(row, positivas_por_municipio), axis=1
+    )
+    municipios_data['epizootias_en_estudio'] = municipios_data.apply(
+        lambda row: safe_map_data(row, en_estudio_por_municipio), axis=1
+    )
+    
+    # Log para debugging
+    total_casos_mapeados = municipios_data['casos'].sum()
+    total_epi_mapeadas = municipios_data['epizootias'].sum()
+    
+    logging.info(f"🗺️ Mapeo municipal: {total_casos_mapeados} casos, {total_epi_mapeadas} epizootias")
+    
+    # Debug: mostrar municipios con datos
+    municipios_con_datos = municipios_data[
+        (municipios_data['casos'] > 0) | (municipios_data['epizootias'] > 0)
+    ]['municipi_1'].tolist()
+    logging.info(f"🗺️ Municipios con datos en mapa: {len(municipios_con_datos)}")
     
     return municipios_data
 
 def prepare_vereda_data_enhanced(casos, epizootias, veredas_gdf):
     """
-    SIMPLIFICADO: Prepara datos por vereda usando nombres directos de shapefiles.
-    ELIMINADA toda la lógica de normalización.
+    CORREGIDO: Prepara datos por vereda con normalización consistente.
     """
+    def normalize_name(name):
+        """Normaliza nombres para mapeo consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
+    # Normalizar nombres en shapefile de veredas
+    veredas_gdf = veredas_gdf.copy()
+    veredas_gdf['vereda_nor_norm'] = veredas_gdf['vereda_nor'].apply(normalize_name)
+    veredas_gdf['municipi_1_norm'] = veredas_gdf['municipi_1'].apply(normalize_name)
+    
+    # Obtener municipio actual del filtro
+    municipio_actual = st.session_state.get('municipio_filter', 'Todos')
+    municipio_norm = normalize_name(municipio_actual)
+    
+    # Preparar conteos de casos por vereda
     casos_por_vereda = {}
+    if not casos.empty and 'vereda' in casos.columns and 'municipio' in casos.columns:
+        casos_norm = casos.copy()
+        casos_norm['vereda_norm'] = casos_norm['vereda'].apply(normalize_name)
+        casos_norm['municipio_norm'] = casos_norm['municipio'].apply(normalize_name)
+        
+        # Filtrar casos del municipio actual
+        casos_municipio = casos_norm[casos_norm['municipio_norm'] == municipio_norm]
+        
+        if not casos_municipio.empty:
+            casos_counts = casos_municipio.groupby('vereda_norm').size()
+            casos_por_vereda = casos_counts.to_dict()
+    
+    # Preparar conteos de epizootias por vereda
     epizootias_por_vereda = {}
     positivas_por_vereda = {}
     en_estudio_por_vereda = {}
     
-    # Contar casos por vereda (usando nombres directos)
-    if not casos.empty and 'vereda' in casos.columns:
-        for vereda, group in casos.groupby('vereda'):
-            casos_por_vereda[vereda] = len(group)
-    
-    # Contar epizootias por vereda (usando nombres directos)
-    if not epizootias.empty and 'vereda' in epizootias.columns:
-        for vereda, group in epizootias.groupby('vereda'):
-            epizootias_por_vereda[vereda] = len(group)
+    if not epizootias.empty and 'vereda' in epizootias.columns and 'municipio' in epizootias.columns:
+        epizootias_norm = epizootias.copy()
+        epizootias_norm['vereda_norm'] = epizootias_norm['vereda'].apply(normalize_name)
+        epizootias_norm['municipio_norm'] = epizootias_norm['municipio'].apply(normalize_name)
+        
+        # Filtrar epizootias del municipio actual
+        epi_municipio = epizootias_norm[epizootias_norm['municipio_norm'] == municipio_norm]
+        
+        if not epi_municipio.empty:
+            epi_counts = epi_municipio.groupby('vereda_norm').size()
+            epizootias_por_vereda = epi_counts.to_dict()
             
-            if 'descripcion' in group.columns:
-                positivas_por_vereda[vereda] = len(group[group['descripcion'] == 'POSITIVO FA'])
-                en_estudio_por_vereda[vereda] = len(group[group['descripcion'] == 'EN ESTUDIO'])
+            if 'descripcion' in epi_municipio.columns:
+                # Positivas
+                positivas_df = epi_municipio[epi_municipio['descripcion'] == 'POSITIVO FA']
+                if not positivas_df.empty:
+                    positivas_counts = positivas_df.groupby('vereda_norm').size()
+                    positivas_por_vereda = positivas_counts.to_dict()
+                
+                # En estudio
+                en_estudio_df = epi_municipio[epi_municipio['descripcion'] == 'EN ESTUDIO']
+                if not en_estudio_df.empty:
+                    en_estudio_counts = en_estudio_df.groupby('vereda_norm').size()
+                    en_estudio_por_vereda = en_estudio_counts.to_dict()
     
-    # Combinar con shapefile usando 'vereda_nor' (que ahora coincide con los datos)
+    # Combinar datos con shapefile
     veredas_data = veredas_gdf.copy()
     
-    # Mapear usando vereda_nor del shapefile
-    veredas_data['casos'] = veredas_data['vereda_nor'].map(casos_por_vereda).fillna(0).astype(int)
-    veredas_data['epizootias'] = veredas_data['vereda_nor'].map(epizootias_por_vereda).fillna(0).astype(int)
-    veredas_data['epizootias_positivas'] = veredas_data['vereda_nor'].map(positivas_por_vereda).fillna(0).astype(int)
-    veredas_data['epizootias_en_estudio'] = veredas_data['vereda_nor'].map(en_estudio_por_vereda).fillna(0).astype(int)
+    # Mapear usando vereda_nor_norm
+    veredas_data['casos'] = veredas_data['vereda_nor_norm'].map(casos_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias'] = veredas_data['vereda_nor_norm'].map(epizootias_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias_positivas'] = veredas_data['vereda_nor_norm'].map(positivas_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias_en_estudio'] = veredas_data['vereda_nor_norm'].map(en_estudio_por_vereda).fillna(0).astype(int)
+    
+    # Log para debugging
+    total_casos_vereda = veredas_data['casos'].sum()
+    total_epi_vereda = veredas_data['epizootias'].sum()
+    
+    logging.info(f"🏘️ Mapeo veredas {municipio_actual}: {total_casos_vereda} casos, {total_epi_vereda} epizootias")
     
     return veredas_data
 
