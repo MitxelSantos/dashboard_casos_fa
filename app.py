@@ -534,20 +534,61 @@ def create_empty_data_structure():
     }
 
 def create_filters_responsive_with_maps_enhanced(data):
-    """Crea sistema de filtros MEJORADO con sincronización bidireccional completa."""
-    # Importar el sistema de filtros mejorado
+    """
+    CORREGIDO: Sistema de filtros usando las funciones que SÍ existen.
+    """
     try:
+        # Intentar usar el sistema completo con mapas
         from components.filters import create_complete_filter_system_with_maps
-
-        # Usar el sistema completo de filtros mejorado con sincronización
+        logger.info("✅ Usando sistema completo de filtros con mapas")
+        
         filter_result = create_complete_filter_system_with_maps(data)
         return filter_result["filters"], filter_result["data_filtered"]
-
-    except ImportError as e:
-        logger.error(f"Error importando filtros mejorados: {str(e)}")
-        # Fallback al sistema básico si no está disponible
-        return create_basic_fallback_filters(data)
-
+        
+    except (ImportError, AttributeError, KeyError) as e:
+        logger.warning(f"⚠️ Sistema completo no disponible: {str(e)}")
+        
+        # Fallback: Usar sistema manual que SÍ funciona
+        try:
+            from components.filters import (
+                create_hierarchical_filters_enhanced,
+                create_content_filters_enhanced, 
+                create_advanced_filters_enhanced,
+                apply_all_filters_enhanced
+            )
+            
+            logger.info("✅ Usando sistema manual de filtros")
+            
+            # Crear filtros por partes
+            filters_location = create_hierarchical_filters_enhanced(data)
+            filters_content = create_content_filters_enhanced(data)
+            filters_advanced = create_advanced_filters_enhanced(data)
+            
+            # Aplicar filtros
+            data_filtered = apply_all_filters_enhanced(
+                data, filters_location, filters_content, filters_advanced
+            )
+            
+            # Combinar filtros
+            all_filters = {
+                **filters_location,
+                **filters_content, 
+                **filters_advanced,
+                "active_filters": []
+            }
+            
+            # Crear lista de filtros activos
+            if filters_location["municipio_display"] != "Todos":
+                all_filters["active_filters"].append(f"Municipio: {filters_location['municipio_display']}")
+            if filters_location["vereda_display"] != "Todas":
+                all_filters["active_filters"].append(f"Vereda: {filters_location['vereda_display']}")
+            
+            return all_filters, data_filtered
+            
+        except ImportError as e2:
+            logger.error(f"❌ Error con sistema manual: {str(e2)}")
+            # Último recurso: sistema básico
+            return create_basic_fallback_filters(data)
 
 def create_basic_fallback_filters(data):
     """Sistema de filtros básico como fallback."""
@@ -720,6 +761,15 @@ def main():
 
     # Cargar datos con indicadores responsive (POSITIVAS + EN ESTUDIO)
     data = load_enhanced_datasets()
+    
+    # DEBUG: Verificar estructura de datos
+    if not data["casos"].empty:
+        st.write("**DEBUG - Columnas en casos:**", list(data["casos"].columns))
+        st.write("**DEBUG - Primeras filas casos:**", data["casos"][["municipio", "vereda"]].head() if "municipio" in data["casos"].columns else "No hay columna municipio")
+
+    if not data["epizootias"].empty:
+        st.write("**DEBUG - Columnas en epizootias:**", list(data["epizootias"].columns))
+        st.write("**DEBUG - Primeras filas epizootias:**", data["epizootias"][["municipio", "vereda"]].head() if "municipio" in data["epizootias"].columns else "No hay columna municipio")
 
     if data["casos"].empty and data["epizootias"].empty:
         # Error responsive con instrucciones claras
@@ -735,6 +785,14 @@ def main():
 
     # Crear filtros responsive con integración de mapas MEJORADOS
     filters, data_filtered = create_filters_responsive_with_maps_enhanced(data)
+    
+    # DEBUG: Verificar filtros y datos filtrados
+    st.write("**DEBUG - Filtros activos:**", filters)
+    st.write("**DEBUG - Casos filtrados:**", len(data_filtered["casos"]), "vs originales:", len(data["casos"]))
+    st.write("**DEBUG - Epizootias filtradas:**", len(data_filtered["epizootias"]), "vs originales:", len(data["epizootias"]))
+
+    if len(data_filtered["casos"]) != len(data["casos"]):
+        st.write("**DEBUG - Ejemplo casos filtrados:**", data_filtered["casos"][["municipio", "vereda"]].head() if "municipio" in data_filtered["casos"].columns else "No hay columna municipio")
 
     # Manejar interacciones del mapa
     handle_map_interactions(data_filtered, filters, COLORS)
