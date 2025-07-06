@@ -200,8 +200,72 @@ for module_name, module in vistas_modules.items():
     status = "✅ OK" if module else "❌ FALLO"
     logger.info(f"   {module_name}: {status}")
 
-
-# Reemplazar las líneas 345-380 en app.py con esta versión corregida:
+def load_shapefile_locations():
+    """
+    NUEVA: Carga ubicaciones desde shapefiles para mostrar en filtros.
+    """
+    try:
+        from pathlib import Path
+        PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
+        
+        # Intentar cargar shapefiles
+        shapefile_data = {"municipios": [], "veredas_por_municipio": {}}
+        
+        try:
+            import geopandas as gpd
+            
+            # Cargar municipios
+            municipios_path = PROCESSED_DIR / "tolima_municipios.shp"
+            if municipios_path.exists():
+                municipios_gdf = gpd.read_file(municipios_path)
+                shapefile_data["municipios"] = sorted(municipios_gdf['municipi_1'].str.upper().str.strip().unique())
+            
+            # Cargar veredas por municipio
+            veredas_path = PROCESSED_DIR / "tolima_veredas.shp"
+            if veredas_path.exists():
+                veredas_gdf = gpd.read_file(veredas_path)
+                
+                # Normalizar nombres
+                veredas_gdf['municipi_1_norm'] = veredas_gdf['municipi_1'].str.upper().str.strip()
+                veredas_gdf['vereda_nor_norm'] = veredas_gdf['vereda_nor'].str.upper().str.strip()
+                
+                # Agrupar veredas por municipio
+                for municipio in shapefile_data["municipios"]:
+                    veredas_municipio = veredas_gdf[
+                        veredas_gdf['municipi_1_norm'] == municipio
+                    ]['vereda_nor_norm'].unique()
+                    
+                    # Filtrar valores vacíos y ordenar
+                    veredas_validas = [v for v in veredas_municipio if v and str(v).strip()]
+                    shapefile_data["veredas_por_municipio"][municipio] = sorted(veredas_validas)
+            
+            logger.info(f"✅ Shapefiles cargados: {len(shapefile_data['municipios'])} municipios")
+            return shapefile_data
+            
+        except ImportError:
+            logger.warning("⚠️ GeoPandas no disponible, usando fallback")
+            
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudieron cargar shapefiles: {str(e)}")
+    
+    # Fallback: usar lista manual
+    municipios_tolima = [
+        "IBAGUE", "ALPUJARRA", "ALVARADO", "AMBALEMA", "ANZOATEGUI",
+        "ARMERO", "ATACO", "CAJAMARCA", "CARMEN DE APICALA", "CASABIANCA",
+        "CHAPARRAL", "COELLO", "COYAIMA", "CUNDAY", "DOLORES",
+        "ESPINAL", "FALAN", "FLANDES", "FRESNO", "GUAMO",
+        "HERVEO", "HONDA", "ICONONZO", "LERIDA", "LIBANO",
+        "MARIQUITA", "MELGAR", "MURILLO", "NATAGAIMA", "ORTEGA",
+        "PALOCABILDO", "PIEDRAS", "PLANADAS", "PRADO", "PURIFICACION",
+        "RIOBLANCO", "RONCESVALLES", "ROVIRA", "SALDAÑA", "SAN ANTONIO",
+        "SAN LUIS", "SANTA ISABEL", "SUAREZ", "VALLE DE SAN JUAN",
+        "VENADILLO", "VILLAHERMOSA", "VILLARRICA"
+    ]
+    
+    return {
+        "municipios": municipios_tolima,
+        "veredas_por_municipio": {municipio: [] for municipio in municipios_tolima}
+    }
 
 def load_enhanced_datasets():
     """
@@ -211,6 +275,9 @@ def load_enhanced_datasets():
         progress_bar = st.progress(0)
         status_text = st.empty()
         status_text.text("🔄 Cargando datos normalizados...")
+        
+        # Cargar ubicaciones de shapefiles
+        shapefile_locations = load_shapefile_locations()
 
         # ==================== CONFIGURACIÓN DE RUTAS ====================
         casos_filename = "BD_positivos.xlsx"
@@ -375,7 +442,7 @@ def load_enhanced_datasets():
         todos_municipios = list(set(municipios_con_datos + municipios_tolima_completos))
         todos_municipios = sorted(todos_municipios)
 
-        # ==================== VEREDAS POR MUNICIPIO NORMALIZADAS ====================
+        # ==================== VEREDAS POR MUNICIPIO MEJORADAS ====================
         veredas_por_municipio = {}
         for municipio in todos_municipios:
             veredas = set()
@@ -390,10 +457,18 @@ def load_enhanced_datasets():
                 veredas_epi = epizootias_df[epizootias_df["municipio"] == municipio]["vereda"].dropna().unique()
                 veredas.update(veredas_epi)
             
+            # NUEVO: Agregar veredas del shapefile (incluso si no tienen datos)
+            if municipio in shapefile_locations["veredas_por_municipio"]:
+                veredas_shapefile = shapefile_locations["veredas_por_municipio"][municipio]
+                veredas.update(veredas_shapefile)
+            
             # Filtrar veredas vacías y ordenar
             veredas_filtradas = [v for v in veredas if v and v.strip()]
-            veredas_por_municipio[municipio] = sorted(veredas_filtradas)
-
+            veredas_por_municipio[municipio] = sorted(veredas_filtradas)    
+            # Filtrar veredas vacías y ordenar
+            veredas_filtradas = [v for v in veredas if v and v.strip()]
+            veredas_por_municipio[municipio] = sorted(veredas_filtradas)            
+            
         progress_bar.progress(90)
         status_text.text("📊 Finalizando...")
 
@@ -424,7 +499,7 @@ def load_enhanced_datasets():
         logger.info(f"📊 Casos cargados: {len(casos_df)}")
         logger.info(f"🔵 Epizootias cargadas: {len(epizootias_df)}")
         logger.info(f"🗺️ Municipios totales: {len(todos_municipios)} (sin duplicados)")
-
+        
         return {
             "casos": casos_df,
             "epizootias": epizootias_df,
@@ -435,6 +510,7 @@ def load_enhanced_datasets():
             "condicion_map": condicion_map,
             "descripcion_map": descripcion_map,
             "data_source": data_source,
+            "shapefile_locations": shapefile_locations,  # NUEVO
         }
 
     except Exception as e:
@@ -627,7 +703,7 @@ def handle_map_interactions(data_filtered, filters, colors):
 
 def main():
     """
-    Aplicación principal del dashboard v3.3 CORREGIDA con debugging mejorado.
+    Aplicación principal del dashboard v1 CORREGIDA con debugging mejorado.
     """
     # Configurar página con espaciado corregido
     configure_page_responsive()
@@ -663,17 +739,16 @@ def main():
     # Manejar interacciones del mapa
     handle_map_interactions(data_filtered, filters, COLORS)
 
-    # PESTAÑAS PRINCIPALES ACTUALIZADAS v3.3
     tab1, tab2, tab3 = st.tabs(
         [
-            "🗺️ Mapa Interactivo",      # Mapas CON todas las tarjetas mejoradas
-            "📊 Análisis Detallado", # Tablas detalladas e interactivas
+            "🗺️ Mapa Interactivo",
+            "📊 Análisis Detallado", 
             "📈 Seguimiento Temporal",
         ]
     )
 
     with tab1:
-        # Vista de mapas CON todas las tarjetas informativas MEJORADAS Y DEBUGGING
+        # Vista de mapas CON datos filtrados
         logger.info(f"🗺️ Intentando mostrar vista de mapas...")
         logger.info(f"   Estado del módulo 'mapas': {'✅ OK' if vistas_modules.get('mapas') else '❌ None'}")
         
@@ -681,7 +756,7 @@ def main():
             try:
                 logger.info("🔄 Ejecutando vistas_modules['mapas'].show()...")
                 
-                # Pasar data filtrada para que los mapas trabajen con positivas + en estudio
+                # **USAR data_filtered (no data)**
                 vistas_modules["mapas"].show(data_filtered, filters, COLORS)
                 
                 logger.info("✅ Vista de mapas ejecutada correctamente")
@@ -719,26 +794,32 @@ def main():
             st.info("🗺️ Las otras pestañas funcionan normalmente.")
 
     with tab2:
-        # NUEVO: Análisis epidemiológico con tablas detalladas e interactivas
+        # **USAR data_filtered PARA ANÁLISIS DETALLADO**
         if "tablas" in vistas_modules and vistas_modules["tablas"]:
             try:
+                logger.info("🔄 Mostrando análisis detallado con datos filtrados")
                 vistas_modules["tablas"].show(data_filtered, filters, COLORS)
             except Exception as e:
+                logger.error(f"❌ Error en módulo de análisis: {str(e)}")
                 st.error(f"Error en módulo de análisis epidemiológico: {str(e)}")
-                st.info("🔧 Vista de análisis epidemiológico en desarrollo.")
+                show_filtered_data_summary(data_filtered, filters)
         else:
             st.info("🔧 Módulo de análisis epidemiológico en desarrollo.")
+            show_filtered_data_summary(data_filtered, filters)
 
     with tab3:
-        # Seguimiento temporal (actualizado para manejar positivas + en estudio)
+        # **USAR data_filtered PARA SEGUIMIENTO TEMPORAL**
         if "comparativo" in vistas_modules and vistas_modules["comparativo"]:
             try:
+                logger.info("🔄 Mostrando seguimiento temporal con datos filtrados")
                 vistas_modules["comparativo"].show(data_filtered, filters, COLORS)
             except Exception as e:
+                logger.error(f"❌ Error en módulo temporal: {str(e)}")
                 st.error(f"Error en módulo de seguimiento temporal: {str(e)}")
-                st.info("🔧 Vista de seguimiento temporal en desarrollo.")
+                show_filtered_data_summary(data_filtered, filters)
         else:
             st.info("🔧 Módulo de seguimiento temporal en desarrollo.")
+            show_filtered_data_summary(data_filtered, filters)
 
     # Footer con información de versión (espaciado reducido)
     st.markdown("---")
@@ -752,6 +833,57 @@ def main():
         unsafe_allow_html=True,
     )
 
+def show_filtered_data_summary(data_filtered, filters):
+    """
+    NUEVA: Muestra resumen de datos filtrados como fallback.
+    """
+    st.markdown("### 📊 Resumen de Datos Filtrados")
+    
+    casos = data_filtered["casos"]
+    epizootias = data_filtered["epizootias"]
+    
+    # Métricas básicas con datos filtrados
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("🦠 Casos", len(casos))
+    
+    with col2:
+        fallecidos = len(casos[casos["condicion_final"] == "Fallecido"]) if not casos.empty and "condicion_final" in casos.columns else 0
+        st.metric("⚰️ Fallecidos", fallecidos)
+    
+    with col3:
+        st.metric("🐒 Epizootias", len(epizootias))
+    
+    with col4:
+        positivas = len(epizootias[epizootias["descripcion"] == "POSITIVO FA"]) if not epizootias.empty and "descripcion" in epizootias.columns else 0
+        st.metric("🔴 Positivas", positivas)
+    
+    # Información de filtros activos
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        st.markdown("**🎯 Filtros Activos:**")
+        for filtro in active_filters:
+            st.caption(f"• {filtro}")
+    else:
+        st.info("📊 Mostrando datos completos del Tolima")
+    
+    # Mostrar tablas básicas si hay datos
+    if not casos.empty:
+        st.markdown("**📋 Casos Filtrados:**")
+        casos_display = casos.head(10)
+        if "fecha_inicio_sintomas" in casos_display.columns:
+            casos_display = casos_display.copy()
+            casos_display["fecha_inicio_sintomas"] = casos_display["fecha_inicio_sintomas"].dt.strftime('%d/%m/%Y')
+        st.dataframe(casos_display, use_container_width=True)
+    
+    if not epizootias.empty:
+        st.markdown("**📋 Epizootias Filtradas:**")
+        epi_display = epizootias.head(10)
+        if "fecha_recoleccion" in epi_display.columns:
+            epi_display = epi_display.copy()
+            epi_display["fecha_recoleccion"] = epi_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
+        st.dataframe(epi_display, use_container_width=True) 
 
 if __name__ == "__main__":
     main()

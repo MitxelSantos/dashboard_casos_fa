@@ -34,8 +34,7 @@ PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
 
 def show(data_filtered, filters, colors):
     """
-    Vista completa de mapas con tarjetas MEJORADAS.
-    Layout: Columnas lado a lado (mapa | tarjetas estéticas mejoradas)
+    CORREGIDO: Vista completa de mapas con datos filtrados.
     """
     
     # CSS para las nuevas tarjetas mejoradas
@@ -57,8 +56,20 @@ def show(data_filtered, filters, colors):
         show_geographic_data_error()
         return
 
+    # **USAR DATOS FILTRADOS**
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]
+    
+    # **LOG PARA VERIFICAR FILTRADO**
+    total_casos_filtrados = len(casos)
+    total_epi_filtradas = len(epizootias)
+    
+    logging.info(f"🗺️ Vista mapas - Datos filtrados: {total_casos_filtrados} casos, {total_epi_filtradas} epizootias")
+    
+    # Mostrar información de filtrado si hay filtros activos
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        st.info(f"🎯 Mostrando datos filtrados: {' • '.join(active_filters[:2])}")
 
     # **LAYOUT MEJORADO**: División en columnas lado a lado
     col_mapa, col_tarjetas = st.columns([3, 2])  # 60% mapa, 40% tarjetas
@@ -67,13 +78,16 @@ def show(data_filtered, filters, colors):
         create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered)
     
     with col_tarjetas:
+        # **PASAR DATOS FILTRADOS A LAS TARJETAS**
         create_beautiful_information_cards(casos, epizootias, filters, colors)
-
 
 def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered):
     """
-    MEJORADO: Sistema de mapas con hover para tooltip y click para filtrar (SIN popup).
+    CORREGIDO: Sistema de mapas con logging mejorado.
     """
+    
+    # Log de datos recibidos
+    logging.info(f"🗺️ Sistema mapas recibió: {len(casos)} casos, {len(epizootias)} epizootias")
     
     # Determinar nivel de mapa actual
     current_level = determine_map_level(filters)
@@ -84,14 +98,16 @@ def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, dat
     # Indicador de filtrado activo
     show_filter_indicator(filters, colors)
     
-    # Crear mapa según nivel con INTERACCIONES MEJORADAS
+    # Crear mapa según nivel con datos filtrados
     if current_level == "departamento":
+        logging.info("🏛️ Creando mapa departamental con datos filtrados")
         create_departmental_map_enhanced(casos, epizootias, geo_data, colors)
     elif current_level == "municipio":
+        logging.info(f"🏘️ Creando mapa municipal para {filters.get('municipio_display')} con datos filtrados")
         create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors)
     elif current_level == "vereda":
+        logging.info(f"📍 Creando vista de vereda {filters.get('vereda_display')} con datos filtrados")
         create_vereda_detail_view(casos, epizootias, filters, colors)
-
 
 def determine_map_level(filters):
     """
@@ -216,8 +232,7 @@ def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
 
 def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     """
-    MEJORADO: Mapa municipal con veredas usando nombres directos.
-    PRINCIPAL CAMBIO: Filtrar veredas usando nombres directos del shapefile.
+    CORREGIDO: Mapa municipal con manejo seguro de veredas grises.
     """
     
     if 'veredas' not in geo_data:
@@ -225,7 +240,7 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         show_municipal_tabular_view(casos, epizootias, filters, colors)
         return
     
-    municipio_selected = filters.get('municipio_display')  # Ahora es nombre directo
+    municipio_selected = filters.get('municipio_display')
     if not municipio_selected or municipio_selected == "Todos":
         st.error("No se pudo determinar el municipio para la vista de veredas")
         return
@@ -264,7 +279,7 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     # Ajustar vista al municipio
     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
     
-    # Agregar veredas con interacciones mejoradas
+    # CREAR TOOLTIPS SEGUROS PARA TODAS LAS VEREDAS
     max_casos_vereda = veredas_data['casos'].max() if veredas_data['casos'].max() > 0 else 1
     max_epi_vereda = veredas_data['epizootias'].max() if veredas_data['epizootias'].max() > 0 else 1
     
@@ -280,53 +295,172 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
             intensity = min(casos_count / max_casos_vereda, 1.0)
             fill_color = f"rgba(229, 25, 55, {0.4 + intensity * 0.5})"
             border_color = colors['danger']
+            status_info = f"Con {casos_count} casos"
         elif epizootias_count > 0:
             intensity = min(epizootias_count / max_epi_vereda, 1.0)
             fill_color = f"rgba(247, 148, 29, {0.4 + intensity * 0.5})"
             border_color = colors['warning']
+            status_info = f"Con {epizootias_count} epizootias"
         else:
+            # VEREDAS GRISES - SIN DATOS
             fill_color = "rgba(200, 200, 200, 0.3)"
             border_color = "#cccccc"
+            status_info = "Sin datos registrados"
         
-        # Tooltip para hover (SIN popup)
+        # TOOLTIP SEGURO PARA TODAS LAS VEREDAS (incluso grises)
         tooltip_text = f"""
-        <div style="font-family: Arial; padding: 6px;">
+        <div style="font-family: Arial; padding: 8px; max-width: 220px;">
             <b style="color: {colors['primary']};">{vereda_name}</b><br>
+            <span style="color: #666;">{status_info}</span><br>
             🦠 Casos: {casos_count}<br>
-            🐒 Epizootias: {epizootias_count}<br>
-            {'🔴 Positivas: ' + str(epizootias_positivas) if epizootias_positivas > 0 else ''}
-            {'🔵 En estudio: ' + str(epizootias_en_estudio) if epizootias_en_estudio > 0 else ''}<br>
-            <i style="color: {colors['info']};">👆 Clic para filtrar</i>
-        </div>
+            🐒 Epizootias: {epizootias_count}
         """
         
-        # Agregar vereda (SIN popup)
-        geojson = folium.GeoJson(
-            row['geometry'],
-            style_function=lambda x, color=fill_color, border=border_color: {
-                'fillColor': color,
-                'color': border,
-                'weight': 1.5,
-                'fillOpacity': 0.6,
-                'opacity': 1
-            },
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),
+        # Solo agregar detalles si hay datos
+        if epizootias_positivas > 0 or epizootias_en_estudio > 0:
+            tooltip_text += f"<br>🔴 Positivas: {epizootias_positivas}"
+            tooltip_text += f"<br>🔵 En estudio: {epizootias_en_estudio}"
+        
+        # Instrucciones de clic (solo si hay datos o es seleccionable)
+        if casos_count > 0 or epizootias_count > 0:
+            tooltip_text += f"<br><i style='color: {colors['info']};'>👆 Clic para filtrar</i>"
+        else:
+            tooltip_text += f"<br><i style='color: #999;'>📍 Vereda sin eventos</i>"
+        
+        tooltip_text += "</div>"
+        
+        # AGREGAR VEREDA CON TOOLTIP SEGURO
+        try:
+            geojson = folium.GeoJson(
+                row['geometry'],
+                style_function=lambda x, color=fill_color, border=border_color: {
+                    'fillColor': color,
+                    'color': border,
+                    'weight': 1.5,
+                    'fillOpacity': 0.6,
+                    'opacity': 1
+                },
+                tooltip=folium.Tooltip(
+                    tooltip_text, 
+                    sticky=True,
+                    style="font-size: 12px;"
+                ),
+            )
+            
+            geojson.add_to(m)
+            
+        except Exception as e:
+            # FALLBACK: Si falla el tooltip, crear uno básico
+            logging.warning(f"⚠️ Error creando tooltip para {vereda_name}: {str(e)}")
+            
+            basic_tooltip = f"<b>{vereda_name}</b><br>📊 {status_info}"
+            
+            basic_geojson = folium.GeoJson(
+                row['geometry'],
+                style_function=lambda x, color=fill_color, border=border_color: {
+                    'fillColor': color,
+                    'color': border,
+                    'weight': 1.5,
+                    'fillOpacity': 0.6,
+                    'opacity': 1
+                },
+                tooltip=folium.Tooltip(basic_tooltip, sticky=True),
+            )
+            
+            basic_geojson.add_to(m)
+    
+    # Renderizar mapa con manejo seguro de errores
+    try:
+        map_data = st_folium(
+            m, 
+            width=700,
+            height=500,
+            returned_objects=["last_object_clicked"],
+            key="enhanced_municipal_map_safe"
         )
         
-        geojson.add_to(m)
+        # Procesar clicks de forma segura
+        handle_vereda_click_safe(map_data, veredas_data, filters)
+        
+    except Exception as e:
+        logging.error(f"❌ Error renderizando mapa: {str(e)}")
+        st.error("Error mostrando el mapa de veredas")
+        show_municipal_tabular_view(casos, epizootias, filters, colors)
+        
+def log_data_filtering_info(data_original, data_filtered, filters):
+    """
+    NUEVA: Log detallado del filtrado para debugging.
+    """
+    casos_orig = len(data_original.get("casos", []))
+    epi_orig = len(data_original.get("epizootias", []))
     
-    # Renderizar mapa
-    map_data = st_folium(
-        m, 
-        width=700,
-        height=500,
-        returned_objects=["last_object_clicked"],
-        key="enhanced_municipal_map"
-    )
+    casos_filt = len(data_filtered.get("casos", []))
+    epi_filt = len(data_filtered.get("epizootias", []))
     
-    # Procesar clicks en veredas
-    handle_vereda_click_enhanced(map_data, veredas_data, filters)
+    active_filters = filters.get("active_filters", [])
+    
+    logging.info(f"📊 Filtrado aplicado:")
+    logging.info(f"   📍 Filtros: {len(active_filters)} activos")
+    logging.info(f"   🦠 Casos: {casos_orig} → {casos_filt} ({((casos_orig-casos_filt)/casos_orig*100):.1f}% filtrado)" if casos_orig > 0 else f"   🦠 Casos: 0 → 0")
+    logging.info(f"   🐒 Epizootias: {epi_orig} → {epi_filt} ({((epi_orig-epi_filt)/epi_orig*100):.1f}% filtrado)" if epi_orig > 0 else f"   🐒 Epizootias: 0 → 0")
+    
+    if active_filters:
+        for i, filtro in enumerate(active_filters[:3]):
+            logging.info(f"   🎯 {i+1}. {filtro}")
 
+def handle_vereda_click_safe(map_data, veredas_data, filters):
+    """
+    NUEVA: Manejo seguro de clicks en veredas (incluso grises).
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar la vereda más cercana
+                min_distance = float('inf')
+                vereda_clicked = None
+                vereda_data = None
+                
+                for idx, row in veredas_data.iterrows():
+                    try:
+                        centroid = row['geometry'].centroid
+                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            vereda_clicked = row['vereda_nor']
+                            vereda_data = row
+                    except Exception as e:
+                        logging.warning(f"⚠️ Error calculando distancia para vereda: {str(e)}")
+                        continue
+                
+                if vereda_clicked and min_distance < 0.05:
+                    # **FILTRAR POR VEREDA (incluso si es gris)**
+                    st.session_state['vereda_filter'] = vereda_clicked
+                    
+                    # **MENSAJE CON INFORMACIÓN APROPIADA**
+                    casos_count = vereda_data['casos'] if vereda_data is not None else 0
+                    epi_count = vereda_data['epizootias'] if vereda_data is not None else 0
+                    
+                    if casos_count > 0 or epi_count > 0:
+                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
+                    else:
+                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
+                        st.caption("💡 Esta vereda existe en el territorio pero no tiene eventos de vigilancia registrados")
+                    
+                    # **ACTUALIZAR SIN CAUSAR BUCLE**
+                    st.rerun()
+                    
+    except Exception as e:
+        logging.error(f"❌ Error procesando clic en vereda: {str(e)}")
+        st.warning("⚠️ Error procesando clic en el mapa. Intente usar los filtros del sidebar.")
 
 def handle_enhanced_click_interactions(map_data, municipios_data):
     """
@@ -704,22 +838,177 @@ def create_vereda_detail_view(casos, epizootias, filters, colors):
 
 def create_beautiful_information_cards(casos, epizootias, filters, colors):
     """
-    NUEVAS: Tarjetas súper mejoradas con toda la información solicitada.
+    CORREGIDO: Tarjetas que usan datos filtrados en lugar de datos totales.
     """
     
-    # Calcular métricas completas
+    # USAR DATOS FILTRADOS para calcular métricas
     metrics = calculate_basic_metrics(casos, epizootias)
     
-    # **TARJETA DE CASOS MEJORADA** con porcentaje de mortalidad y último caso
-    create_enhanced_cases_card(metrics, colors)
+    # **TARJETA DE CASOS MEJORADA** con datos filtrados
+    create_enhanced_cases_card_filtered(metrics, filters, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # **TARJETA DE EPIZOOTIAS MEJORADA** con positivas + en estudio y último caso positivo
-    create_enhanced_epizootias_card(metrics, colors)
+    # **TARJETA DE EPIZOOTIAS MEJORADA** con datos filtrados
+    create_enhanced_epizootias_card_filtered(metrics, filters, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
+    
+def create_enhanced_cases_card_filtered(metrics, filters, colors):
+    """
+    NUEVA: Tarjeta de casos con información de filtrado aplicado.
+    """
+    total_casos = metrics["total_casos"]
+    vivos = metrics["vivos"]
+    fallecidos = metrics["fallecidos"]
+    letalidad = metrics["letalidad"]
+    ultimo_caso = metrics["ultimo_caso"]
+    
+    # Determinar contexto de filtrado
+    filter_context = get_filter_context_info(filters)
+    
+    # Información del último caso
+    if ultimo_caso["existe"]:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <strong>{ultimo_caso["ubicacion"]}</strong><br>
+                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
+                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
+            </div>
+        </div>
+        """
+    else:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <span class="no-data">Sin casos registrados{filter_context["suffix"].lower()}</span>
+            </div>
+        </div>
+        """
+    
+    st.markdown(
+        f"""
+        <div class="super-enhanced-card cases-card">
+            <div class="card-header">
+                <div class="card-icon">🦠</div>
+                <div class="card-title">CASOS FIEBRE AMARILLA</div>
+                <div class="card-subtitle">{filter_context["title"]}</div>
+            </div>
+            <div class="card-body">
+                <div class="main-metrics-grid">
+                    <div class="main-metric">
+                        <div class="metric-number primary">{total_casos}</div>
+                        <div class="metric-label">Total Casos</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number success">{vivos}</div>
+                        <div class="metric-label">Vivos</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number danger">{fallecidos}</div>
+                        <div class="metric-label">Fallecidos</div>
+                    </div>
+                    <div class="main-metric mortality">
+                        <div class="metric-number warning">{letalidad:.1f}%</div>
+                        <div class="metric-label">Mortalidad</div>
+                    </div>
+                </div>
+                {ultimo_info}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
+def create_enhanced_epizootias_card_filtered(metrics, filters, colors):
+    """
+    NUEVA: Tarjeta de epizootias con información de filtrado aplicado.
+    """
+    total_epizootias = metrics["total_epizootias"]
+    positivas = metrics["epizootias_positivas"]
+    en_estudio = metrics["epizootias_en_estudio"]
+    ultima_epizootia = metrics["ultima_epizootia_positiva"]
+    
+    # Determinar contexto de filtrado
+    filter_context = get_filter_context_info(filters)
+    
+    # Información de la última epizootia positiva
+    if ultima_epizootia["existe"]:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
+                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
+                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
+            </div>
+        </div>
+        """
+    else:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <span class="no-data">Sin epizootias positivas{filter_context["suffix"].lower()}</span>
+            </div>
+        </div>
+        """
+    
+    st.markdown(
+        f"""
+        <div class="super-enhanced-card epizootias-card">
+            <div class="card-header">
+                <div class="card-icon">🐒</div>
+                <div class="card-title">EPIZOOTIAS</div>
+                <div class="card-subtitle">{filter_context["title"]}</div>
+            </div>
+            <div class="card-body">
+                <div class="main-metrics-grid">
+                    <div class="main-metric">
+                        <div class="metric-number warning">{total_epizootias}</div>
+                        <div class="metric-label">Total</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number danger">{positivas}</div>
+                        <div class="metric-label">Positivas</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number info">{en_estudio}</div>
+                        <div class="metric-label">En Estudio</div>
+                    </div>
+                </div>
+                {ultimo_info}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )  
+
+def get_filter_context_info(filters):
+    """
+    NUEVA: Obtiene información del contexto de filtrado para mostrar en tarjetas.
+    """
+    municipio = filters.get("municipio_display", "Todos")
+    vereda = filters.get("vereda_display", "Todas")
+    
+    if vereda != "Todas":
+        return {
+            "title": f"Vigilancia en {vereda}",
+            "suffix": f"en {vereda}"
+        }
+    elif municipio != "Todos":
+        return {
+            "title": f"Vigilancia en {municipio}",
+            "suffix": f"en {municipio}"
+        }
+    else:
+        return {
+            "title": "Vigilancia epidemiológica Tolima",
+            "suffix": "en Tolima"
+        }
 
 def create_enhanced_cases_card(metrics, colors):
     """
