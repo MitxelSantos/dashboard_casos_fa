@@ -535,60 +535,20 @@ def create_empty_data_structure():
 
 def create_filters_responsive_with_maps_enhanced(data):
     """
-    CORREGIDO: Sistema de filtros usando las funciones que SÍ existen.
+    CORREGIDO: Sistema de filtros que SÍ existe en components/filters.py
     """
+    # Importar el sistema de filtros mejorado que SÍ existe
     try:
-        # Intentar usar el sistema completo con mapas
         from components.filters import create_complete_filter_system_with_maps
-        logger.info("✅ Usando sistema completo de filtros con mapas")
-        
+
+        # Usar el sistema completo de filtros mejorado con sincronización
         filter_result = create_complete_filter_system_with_maps(data)
         return filter_result["filters"], filter_result["data_filtered"]
-        
-    except (ImportError, AttributeError, KeyError) as e:
-        logger.warning(f"⚠️ Sistema completo no disponible: {str(e)}")
-        
-        # Fallback: Usar sistema manual que SÍ funciona
-        try:
-            from components.filters import (
-                create_hierarchical_filters_enhanced,
-                create_content_filters_enhanced, 
-                create_advanced_filters_enhanced,
-                apply_all_filters_enhanced
-            )
-            
-            logger.info("✅ Usando sistema manual de filtros")
-            
-            # Crear filtros por partes
-            filters_location = create_hierarchical_filters_enhanced(data)
-            filters_content = create_content_filters_enhanced(data)
-            filters_advanced = create_advanced_filters_enhanced(data)
-            
-            # Aplicar filtros
-            data_filtered = apply_all_filters_enhanced(
-                data, filters_location, filters_content, filters_advanced
-            )
-            
-            # Combinar filtros
-            all_filters = {
-                **filters_location,
-                **filters_content, 
-                **filters_advanced,
-                "active_filters": []
-            }
-            
-            # Crear lista de filtros activos
-            if filters_location["municipio_display"] != "Todos":
-                all_filters["active_filters"].append(f"Municipio: {filters_location['municipio_display']}")
-            if filters_location["vereda_display"] != "Todas":
-                all_filters["active_filters"].append(f"Vereda: {filters_location['vereda_display']}")
-            
-            return all_filters, data_filtered
-            
-        except ImportError as e2:
-            logger.error(f"❌ Error con sistema manual: {str(e2)}")
-            # Último recurso: sistema básico
-            return create_basic_fallback_filters(data)
+
+    except ImportError as e:
+        logger.error(f"Error importando filtros mejorados: {str(e)}")
+        # Fallback al sistema básico si no está disponible
+        return create_basic_fallback_filters(data)
 
 def create_basic_fallback_filters(data):
     """Sistema de filtros básico como fallback."""

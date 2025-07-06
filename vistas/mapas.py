@@ -36,6 +36,10 @@ def show(data_filtered, filters, colors):
     """
     CORREGIDO: Vista completa de mapas con datos filtrados.
     """
+    st.write("**DEBUG MAPAS - Datos recibidos:**")
+    st.write("- Casos:", len(data_filtered["casos"]))
+    st.write("- Epizootias:", len(data_filtered["epizootias"]))
+    st.write("- Filtros:", filters.get("active_filters", []))
     
     # CSS para las nuevas tarjetas mejoradas
     apply_enhanced_cards_css(colors)
