@@ -1,8 +1,9 @@
 """
 Vista de mapas CORREGIDA del dashboard de Fiebre Amarilla.
 CORRECCIÓN PRINCIPAL:
-- Fix en determine_map_level() para cambiar correctamente al mapa municipal al hacer click
-- Limpieza de funciones obsoletas
+- Las tarjetas informativas GARANTIZAN uso de datos filtrados
+- Verificación y logging de flujo de datos filtrados
+- Eliminación de accesos a datos originales
 """
 
 import streamlit as st
@@ -25,7 +26,10 @@ except ImportError:
 from utils.data_processor import (
     calculate_basic_metrics,
     get_latest_case_info,
-    excel_date_to_datetime
+    excel_date_to_datetime,
+    verify_filtered_data_usage,
+    debug_data_flow,
+    ensure_filtered_data_usage
 )
 
 # Ruta de shapefiles procesados
@@ -34,12 +38,43 @@ PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
 
 def show(data_filtered, filters, colors):
     """
-    CORREGIDO: Vista completa de mapas con datos filtrados.
+    CORREGIDO: Vista completa de mapas que GARANTIZA uso de datos filtrados.
     """
-    st.write("**DEBUG MAPAS - Datos recibidos:**")
-    st.write("- Casos:", len(data_filtered["casos"]))
-    st.write("- Epizootias:", len(data_filtered["epizootias"]))
-    st.write("- Filtros:", filters.get("active_filters", []))
+    # **VERIFICACIÓN CRÍTICA INICIAL**
+    logger = logging.getLogger(__name__)
+    logger.info("🗺️ INICIANDO VISTA DE MAPAS")
+    
+    # Debug detallado del flujo de datos
+    debug_data_flow(
+        data_filtered,  # Como "originales" porque ya vienen filtrados
+        data_filtered,  # Como "filtrados" 
+        filters, 
+        "ENTRADA_VISTA_MAPAS"
+    )
+    
+    # Verificar que los datos están filtrados
+    casos_filtrados = data_filtered["casos"]
+    epizootias_filtradas = data_filtered["epizootias"]
+    
+    verify_filtered_data_usage(casos_filtrados, "vista_mapas - casos_filtrados")
+    verify_filtered_data_usage(epizootias_filtradas, "vista_mapas - epizootias_filtradas")
+    
+    # **DEBUG INFO PARA EL USUARIO**
+    with st.expander("🔧 Debug - Datos recibidos en vista mapas", expanded=False):
+        st.write(f"**Casos filtrados:** {len(casos_filtrados)}")
+        st.write(f"**Epizootias filtradas:** {len(epizootias_filtradas)}")
+        st.write(f"**Filtros activos:** {filters.get('active_filters', [])}")
+        
+        # Verificar filtro específico
+        municipio_filter = filters.get("municipio_display", "Todos")
+        vereda_filter = filters.get("vereda_display", "Todas")
+        st.write(f"**Filtro municipio:** {municipio_filter}")
+        st.write(f"**Filtro vereda:** {vereda_filter}")
+        
+        # Verificar si los datos realmente están filtrados
+        if municipio_filter != "Todos" and not casos_filtrados.empty:
+            municipios_en_datos = casos_filtrados["municipio"].unique() if "municipio" in casos_filtrados.columns else []
+            st.write(f"**Municipios en casos:** {list(municipios_en_datos)}")
     
     # CSS para las nuevas tarjetas mejoradas
     apply_enhanced_cards_css(colors)
@@ -60,15 +95,8 @@ def show(data_filtered, filters, colors):
         show_geographic_data_error()
         return
 
-    # **USAR DATOS FILTRADOS**
-    casos = data_filtered["casos"]
-    epizootias = data_filtered["epizootias"]
-    
-    # **LOG PARA VERIFICAR FILTRADO**
-    total_casos_filtrados = len(casos)
-    total_epi_filtradas = len(epizootias)
-    
-    logging.info(f"🗺️ Vista mapas - Datos filtrados: {total_casos_filtrados} casos, {total_epi_filtradas} epizootias")
+    # **LOG DE VERIFICACIÓN ADICIONAL**
+    logger.info(f"🗺️ Vista mapas - Datos filtrados verificados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
     
     # Mostrar información de filtrado si hay filtros activos
     active_filters = filters.get("active_filters", [])
@@ -79,11 +107,11 @@ def show(data_filtered, filters, colors):
     col_mapa, col_tarjetas = st.columns([3, 2])  # 60% mapa, 40% tarjetas
     
     with col_mapa:
-        create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered)
+        create_enhanced_map_system(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
     
     with col_tarjetas:
-        # **PASAR DATOS FILTRADOS A LAS TARJETAS**
-        create_beautiful_information_cards_FIXED(casos, epizootias, filters, colors)
+        # **CRÍTICO: PASAR DATOS FILTRADOS VERIFICADOS A LAS TARJETAS**
+        create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors)
 
 def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered):
     """
@@ -112,6 +140,233 @@ def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, dat
     elif current_level == "vereda":
         logging.info(f"📍 Creando vista de vereda {filters.get('vereda_display')} con datos filtrados")
         create_vereda_detail_view(casos, epizootias, filters, colors)
+
+def create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors):
+    """
+    NUEVA FUNCIÓN: Tarjetas informativas que GARANTIZAN uso de datos filtrados.
+    Esta función reemplaza completamente la anterior para eliminar cualquier ambigüedad.
+    """
+    logger = logging.getLogger(__name__)
+    logger.info("🏷️ INICIANDO TARJETAS INFORMATIVAS CON DATOS FILTRADOS GARANTIZADOS")
+    
+    # **VERIFICACIÓN DOBLE DE DATOS FILTRADOS**
+    casos_verificados, epizootias_verificadas = ensure_filtered_data_usage(
+        casos_filtrados, 
+        epizootias_filtradas, 
+        "tarjetas_informativas"
+    )
+    
+    # **CALCULAR MÉTRICAS DIRECTAMENTE CON DATOS VERIFICADOS**
+    logger.info(f"🧮 Calculando métricas con datos verificados: {len(casos_verificados)} casos, {len(epizootias_verificadas)} epizootias")
+    metrics = calculate_basic_metrics(casos_verificados, epizootias_verificadas)
+    
+    # **LOG DETALLADO DE MÉTRICAS CALCULADAS**
+    logger.info(f"📊 Métricas calculadas con datos filtrados:")
+    logger.info(f"   🦠 Total casos: {metrics['total_casos']}")
+    logger.info(f"   ⚰️ Fallecidos: {metrics['fallecidos']}")
+    logger.info(f"   🐒 Total epizootias: {metrics['total_epizootias']}")
+    logger.info(f"   🔴 Epizootias positivas: {metrics['epizootias_positivas']}")
+    
+    # **TARJETA DE CASOS CON DATOS FILTRADOS GARANTIZADOS**
+    create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **TARJETA DE EPIZOOTIAS CON DATOS FILTRADOS GARANTIZADOS**
+    create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **VERIFICACIÓN FINAL**
+    logger.info("✅ Tarjetas informativas completadas con datos filtrados verificados")
+
+def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
+    """
+    NUEVA: Tarjeta de casos que usa métricas de datos filtrados verificados.
+    """
+    logger = logging.getLogger(__name__)
+    
+    total_casos = metrics["total_casos"]
+    vivos = metrics["vivos"]
+    fallecidos = metrics["fallecidos"]
+    letalidad = metrics["letalidad"]
+    ultimo_caso = metrics["ultimo_caso"]
+    
+    # **LOG DE VERIFICACIÓN DE MÉTRICAS FILTRADAS**
+    logger.info(f"🏷️ Tarjeta casos - métricas filtradas: {total_casos} casos, {fallecidos} fallecidos")
+    
+    # Determinar contexto de filtrado
+    filter_context = get_filter_context_info(filters)
+    
+    # Información del último caso FILTRADO
+    if ultimo_caso["existe"]:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <strong>{ultimo_caso["ubicacion"]}</strong><br>
+                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
+                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
+            </div>
+        </div>
+        """
+    else:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <span class="no-data">Sin casos registrados{filter_context["suffix"].lower()}</span>
+            </div>
+        </div>
+        """
+    
+    # **INDICADOR CLARO DE QUE SON DATOS FILTRADOS**
+    filter_indicator = ""
+    if len(filters.get("active_filters", [])) > 0:
+        filter_indicator = f"""
+        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0; border-left: 3px solid #2196f3;">
+            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
+        </div>
+        """
+    
+    st.markdown(
+        f"""
+        <div class="super-enhanced-card cases-card">
+            <div class="card-header">
+                <div class="card-icon">🦠</div>
+                <div class="card-title">CASOS FIEBRE AMARILLA</div>
+                <div class="card-subtitle">{filter_context["title"]}</div>
+            </div>
+            <div class="card-body">
+                {filter_indicator}
+                <div class="main-metrics-grid">
+                    <div class="main-metric">
+                        <div class="metric-number primary">{total_casos}</div>
+                        <div class="metric-label">Total Casos</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number success">{vivos}</div>
+                        <div class="metric-label">Vivos</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number danger">{fallecidos}</div>
+                        <div class="metric-label">Fallecidos</div>
+                    </div>
+                    <div class="main-metric mortality">
+                        <div class="metric-number warning">{letalidad:.1f}%</div>
+                        <div class="metric-label">Mortalidad</div>
+                    </div>
+                </div>
+                {ultimo_info}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
+    """
+    NUEVA: Tarjeta de epizootias que usa métricas de datos filtrados verificados.
+    """
+    logger = logging.getLogger(__name__)
+    
+    total_epizootias = metrics["total_epizootias"]
+    positivas = metrics["epizootias_positivas"]
+    en_estudio = metrics["epizootias_en_estudio"]
+    ultima_epizootia = metrics["ultima_epizootia_positiva"]
+    
+    # **LOG DE VERIFICACIÓN DE MÉTRICAS FILTRADAS**
+    logger.info(f"🏷️ Tarjeta epizootias - métricas filtradas: {total_epizootias} epizootias, {positivas} positivas")
+    
+    # Determinar contexto de filtrado
+    filter_context = get_filter_context_info(filters)
+    
+    # Información de la última epizootia positiva FILTRADA
+    if ultima_epizootia["existe"]:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
+                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
+                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
+            </div>
+        </div>
+        """
+    else:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <span class="no-data">Sin epizootias positivas{filter_context["suffix"].lower()}</span>
+            </div>
+        </div>
+        """
+    
+    # **INDICADOR CLARO DE QUE SON DATOS FILTRADOS**
+    filter_indicator = ""
+    if len(filters.get("active_filters", [])) > 0:
+        filter_indicator = f"""
+        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00; border-left: 3px solid #ff9800;">
+            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
+        </div>
+        """
+    
+    st.markdown(
+        f"""
+        <div class="super-enhanced-card epizootias-card">
+            <div class="card-header">
+                <div class="card-icon">🐒</div>
+                <div class="card-title">EPIZOOTIAS</div>
+                <div class="card-subtitle">{filter_context["title"]}</div>
+            </div>
+            <div class="card-body">
+                {filter_indicator}
+                <div class="main-metrics-grid">
+                    <div class="main-metric">
+                        <div class="metric-number warning">{total_epizootias}</div>
+                        <div class="metric-label">Total</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number danger">{positivas}</div>
+                        <div class="metric-label">Positivas</div>
+                    </div>
+                    <div class="main-metric">
+                        <div class="metric-number info">{en_estudio}</div>
+                        <div class="metric-label">En Estudio</div>
+                    </div>
+                </div>
+                {ultimo_info}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def get_filter_context_info(filters):
+    """
+    Obtiene información del contexto de filtrado para mostrar en tarjetas.
+    """
+    municipio = filters.get("municipio_display", "Todos")
+    vereda = filters.get("vereda_display", "Todas")
+    
+    if vereda != "Todas":
+        return {
+            "title": f"Vigilancia en {vereda}",
+            "suffix": f"en {vereda}"
+        }
+    elif municipio != "Todos":
+        return {
+            "title": f"Vigilancia en {municipio}",
+            "suffix": f"en {municipio}"
+        }
+    else:
+        return {
+            "title": "Vigilancia epidemiológica Tolima",
+            "suffix": "en Tolima"
+        }
+
+# === RESTO DE FUNCIONES EXISTENTES (sin cambios) ===
 
 def determine_map_level(filters):
     """
@@ -232,7 +487,6 @@ def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
     
     # **LÓGICA MEJORADA**: Procesar clicks (incluyendo municipios grises)
     handle_enhanced_click_interactions(map_data, municipios_data)
-
 
 def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
     """
@@ -390,242 +644,6 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         logging.error(f"❌ Error renderizando mapa: {str(e)}")
         st.error("Error mostrando el mapa de veredas")
         show_municipal_tabular_view(casos, epizootias, filters, colors)
-        
-def log_data_filtering_info(data_original, data_filtered, filters):
-    """
-    NUEVA: Log detallado del filtrado para debugging.
-    """
-    casos_orig = len(data_original.get("casos", []))
-    epi_orig = len(data_original.get("epizootias", []))
-    
-    casos_filt = len(data_filtered.get("casos", []))
-    epi_filt = len(data_filtered.get("epizootias", []))
-    
-    active_filters = filters.get("active_filters", [])
-    
-    logging.info(f"📊 Filtrado aplicado:")
-    logging.info(f"   📍 Filtros: {len(active_filters)} activos")
-    logging.info(f"   🦠 Casos: {casos_orig} → {casos_filt} ({((casos_orig-casos_filt)/casos_orig*100):.1f}% filtrado)" if casos_orig > 0 else f"   🦠 Casos: 0 → 0")
-    logging.info(f"   🐒 Epizootias: {epi_orig} → {epi_filt} ({((epi_orig-epi_filt)/epi_orig*100):.1f}% filtrado)" if epi_orig > 0 else f"   🐒 Epizootias: 0 → 0")
-    
-    if active_filters:
-        for i, filtro in enumerate(active_filters[:3]):
-            logging.info(f"   🎯 {i+1}. {filtro}")
-
-def handle_vereda_click_safe(map_data, veredas_data, filters):
-    """
-    NUEVA: Manejo seguro de clicks en veredas (incluso grises).
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                # Encontrar la vereda más cercana
-                min_distance = float('inf')
-                vereda_clicked = None
-                vereda_data = None
-                
-                for idx, row in veredas_data.iterrows():
-                    try:
-                        centroid = row['geometry'].centroid
-                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                        
-                        if distance < min_distance:
-                            min_distance = distance
-                            vereda_clicked = row['vereda_nor']
-                            vereda_data = row
-                    except Exception as e:
-                        logging.warning(f"⚠️ Error calculando distancia para vereda: {str(e)}")
-                        continue
-                
-                if vereda_clicked and min_distance < 0.05:
-                    # **FILTRAR POR VEREDA (incluso si es gris)**
-                    st.session_state['vereda_filter'] = vereda_clicked
-                    
-                    # **MENSAJE CON INFORMACIÓN APROPIADA**
-                    casos_count = vereda_data['casos'] if vereda_data is not None else 0
-                    epi_count = vereda_data['epizootias'] if vereda_data is not None else 0
-                    
-                    if casos_count > 0 or epi_count > 0:
-                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
-                    else:
-                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
-                        st.caption("💡 Esta vereda existe en el territorio pero no tiene eventos de vigilancia registrados")
-                    
-                    # **ACTUALIZAR SIN CAUSAR BUCLE**
-                    st.rerun()
-                    
-    except Exception as e:
-        logging.error(f"❌ Error procesando clic en vereda: {str(e)}")
-        st.warning("⚠️ Error procesando clic en el mapa. Intente usar los filtros del sidebar.")
-
-def handle_enhanced_click_interactions(map_data, municipios_data):
-    """
-    SIMPLIFICADO: Maneja clicks usando nombres directos de shapefiles.
-    ELIMINADA toda la lógica de normalización.
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                # Encontrar el municipio más cercano al punto clicado
-                min_distance = float('inf')
-                municipio_clicked = None
-                
-                for idx, row in municipios_data.iterrows():
-                    # Calcular el centroide del municipio
-                    centroid = row['geometry'].centroid
-                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                    
-                    if distance < min_distance:
-                        min_distance = distance
-                        # Usar el nombre del shapefile directamente
-                        municipio_clicked = row['municipi_1']  # Nombre directo del shapefile
-                        
-                if municipio_clicked and min_distance < 0.1:
-                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
-                    st.session_state['municipio_filter'] = municipio_clicked
-                    
-                    # Resetear vereda cuando se cambia municipio
-                    st.session_state['vereda_filter'] = 'Todas'
-                    
-                    # **MENSAJE MEJORADO** 
-                    row_data = municipios_data[municipios_data['municipi_1'] == municipio_clicked].iloc[0]
-                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
-                    
-                    if tiene_datos:
-                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
-                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
-                    else:
-                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
-                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
-                    
-                    # **ACTUALIZAR INMEDIATAMENTE**
-                    st.rerun()
-                    
-    except Exception as e:
-        st.warning(f"Error procesando clic en mapa: {str(e)}")
-
-def handle_vereda_click_enhanced(map_data, veredas_data, filters):
-    """
-    SIMPLIFICADO: Maneja clicks en veredas usando nombres directos.
-    ELIMINADA toda la lógica de normalización.
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                # Encontrar la vereda más cercana
-                min_distance = float('inf')
-                vereda_clicked = None
-                vereda_data = None
-                
-                for idx, row in veredas_data.iterrows():
-                    centroid = row['geometry'].centroid
-                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                    
-                    if distance < min_distance:
-                        min_distance = distance
-                        # Usar el nombre del shapefile directamente
-                        vereda_clicked = row['vereda_nor']  # Nombre directo del shapefile
-                        vereda_data = row
-                
-                if vereda_clicked and min_distance < 0.05:
-                    # **FILTRAR POR VEREDA**
-                    st.session_state['vereda_filter'] = vereda_clicked
-                    
-                    # **MENSAJE CON INFORMACIÓN**
-                    casos_count = vereda_data['casos']
-                    epi_count = vereda_data['epizootias']
-                    
-                    if casos_count > 0 or epi_count > 0:
-                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
-                    else:
-                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
-                    
-                    # **ACTUALIZAR**
-                    st.rerun()
-                    
-    except Exception as e:
-        st.warning(f"Error procesando clic en vereda: {str(e)}")
-        
-def create_navigation_controls(current_level, filters, colors):
-    """Controles de navegación simplificados."""
-    level_info = {
-        "departamento": "🏛️ Vista Departamental - Tolima",
-        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
-        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
-    }
-    
-    current_info = level_info[current_level]
-    
-    # Botones de navegación
-    cols = st.columns([1, 1])
-    
-    with cols[0]:
-        if current_level != "departamento":
-            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced", use_container_width=True):
-                reset_all_location_filters()
-                st.rerun()
-    
-    with cols[1]:
-        if current_level == "vereda":
-            municipio_name = filters.get('municipio_display', 'Municipio')
-            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced", use_container_width=True):
-                reset_vereda_filter_only()
-                st.rerun()
-
-
-def show_filter_indicator(filters, colors):
-    """Indicador de filtrado activo simplificado."""
-    active_filters = filters.get("active_filters", [])
-    
-    if active_filters:
-        filters_text = " • ".join(active_filters[:2])  # Máximo 2 filtros
-        
-        if len(active_filters) > 2:
-            filters_text += f" • +{len(active_filters) - 2} más"
-        
-        st.markdown(
-            f"""
-            <div style="
-                background: linear-gradient(45deg, {colors['info']}, {colors['warning']});
-                color: white;
-                padding: 8px 15px;
-                border-radius: 20px;
-                margin-bottom: 10px;
-                text-align: center;
-                font-size: 0.85rem;
-                font-weight: 600;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            ">
-                🎯 FILTROS: {filters_text}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
 
 def create_vereda_detail_view(casos, epizootias, filters, colors):
     """
@@ -723,7 +741,7 @@ def create_vereda_detail_view(casos, epizootias, filters, colors):
         st.markdown("### 📊 Análisis Específico de la Vereda")
         
         # Crear dos columnas para casos y epizootias
-        col_casos, col_epi = st.columns(2)
+        col_casos, col_epi = st.columns([1, 1])
         
         with col_casos:
             st.markdown("#### 🦠 Casos en esta Vereda")
@@ -840,509 +858,7 @@ def create_vereda_detail_view(casos, epizootias, filters, colors):
         - Use los botones de navegación para volver a la vista municipal o departamental
         """)
 
-def create_beautiful_information_cards_FIXED(casos_filtrados, epizootias_filtradas, filters, colors):
-    """
-    CORREGIDO: Tarjetas que GARANTIZAN uso de datos filtrados.
-    Reemplazar la función original por esta versión.
-    """
-    # IMPORTACIÓN CORREGIDA - solo importar funciones que existen
-    from utils.data_processor import calculate_basic_metrics, verify_filtered_data_usage, debug_data_flow
-    
-    # VERIFICACIÓN: Asegurar que se usan datos filtrados
-    verify_filtered_data_usage(casos_filtrados, "create_beautiful_information_cards - casos")
-    verify_filtered_data_usage(epizootias_filtradas, "create_beautiful_information_cards - epizootias")
-    
-    # DEBUG: Verificar el flujo de datos
-    debug_data_flow(
-        {"casos": casos_filtrados, "epizootias": epizootias_filtradas}, 
-        {"casos": casos_filtrados, "epizootias": epizootias_filtradas},
-        filters, 
-        "tarjetas_informativas"
-    )
-    
-    # CALCULAR MÉTRICAS CON DATOS FILTRADOS GARANTIZADOS
-    metrics = calculate_basic_metrics(casos_filtrados, epizootias_filtradas)
-    
-    # Log para debugging del problema reportado
-    logging.info(f"🏷️ Tarjetas informativas: {metrics['total_casos']} casos, {metrics['total_epizootias']} epizootias de datos filtrados")
-    
-    # **TARJETA DE CASOS MEJORADA** con datos filtrados
-    create_enhanced_cases_card_filtered_FIXED(metrics, filters, colors)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # **TARJETA DE EPIZOOTIAS MEJORADA** con datos filtrados
-    create_enhanced_epizootias_card_filtered_FIXED(metrics, filters, colors)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-def create_enhanced_cases_card_filtered_FIXED(metrics, filters, colors):
-    """
-    CORREGIDO: Tarjeta de casos que especifica claramente el uso de datos filtrados.
-    """
-    total_casos = metrics["total_casos"]
-    vivos = metrics["vivos"]
-    fallecidos = metrics["fallecidos"]
-    letalidad = metrics["letalidad"]
-    ultimo_caso = metrics["ultimo_caso"]
-    
-    # Determinar contexto de filtrado
-    filter_context = get_filter_context_info_FIXED(filters)
-    
-    # Información del último caso
-    if ultimo_caso["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <strong>{ultimo_caso["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
-            </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin casos registrados{filter_context["suffix"].lower()}</span>
-            </div>
-        </div>
-        """
-    
-    # INDICADOR CLARO DE FILTRADO
-    filter_indicator = ""
-    if len(filters.get("active_filters", [])) > 0:
-        filter_indicator = f"""
-        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0;">
-            🎯 <strong>Datos filtrados:</strong> {filter_context["title"]}
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card cases-card">
-            <div class="card-header">
-                <div class="card-icon">🦠</div>
-                <div class="card-title">CASOS FIEBRE AMARILLA</div>
-                <div class="card-subtitle">{filter_context["title"]}</div>
-            </div>
-            <div class="card-body">
-                {filter_indicator}
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number primary">{total_casos}</div>
-                        <div class="metric-label">Total Casos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number success">{vivos}</div>
-                        <div class="metric-label">Vivos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{fallecidos}</div>
-                        <div class="metric-label">Fallecidos</div>
-                    </div>
-                    <div class="main-metric mortality">
-                        <div class="metric-number warning">{letalidad:.1f}%</div>
-                        <div class="metric-label">Mortalidad</div>
-                    </div>
-                </div>
-                {ultimo_info}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def create_enhanced_epizootias_card_filtered_FIXED(metrics, filters, colors):
-    """
-    CORREGIDO: Tarjeta de epizootias que especifica claramente el uso de datos filtrados.
-    """
-    total_epizootias = metrics["total_epizootias"]
-    positivas = metrics["epizootias_positivas"]
-    en_estudio = metrics["epizootias_en_estudio"]
-    ultima_epizootia = metrics["ultima_epizootia_positiva"]
-    
-    # Determinar contexto de filtrado
-    filter_context = get_filter_context_info_FIXED(filters)
-    
-    # Información de la última epizootia positiva
-    if ultima_epizootia["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
-            </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin epizootias positivas{filter_context["suffix"].lower()}</span>
-            </div>
-        </div>
-        """
-    
-    # INDICADOR CLARO DE FILTRADO
-    filter_indicator = ""
-    if len(filters.get("active_filters", [])) > 0:
-        filter_indicator = f"""
-        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00;">
-            🎯 <strong>Datos filtrados:</strong> {filter_context["title"]}
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card epizootias-card">
-            <div class="card-header">
-                <div class="card-icon">🐒</div>
-                <div class="card-title">EPIZOOTIAS</div>
-                <div class="card-subtitle">{filter_context["title"]}</div>
-            </div>
-            <div class="card-body">
-                {filter_indicator}
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number warning">{total_epizootias}</div>
-                        <div class="metric-label">Total</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{positivas}</div>
-                        <div class="metric-label">Positivas</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number info">{en_estudio}</div>
-                        <div class="metric-label">En Estudio</div>
-                    </div>
-                </div>
-                {ultimo_info}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def get_filter_context_info_FIXED(filters):
-    """
-    CORREGIDO: Obtiene información del contexto de filtrado para mostrar en tarjetas.
-    """
-    municipio = filters.get("municipio_display", "Todos")
-    vereda = filters.get("vereda_display", "Todas")
-    
-    if vereda != "Todas":
-        return {
-            "title": f"Vigilancia en {vereda}",
-            "suffix": f"en {vereda}"
-        }
-    elif municipio != "Todos":
-        return {
-            "title": f"Vigilancia en {municipio}",
-            "suffix": f"en {municipio}"
-        }
-    else:
-        return {
-            "title": "Vigilancia epidemiológica Tolima",
-            "suffix": "en Tolima"
-        }
-
-def create_enhanced_cases_card(metrics, colors):
-    """
-    NUEVA: Tarjeta súper mejorada para casos con toda la información solicitada.
-    """
-    total_casos = metrics["total_casos"]
-    vivos = metrics["vivos"]
-    fallecidos = metrics["fallecidos"]
-    letalidad = metrics["letalidad"]
-    ultimo_caso = metrics["ultimo_caso"]
-    
-    # Información del último caso
-    if ultimo_caso["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso</div>
-            <div class="last-event-details">
-                <strong>{ultimo_caso["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
-            </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin casos registrados</span>
-            </div>
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card cases-card">
-            <div class="card-header">
-                <div class="card-icon">🦠</div>
-                <div class="card-title">CASOS FIEBRE AMARILLA</div>
-                <div class="card-subtitle">Vigilancia epidemiológica</div>
-            </div>
-            <div class="card-body">
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number primary">{total_casos}</div>
-                        <div class="metric-label">Total Casos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number success">{vivos}</div>
-                        <div class="metric-label">Vivos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{fallecidos}</div>
-                        <div class="metric-label">Fallecidos</div>
-                    </div>
-                    <div class="main-metric mortality">
-                        <div class="metric-number warning">{letalidad:.1f}%</div>
-                        <div class="metric-label">Mortalidad</div>
-                    </div>
-                </div>
-                {ultimo_info}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def apply_enhanced_cards_css(colors):
-    """
-    CSS súper mejorado para tarjetas hermosas y funcionales.
-    """
-    st.markdown(
-        f"""
-        <style>
-        /* Título principal sin espaciado excesivo */
-        .maps-title {{
-            color: {colors['primary']};
-            font-size: clamp(1.8rem, 5vw, 2.2rem);
-            font-weight: 700;
-            text-align: center;
-            margin: 0.5rem 0 1rem 0;
-            padding: 1rem;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 6px solid {colors['secondary']};
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-        }}
-        
-        /* Tarjetas súper mejoradas */
-        .super-enhanced-card {{
-            background: linear-gradient(135deg, white 0%, #fafafa 100%);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            overflow: hidden;
-            margin-bottom: 1.5rem;
-            border: 1px solid #e1e5e9;
-            transition: all 0.4s ease;
-            position: relative;
-        }}
-        
-        .super-enhanced-card:hover {{
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-            transform: translateY(-3px);
-        }}
-        
-        .super-enhanced-card::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, {colors['primary']}, {colors['secondary']}, {colors['accent']});
-        }}
-        
-        /* Headers específicos por tipo de tarjeta */
-        .cases-card .card-header {{
-            background: linear-gradient(135deg, {colors['danger']}, #e74c3c);
-            color: white;
-            padding: 20px;
-        }}
-        
-        .epizootias-card .card-header {{
-            background: linear-gradient(135deg, {colors['warning']}, #f39c12);
-            color: white;
-            padding: 20px;
-        }}
-        
-        .location-card .card-header {{
-            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
-            color: white;
-            padding: 20px;
-        }}
-        
-        .card-header {{
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            position: relative;
-        }}
-        
-        .card-icon {{
-            font-size: 2.2rem;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-        }}
-        
-        .card-title {{
-            font-size: 1.3rem;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            margin: 0;
-        }}
-        
-        .card-subtitle {{
-            font-size: 0.9rem;
-            opacity: 0.9;
-            font-weight: 500;
-            margin: 2px 0 0 0;
-        }}
-        
-        /* Cuerpo de tarjetas */
-        .card-body {{
-            padding: 25px;
-        }}
-        
-        .main-metrics-grid {{
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
-        }}
-        
-        .main-metric {{
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }}
-        
-        .main-metric:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        }}
-        
-        .main-metric.mortality {{
-            border-color: {colors['warning']};
-            background: linear-gradient(135deg, #fff8e1, #ffecb3);
-        }}
-        
-        .main-metric.laboratory {{
-            border-color: {colors['info']};
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-        }}
-        
-        .metric-number {{
-            font-size: 1.8rem;
-            font-weight: 800;
-            margin-bottom: 5px;
-            line-height: 1;
-        }}
-        
-        .metric-number.primary {{ color: {colors['primary']}; }}
-        .metric-number.success {{ color: {colors['success']}; }}
-        .metric-number.danger {{ color: {colors['danger']}; }}
-        .metric-number.warning {{ color: {colors['warning']}; }}
-        .metric-number.info {{ color: {colors['info']}; }}
-        
-        .metric-label {{
-            font-size: 0.8rem;
-            color: #666;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }}
-        
-        /* Información del último evento */
-        .last-event-info {{
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
-            border-radius: 12px;
-            padding: 15px;
-            border-left: 4px solid {colors['info']};
-            margin-top: 15px;
-        }}
-        
-        .last-event-title {{
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: {colors['primary']};
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }}
-        
-        .last-event-details {{
-            font-size: 0.9rem;
-            line-height: 1.4;
-        }}
-        
-        .last-event-date {{
-            color: {colors['info']};
-            font-weight: 600;
-        }}
-        
-        .last-event-time {{
-            color: {colors['accent']};
-            font-weight: 500;
-            font-style: italic;
-        }}
-        
-        .no-data {{
-            color: #999;
-            font-style: italic;
-        }}
-        
-        /* Responsive design */
-        @media (max-width: 768px) {{
-            .main-metrics-grid {{
-                grid-template-columns: 1fr;
-                gap: 10px;
-            }}
-            
-            .card-header {{
-                padding: 15px;
-            }}
-            
-            .card-body {{
-                padding: 20px;
-            }}
-            
-            .card-icon {{
-                font-size: 1.8rem;
-            }}
-            
-            .card-title {{
-                font-size: 1.1rem;
-            }}
-            
-            .metric-number {{
-                font-size: 1.5rem;
-            }}
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-# === FUNCIONES DE APOYO ===
+# === FUNCIONES DE APOYO (resto del código sin cambios) ===
 
 def prepare_municipal_data_enhanced(casos, epizootias, municipios):
     """
@@ -1603,3 +1119,393 @@ def show_shapefiles_setup_instructions():
 def show_geographic_data_error():
     """Muestra mensaje de error al cargar datos geográficos."""
     st.error("❌ Error al cargar datos geográficos")
+
+
+def create_navigation_controls(current_level, filters, colors):
+    """Controles de navegación simplificados."""
+    level_info = {
+        "departamento": "🏛️ Vista Departamental - Tolima",
+        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
+        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
+    }
+    
+    current_info = level_info[current_level]
+    
+    # Botones de navegación
+    cols = st.columns([1, 1])
+    
+    with cols[0]:
+        if current_level != "departamento":
+            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced", use_container_width=True):
+                reset_all_location_filters()
+                st.rerun()
+    
+    with cols[1]:
+        if current_level == "vereda":
+            municipio_name = filters.get('municipio_display', 'Municipio')
+            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced", use_container_width=True):
+                reset_vereda_filter_only()
+                st.rerun()
+
+
+def show_filter_indicator(filters, colors):
+    """Indicador de filtrado activo simplificado."""
+    active_filters = filters.get("active_filters", [])
+    
+    if active_filters:
+        filters_text = " • ".join(active_filters[:2])  # Máximo 2 filtros
+        
+        if len(active_filters) > 2:
+            filters_text += f" • +{len(active_filters) - 2} más"
+        
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(45deg, {colors['info']}, {colors['warning']});
+                color: white;
+                padding: 8px 15px;
+                border-radius: 20px;
+                margin-bottom: 10px;
+                text-align: center;
+                font-size: 0.85rem;
+                font-weight: 600;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            ">
+                🎯 FILTROS: {filters_text}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+
+def handle_enhanced_click_interactions(map_data, municipios_data):
+    """
+    SIMPLIFICADO: Maneja clicks usando nombres directos de shapefiles.
+    ELIMINADA toda la lógica de normalización.
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar el municipio más cercano al punto clicado
+                min_distance = float('inf')
+                municipio_clicked = None
+                
+                for idx, row in municipios_data.iterrows():
+                    # Calcular el centroide del municipio
+                    centroid = row['geometry'].centroid
+                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                    
+                    if distance < min_distance:
+                        min_distance = distance
+                        # Usar el nombre del shapefile directamente
+                        municipio_clicked = row['municipi_1']  # Nombre directo del shapefile
+                        
+                if municipio_clicked and min_distance < 0.1:
+                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
+                    st.session_state['municipio_filter'] = municipio_clicked
+                    
+                    # Resetear vereda cuando se cambia municipio
+                    st.session_state['vereda_filter'] = 'Todas'
+                    
+                    # **MENSAJE MEJORADO** 
+                    row_data = municipios_data[municipios_data['municipi_1'] == municipio_clicked].iloc[0]
+                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
+                    
+                    if tiene_datos:
+                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
+                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
+                    else:
+                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
+                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
+                    
+                    # **ACTUALIZAR INMEDIATAMENTE**
+                    st.rerun()
+                    
+    except Exception as e:
+        st.warning(f"Error procesando clic en mapa: {str(e)}")
+
+def handle_vereda_click_safe(map_data, veredas_data, filters):
+    """
+    NUEVA: Manejo seguro de clicks en veredas (incluso grises).
+    """
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar la vereda más cercana
+                min_distance = float('inf')
+                vereda_clicked = None
+                vereda_data = None
+                
+                for idx, row in veredas_data.iterrows():
+                    try:
+                        centroid = row['geometry'].centroid
+                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            vereda_clicked = row['vereda_nor']
+                            vereda_data = row
+                    except Exception as e:
+                        logging.warning(f"⚠️ Error calculando distancia para vereda: {str(e)}")
+                        continue
+                
+                if vereda_clicked and min_distance < 0.05:
+                    # **FILTRAR POR VEREDA (incluso si es gris)**
+                    st.session_state['vereda_filter'] = vereda_clicked
+                    
+                    # **MENSAJE CON INFORMACIÓN APROPIADA**
+                    casos_count = vereda_data['casos'] if vereda_data is not None else 0
+                    epi_count = vereda_data['epizootias'] if vereda_data is not None else 0
+                    
+                    if casos_count > 0 or epi_count > 0:
+                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
+                    else:
+                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
+                        st.caption("💡 Esta vereda existe en el territorio pero no tiene eventos de vigilancia registrados")
+                    
+                    # **ACTUALIZAR SIN CAUSAR BUCLE**
+                    st.rerun()
+                    
+    except Exception as e:
+        logging.error(f"❌ Error procesando clic en vereda: {str(e)}")
+        st.warning("⚠️ Error procesando clic en el mapa. Intente usar los filtros del sidebar.")
+
+
+def apply_enhanced_cards_css(colors):
+    """
+    CSS súper mejorado para tarjetas hermosas y funcionales.
+    """
+    st.markdown(
+        f"""
+        <style>
+        /* Título principal sin espaciado excesivo */
+        .maps-title {{
+            color: {colors['primary']};
+            font-size: clamp(1.8rem, 5vw, 2.2rem);
+            font-weight: 700;
+            text-align: center;
+            margin: 0.5rem 0 1rem 0;
+            padding: 1rem;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-left: 6px solid {colors['secondary']};
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }}
+        
+        /* Tarjetas súper mejoradas */
+        .super-enhanced-card {{
+            background: linear-gradient(135deg, white 0%, #fafafa 100%);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin-bottom: 1.5rem;
+            border: 1px solid #e1e5e9;
+            transition: all 0.4s ease;
+            position: relative;
+        }}
+        
+        .super-enhanced-card:hover {{
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+            transform: translateY(-3px);
+        }}
+        
+        .super-enhanced-card::before {{
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, {colors['primary']}, {colors['secondary']}, {colors['accent']});
+        }}
+        
+        /* Headers específicos por tipo de tarjeta */
+        .cases-card .card-header {{
+            background: linear-gradient(135deg, {colors['danger']}, #e74c3c);
+            color: white;
+            padding: 20px;
+        }}
+        
+        .epizootias-card .card-header {{
+            background: linear-gradient(135deg, {colors['warning']}, #f39c12);
+            color: white;
+            padding: 20px;
+        }}
+        
+        .location-card .card-header {{
+            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
+            color: white;
+            padding: 20px;
+        }}
+        
+        .card-header {{
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            position: relative;
+        }}
+        
+        .card-icon {{
+            font-size: 2.2rem;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+        }}
+        
+        .card-title {{
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            margin: 0;
+        }}
+        
+        .card-subtitle {{
+            font-size: 0.9rem;
+            opacity: 0.9;
+            font-weight: 500;
+            margin: 2px 0 0 0;
+        }}
+        
+        /* Cuerpo de tarjetas */
+        .card-body {{
+            padding: 25px;
+        }}
+        
+        .main-metrics-grid {{
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }}
+        
+        .main-metric {{
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }}
+        
+        .main-metric:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }}
+        
+        .main-metric.mortality {{
+            border-color: {colors['warning']};
+            background: linear-gradient(135deg, #fff8e1, #ffecb3);
+        }}
+        
+        .main-metric.laboratory {{
+            border-color: {colors['info']};
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+        }}
+        
+        .metric-number {{
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 5px;
+            line-height: 1;
+        }}
+        
+        .metric-number.primary {{ color: {colors['primary']}; }}
+        .metric-number.success {{ color: {colors['success']}; }}
+        .metric-number.danger {{ color: {colors['danger']}; }}
+        .metric-number.warning {{ color: {colors['warning']}; }}
+        .metric-number.info {{ color: {colors['info']}; }}
+        
+        .metric-label {{
+            font-size: 0.8rem;
+            color: #666;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }}
+        
+        /* Información del último evento */
+        .last-event-info {{
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+            border-radius: 12px;
+            padding: 15px;
+            border-left: 4px solid {colors['info']};
+            margin-top: 15px;
+        }}
+        
+        .last-event-title {{
+            font-size: 0.9rem;
+            font-weight: 700;
+            color: {colors['primary']};
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }}
+        
+        .last-event-details {{
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }}
+        
+        .last-event-date {{
+            color: {colors['info']};
+            font-weight: 600;
+        }}
+        
+        .last-event-time {{
+            color: {colors['accent']};
+            font-weight: 500;
+            font-style: italic;
+        }}
+        
+        .no-data {{
+            color: #999;
+            font-style: italic;
+        }}
+        
+        /* Responsive design */
+        @media (max-width: 768px) {{
+            .main-metrics-grid {{
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }}
+            
+            .card-header {{
+                padding: 15px;
+            }}
+            
+            .card-body {{
+                padding: 20px;
+            }}
+            
+            .card-icon {{
+                font-size: 1.8rem;
+            }}
+            
+            .card-title {{
+                font-size: 1.1rem;
+            }}
+            
+            .metric-number {{
+                font-size: 1.5rem;
+            }}
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
