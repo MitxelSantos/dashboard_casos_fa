@@ -6,6 +6,10 @@ Soporte para doble clic en mapas → actualización automática de filtros
 
 import streamlit as st
 import pandas as pd
+import logging
+
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 
 def create_responsive_filters_ui():
@@ -230,6 +234,7 @@ def show_map_sync_indicator():
         # Auto-limpiar después de mostrar
         clear_map_interaction_flag()
 
+
 def create_hierarchical_filters_enhanced(data):
     """
     CORREGIDO: Filtros jerárquicos con normalización consistente.
@@ -247,7 +252,7 @@ def create_hierarchical_filters_enhanced(data):
         return str(name).upper().strip()
     
     # FILTRO DE MUNICIPIO MEJORADO
-    municipio_options = ["Todos"] + list(data["municipios_normalizados"])
+    municipio_options = ["Todos"] + data["municipios_normalizados"]
 
     # Detectar valor inicial
     initial_municipio_index = 0
@@ -277,33 +282,33 @@ def create_hierarchical_filters_enhanced(data):
         municipio_norm = normalize_name(municipio_selected)
         
         # Buscar en datos de casos
-        veredas_casos = set()
-        if not data["casos"].empty and "municipio" in data["casos"].columns and "vereda" in data["casos"].columns:
+        veredas = set()
+        if not data["casos"].empty and "vereda" in data["casos"].columns and "municipio" in data["casos"].columns:
             casos_municipio = data["casos"][
                 data["casos"]["municipio"].apply(normalize_name) == municipio_norm
             ]
             if not casos_municipio.empty:
-                veredas_casos = set(casos_municipio["vereda"].dropna().unique())
+                veredas.update(casos_municipio["vereda"].dropna().unique())
         
         # Buscar en datos de epizootias
-        veredas_epizootias = set()
-        if not data["epizootias"].empty and "municipio" in data["epizootias"].columns and "vereda" in data["epizootias"].columns:
+        if not data["epizootias"].empty and "vereda" in data["epizootias"].columns and "municipio" in data["epizootias"].columns:
             epi_municipio = data["epizootias"][
                 data["epizootias"]["municipio"].apply(normalize_name) == municipio_norm
             ]
             if not epi_municipio.empty:
-                veredas_epizootias = set(epi_municipio["vereda"].dropna().unique())
+                veredas.update(epi_municipio["vereda"].dropna().unique())
         
-        # Combinar veredas de ambas fuentes
-        todas_veredas = veredas_casos.union(veredas_epizootias)
+        # NUEVO: Agregar veredas del shapefile (incluso si no tienen datos)
+        if municipio_norm in data.get("veredas_por_municipio", {}):
+            veredas_shapefile = data["veredas_por_municipio"][municipio_norm]
+            veredas.update(veredas_shapefile)
         
         # Filtrar veredas vacías y ordenar
-        veredas_validas = [v for v in todas_veredas if v and str(v).strip()]
-        vereda_options.extend(sorted(veredas_validas))
+        veredas_filtradas = [v for v in veredas if v and str(v).strip()]
+        vereda_options.extend(sorted(veredas_filtradas))
         
         # Debug log
-        logger.info(f"🏘️ Municipio {municipio_selected}: {len(veredas_validas)} veredas encontradas")
-        logger.debug(f"   Veredas: {veredas_validas[:5]}...")  # Mostrar primeras 5
+        logger.info(f"🏘️ Municipio {municipio_selected}: {len(veredas_filtradas)} veredas encontradas")
 
     # Detectar valor inicial de vereda
     initial_vereda_index = 0
@@ -395,182 +400,6 @@ def create_hierarchical_filters_enhanced(data):
         "vereda_normalizada": vereda_selected,
     }
 
-def apply_all_filters_enhanced(data, filters_location, filters_content, filters_advanced):
-    """
-    CORREGIDO: Aplica filtros usando normalización consistente.
-    """
-    def normalize_name(name):
-        """Normaliza nombres para comparación consistente."""
-        if pd.isna(name) or name == "":
-            return ""
-        return str(name).upper().strip()
-    
-    casos_filtrados = data["casos"].copy()
-    epizootias_filtradas = data["epizootias"].copy()
-
-    # Contador de registros para logging
-    initial_casos = len(casos_filtrados)
-    initial_epizootias = len(epizootias_filtradas)
-
-    # PASO 1: Aplicar filtros de ubicación con normalización
-    if filters_location["municipio_display"] != "Todos":
-        municipio_selected = filters_location["municipio_display"]
-        municipio_norm = normalize_name(municipio_selected)
-
-        if "municipio" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["municipio"].apply(normalize_name) == municipio_norm
-            ]
-            casos_despues = len(casos_filtrados)
-            logger.info(f"🔍 Filtro municipio casos: {casos_antes} → {casos_despues}")
-
-        if "municipio" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["municipio"].apply(normalize_name) == municipio_norm
-            ]
-            epi_despues = len(epizootias_filtradas)
-            logger.info(f"🔍 Filtro municipio epizootias: {epi_antes} → {epi_despues}")
-
-    if filters_location["vereda_display"] != "Todas":
-        vereda_selected = filters_location["vereda_display"]
-        vereda_norm = normalize_name(vereda_selected)
-
-        if "vereda" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["vereda"].apply(normalize_name) == vereda_norm
-            ]
-            casos_despues = len(casos_filtrados)
-            logger.info(f"🔍 Filtro vereda casos: {casos_antes} → {casos_despues}")
-
-        if "vereda" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["vereda"].apply(normalize_name) == vereda_norm
-            ]
-            epi_despues = len(epizootias_filtradas)
-            logger.info(f"🔍 Filtro vereda epizootias: {epi_antes} → {epi_despues}")
-
-    # PASO 2: Aplicar filtros temporales (sin cambios)
-    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        fecha_inicio = pd.Timestamp(fecha_inicio)
-        fecha_fin = pd.Timestamp(fecha_fin) + pd.Timedelta(hours=23, minutes=59, seconds=59)
-
-        # Filtrar casos por fecha de inicio de síntomas
-        if "fecha_inicio_sintomas" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
-                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                logger.info(f"🔍 Filtro fecha casos: {casos_antes} → {casos_despues}")
-
-        # Filtrar epizootias por fecha de recolección
-        if "fecha_recoleccion" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
-                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                logger.info(f"🔍 Filtro fecha epizootias: {epi_antes} → {epi_despues}")
-
-    # PASO 3: Aplicar filtros avanzados para casos (sin cambios en lógica)
-    if filters_advanced["condicion_final"] != "Todas":
-        if "condicion_final" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["condicion_final"] == filters_advanced["condicion_final"]
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                logger.info(f"🔍 Filtro condición: {casos_antes} → {casos_despues}")
-
-    if filters_advanced["sexo"] != "Todos":
-        if "sexo" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["sexo"] == filters_advanced["sexo"]
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                logger.info(f"🔍 Filtro sexo: {casos_antes} → {casos_despues}")
-
-    if filters_advanced["edad_rango"]:
-        edad_min, edad_max = filters_advanced["edad_rango"]
-        if "edad" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["edad"] >= edad_min)
-                & (casos_filtrados["edad"] <= edad_max)
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                logger.info(f"🔍 Filtro edad: {casos_antes} → {casos_despues}")
-
-    # PASO 4: Aplicar filtros avanzados para epizootias
-    if filters_advanced["fuente_epizootia"] != "Todas":
-        if "proveniente" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["proveniente"] == filters_advanced["fuente_epizootia"]
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                logger.info(f"🔍 Filtro fuente epizootias: {epi_antes} → {epi_despues}")
-
-    # LOGGING: Almacenar estadísticas de filtrado
-    final_casos = len(casos_filtrados)
-    final_epizootias = len(epizootias_filtradas)
-    
-    # Log resumen final
-    logger.info(f"📊 Filtrado final - Casos: {initial_casos} → {final_casos}, Epizootias: {initial_epizootias} → {final_epizootias}")
-    
-    st.session_state["filter_stats"] = {
-        "initial_casos": initial_casos,
-        "final_casos": final_casos,
-        "casos_filtered_out": initial_casos - final_casos,
-        "initial_epizootias": initial_epizootias,
-        "final_epizootias": final_epizootias,
-        "epizootias_filtered_out": initial_epizootias - final_epizootias,
-    }
-
-    # Retornar datos filtrados con metadatos preservados
-    return {
-        "casos": casos_filtrados,
-        "epizootias": epizootias_filtradas,
-        **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
-    }
-
-def update_filters_from_map(municipio=None, vereda=None):
-    """
-    SIMPLIFICADO: Actualiza filtros desde interacciones del mapa usando nombres directos.
-    """
-    updated = False
-    
-    if municipio and municipio != "Todos":
-        if "municipio_filter" not in st.session_state or st.session_state["municipio_filter"] != municipio:
-            st.session_state["municipio_filter"] = municipio
-            st.session_state["map_filter_updated"] = True
-            updated = True
-    
-    if vereda and vereda != "Todas":
-        if "vereda_filter" not in st.session_state or st.session_state["vereda_filter"] != vereda:
-            st.session_state["vereda_filter"] = vereda
-            st.session_state["map_filter_updated"] = True
-            updated = True
-    elif vereda == "Todas" and "vereda_filter" in st.session_state:
-        st.session_state["vereda_filter"] = "Todas"
-        st.session_state["map_filter_updated"] = True
-        updated = True
-    
-    return updated
 
 def create_content_filters_enhanced(data):
     """
@@ -783,6 +612,160 @@ def create_advanced_filters_enhanced(data):
     }
 
 
+def apply_all_filters_enhanced(data, filters_location, filters_content, filters_advanced):
+    """
+    CORREGIDO: Aplica filtros usando normalización consistente.
+    """
+    def normalize_name(name):
+        """Normaliza nombres para comparación consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
+    casos_filtrados = data["casos"].copy()
+    epizootias_filtradas = data["epizootias"].copy()
+
+    # Contador de registros para logging
+    initial_casos = len(casos_filtrados)
+    initial_epizootias = len(epizootias_filtradas)
+
+    # PASO 1: Aplicar filtros de ubicación con normalización
+    if filters_location["municipio_display"] != "Todos":
+        municipio_selected = filters_location["municipio_display"]
+        municipio_norm = normalize_name(municipio_selected)
+
+        if "municipio" in casos_filtrados.columns:
+            casos_antes = len(casos_filtrados)
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["municipio"].apply(normalize_name) == municipio_norm
+            ]
+            casos_despues = len(casos_filtrados)
+            logger.info(f"🔍 Filtro municipio casos: {casos_antes} → {casos_despues}")
+
+        if "municipio" in epizootias_filtradas.columns:
+            epi_antes = len(epizootias_filtradas)
+            epizootias_filtradas = epizootias_filtradas[
+                epizootias_filtradas["municipio"].apply(normalize_name) == municipio_norm
+            ]
+            epi_despues = len(epizootias_filtradas)
+            logger.info(f"🔍 Filtro municipio epizootias: {epi_antes} → {epi_despues}")
+
+    if filters_location["vereda_display"] != "Todas":
+        vereda_selected = filters_location["vereda_display"]
+        vereda_norm = normalize_name(vereda_selected)
+
+        if "vereda" in casos_filtrados.columns:
+            casos_antes = len(casos_filtrados)
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["vereda"].apply(normalize_name) == vereda_norm
+            ]
+            casos_despues = len(casos_filtrados)
+            logger.info(f"🔍 Filtro vereda casos: {casos_antes} → {casos_despues}")
+
+        if "vereda" in epizootias_filtradas.columns:
+            epi_antes = len(epizootias_filtradas)
+            epizootias_filtradas = epizootias_filtradas[
+                epizootias_filtradas["vereda"].apply(normalize_name) == vereda_norm
+            ]
+            epi_despues = len(epizootias_filtradas)
+            logger.info(f"🔍 Filtro vereda epizootias: {epi_antes} → {epi_despues}")
+
+    # PASO 2: Aplicar filtros temporales (sin cambios)
+    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
+        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
+        fecha_inicio = pd.Timestamp(fecha_inicio)
+        fecha_fin = pd.Timestamp(fecha_fin) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+
+        # Filtrar casos por fecha de inicio de síntomas
+        if "fecha_inicio_sintomas" in casos_filtrados.columns:
+            casos_antes = len(casos_filtrados)
+            casos_filtrados = casos_filtrados[
+                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
+                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
+            ]
+            casos_despues = len(casos_filtrados)
+            if casos_antes != casos_despues:
+                logger.info(f"🔍 Filtro fecha casos: {casos_antes} → {casos_despues}")
+
+        # Filtrar epizootias por fecha de recolección
+        if "fecha_recoleccion" in epizootias_filtradas.columns:
+            epi_antes = len(epizootias_filtradas)
+            epizootias_filtradas = epizootias_filtradas[
+                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
+                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
+            ]
+            epi_despues = len(epizootias_filtradas)
+            if epi_antes != epi_despues:
+                logger.info(f"🔍 Filtro fecha epizootias: {epi_antes} → {epi_despues}")
+
+    # PASO 3: Aplicar filtros avanzados para casos (sin cambios en lógica)
+    if filters_advanced["condicion_final"] != "Todas":
+        if "condicion_final" in casos_filtrados.columns:
+            casos_antes = len(casos_filtrados)
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["condicion_final"] == filters_advanced["condicion_final"]
+            ]
+            casos_despues = len(casos_filtrados)
+            if casos_antes != casos_despues:
+                logger.info(f"🔍 Filtro condición: {casos_antes} → {casos_despues}")
+
+    if filters_advanced["sexo"] != "Todos":
+        if "sexo" in casos_filtrados.columns:
+            casos_antes = len(casos_filtrados)
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["sexo"] == filters_advanced["sexo"]
+            ]
+            casos_despues = len(casos_filtrados)
+            if casos_antes != casos_despues:
+                logger.info(f"🔍 Filtro sexo: {casos_antes} → {casos_despues}")
+
+    if filters_advanced["edad_rango"]:
+        edad_min, edad_max = filters_advanced["edad_rango"]
+        if "edad" in casos_filtrados.columns:
+            casos_antes = len(casos_filtrados)
+            casos_filtrados = casos_filtrados[
+                (casos_filtrados["edad"] >= edad_min)
+                & (casos_filtrados["edad"] <= edad_max)
+            ]
+            casos_despues = len(casos_filtrados)
+            if casos_antes != casos_despues:
+                logger.info(f"🔍 Filtro edad: {casos_antes} → {casos_despues}")
+
+    # PASO 4: Aplicar filtros avanzados para epizootias
+    if filters_advanced["fuente_epizootia"] != "Todas":
+        if "proveniente" in epizootias_filtradas.columns:
+            epi_antes = len(epizootias_filtradas)
+            epizootias_filtradas = epizootias_filtradas[
+                epizootias_filtradas["proveniente"] == filters_advanced["fuente_epizootia"]
+            ]
+            epi_despues = len(epizootias_filtradas)
+            if epi_antes != epi_despues:
+                logger.info(f"🔍 Filtro fuente epizootias: {epi_antes} → {epi_despues}")
+
+    # LOGGING: Almacenar estadísticas de filtrado
+    final_casos = len(casos_filtrados)
+    final_epizootias = len(epizootias_filtradas)
+    
+    # Log resumen final
+    logger.info(f"📊 Filtrado final - Casos: {initial_casos} → {final_casos}, Epizootias: {initial_epizootias} → {final_epizootias}")
+    
+    st.session_state["filter_stats"] = {
+        "initial_casos": initial_casos,
+        "final_casos": final_casos,
+        "casos_filtered_out": initial_casos - final_casos,
+        "initial_epizootias": initial_epizootias,
+        "final_epizootias": final_epizootias,
+        "epizootias_filtered_out": initial_epizootias - final_epizootias,
+    }
+
+    # Retornar datos filtrados con metadatos preservados
+    return {
+        "casos": casos_filtrados,
+        "epizootias": epizootias_filtradas,
+        **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
+    }
+
+
 def create_filter_summary_enhanced(filters_location, filters_content, filters_advanced, data):
     """
     MEJORADO: Resumen de filtros activos con categorización.
@@ -925,6 +908,7 @@ def show_active_filters_sidebar_enhanced(active_filters):
         unsafe_allow_html=True,
     )
 
+
 def reset_all_filters_enhanced():
     """
     CORREGIDO: Reset completo con limpieza de estado de mapas y confirmación.
@@ -964,6 +948,7 @@ def reset_all_filters_enhanced():
         st.sidebar.success(f"✅ {reset_count} filtros restablecidos", icon="🧹")
     else:
         st.sidebar.info("ℹ️ No había filtros para restablecer", icon="🔄")
+
 
 def create_complete_filter_system_enhanced(data):
     """
@@ -1061,588 +1046,157 @@ def create_complete_filter_system_enhanced(data):
 
     return {"filters": all_filters, "data_filtered": data_filtered}
 
+
 def create_complete_filter_system_with_maps(data):
     """
-    CORREGIDO: Sistema completo con sincronización bidireccional mapas-filtros.
+    SISTEMA PRINCIPAL: Sistema completo con sincronización bidireccional mapas-filtros.
     """
-    # Aplicar CSS responsive
-    create_responsive_filters_ui()
-    
-    # **PASO 1: Detectar cambios desde mapa**
-    map_changed = detect_and_process_map_changes()
-    
-    # **PASO 2: Crear filtros jerárquicos con valores sincronizados**
-    filters_location = create_hierarchical_filters_with_map_sync(data, map_changed)
-    
-    # **PASO 3: Crear filtros de contenido**
-    filters_content = create_content_filters_enhanced(data)
-    
-    # **PASO 4: Crear filtros avanzados**
-    filters_advanced = create_advanced_filters_enhanced(data)
-
-    # **PASO 5: Crear resumen de filtros activos mejorado**
-    active_filters = create_filter_summary_enhanced(
-        filters_location, filters_content, filters_advanced, data
-    )
-
-    # **PASO 6: Mostrar filtros activos en sidebar**
-    show_active_filters_sidebar_enhanced(active_filters)
-
-    # **PASO 7: Controles de gestión**
-    show_filter_management_controls(active_filters)
-    
-    # **PASO 8: Aplicar filtros con logging detallado**
-    data_filtered = apply_all_filters_with_logging(
-        data, filters_location, filters_content, filters_advanced
-    )
-    
-    # **PASO 9: Mostrar estadísticas de filtrado**
-    show_filtering_statistics(data, data_filtered)
-    
-    # Combinar todos los filtros
-    all_filters = {
-        **filters_location,
-        **filters_content,
-        **filters_advanced,
-        "active_filters": active_filters,
-        "map_synchronized": map_changed,
-    }
-
-    return {"filters": all_filters, "data_filtered": data_filtered}
-
-
-def get_current_filter_state():
-    """
-    NUEVO: Obtiene el estado actual de todos los filtros.
-    """
-    return {
-        "municipio": st.session_state.get("municipio_filter", "Todos"),
-        "vereda": st.session_state.get("vereda_filter", "Todas"),
-        "fecha": st.session_state.get("fecha_filter", None),
-        "condicion": st.session_state.get("condicion_filter", "Todas"),
-        "sexo": st.session_state.get("sexo_filter", "Todos"),
-        "edad": st.session_state.get("edad_filter", None),
-        "fuente": st.session_state.get("fuente_filter", "Todas"),
-    }
-
-
-def validate_filter_sync():
-    """
-    NUEVO: Valida que los filtros estén sincronizados correctamente.
-    """
-    issues = []
-    
-    # Verificar coherencia municipio-vereda
-    municipio = st.session_state.get("municipio_filter", "Todos")
-    vereda = st.session_state.get("vereda_filter", "Todas")
-    
-    if vereda != "Todas" and municipio == "Todos":
-        issues.append("Vereda seleccionada sin municipio")
-    
-    # Verificar fechas válidas
-    fecha_rango = st.session_state.get("fecha_filter", None)
-    if fecha_rango and len(fecha_rango) == 2:
-        if fecha_rango[0] > fecha_rango[1]:
-            issues.append("Rango de fechas inválido")
-    
-    return issues
-
-def detect_and_process_map_changes():
-    """
-    NUEVA: Detección mejorada de cambios desde el mapa.
-    """
-    map_changed = False
-    
-    # Verificar si hay cambios pendientes desde el mapa
-    if st.session_state.get('map_filter_updated', False):
-        map_changed = True
+    try:
+        # Aplicar CSS responsive
+        create_responsive_filters_ui()
         
-        # Mostrar notificación de sincronización
-        st.sidebar.success("🗺️ Sincronizado desde mapa", icon="🔄")
+        # Crear filtros jerárquicos con valores sincronizados
+        filters_location = create_hierarchical_filters_enhanced(data)
         
-        # Limpiar bandera después de procesar
-        st.session_state['map_filter_updated'] = False
-    
-    return map_changed
+        # Crear filtros de contenido
+        filters_content = create_content_filters_enhanced(data)
+        
+        # Crear filtros avanzados
+        filters_advanced = create_advanced_filters_enhanced(data)
 
-
-def create_hierarchical_filters_with_map_sync(data, map_changed):
-    """
-    NUEVA: Filtros jerárquicos con sincronización perfecta con mapas.
-    """
-    
-    # **SINCRONIZACIÓN: Detectar fuente del cambio**
-    if map_changed:
-        st.sidebar.markdown(
-            """
-            <div class="map-sync-indicator">
-                🗺️ ✅ Actualizado desde mapa
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    
-    # **FILTRO DE MUNICIPIO CON SINCRONIZACIÓN PERFECTA**
-    municipio_options = ["Todos"] + [
-        data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
-    ]
-
-    # Valor inicial desde session_state o por defecto
-    municipio_inicial = st.session_state.get("municipio_filter", "Todos")
-    
-    # Validar que el valor inicial esté en las opciones
-    if municipio_inicial not in municipio_options:
-        municipio_inicial = "Todos"
-        st.session_state["municipio_filter"] = "Todos"
-
-    municipio_selected = st.sidebar.selectbox(
-        "📍 **MUNICIPIO**:",
-        municipio_options,
-        index=municipio_options.index(municipio_inicial),
-        key="municipio_filter_widget",
-        help="🗺️ Seleccione un municipio o haga clic en el mapa",
-    )
-
-    # **ACTUALIZACIÓN BIDIRECCIONAL**
-    if municipio_selected != st.session_state.get("municipio_filter", "Todos"):
-        st.session_state["municipio_filter"] = municipio_selected
-        # Si el cambio viene del sidebar (no del mapa), resetear vereda
-        if not map_changed:
-            st.session_state["vereda_filter"] = "Todas"
-
-    # Determinar municipio normalizado
-    municipio_norm_selected = None
-    if municipio_selected != "Todos":
-        for norm, display in data["municipio_display_map"].items():
-            if display == municipio_selected:
-                municipio_norm_selected = norm
-                break
-
-    # **FILTRO DE VEREDA CON DEPENDENCIA DEL MUNICIPIO**
-    vereda_options = ["Todas"]
-    vereda_disabled = municipio_selected == "Todos"
-    
-    if not vereda_disabled and municipio_norm_selected in data["veredas_por_municipio"]:
-        veredas_norm = data["veredas_por_municipio"][municipio_norm_selected]
-        if municipio_norm_selected in data["vereda_display_map"]:
-            vereda_options.extend([
-                data["vereda_display_map"][municipio_norm_selected].get(norm, norm)
-                for norm in veredas_norm
-            ])
-
-    # Valor inicial de vereda con validación
-    vereda_inicial = st.session_state.get("vereda_filter", "Todas")
-    if vereda_disabled or vereda_inicial not in vereda_options:
-        vereda_inicial = "Todas"
-        st.session_state["vereda_filter"] = "Todas"
-
-    vereda_selected = st.sidebar.selectbox(
-        "🏘️ **VEREDA**:",
-        vereda_options,
-        index=vereda_options.index(vereda_inicial),
-        key="vereda_filter_widget",
-        disabled=vereda_disabled,
-        help="🏘️ Las veredas se actualizan según el municipio seleccionado",
-    )
-
-    # **ACTUALIZACIÓN DE VEREDA**
-    if not vereda_disabled and vereda_selected != st.session_state.get("vereda_filter", "Todas"):
-        st.session_state["vereda_filter"] = vereda_selected
-
-    # Determinar vereda normalizada
-    vereda_norm_selected = None
-    if vereda_selected != "Todas" and municipio_norm_selected:
-        if municipio_norm_selected in data["vereda_display_map"]:
-            for norm, display in data["vereda_display_map"][municipio_norm_selected].items():
-                if display == vereda_selected:
-                    vereda_norm_selected = norm
-                    break
-
-    # **INFORMACIÓN CONTEXTUAL MEJORADA**
-    if municipio_selected != "Todos":
-        veredas_count = len(vereda_options) - 1  # -1 por "Todas"
-        info_color = "🟢" if vereda_selected != "Todas" else "🟡"
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-help">
-                {info_color} <strong>{municipio_selected}</strong><br>
-                🏘️ {veredas_count} veredas disponibles<br>
-                🗺️ Nivel: {'Vereda' if vereda_selected != 'Todas' else 'Municipal'}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.sidebar.markdown(
-            """
-            <div class="filter-help">
-                🗺️ Vista departamental del Tolima<br>
-                📍 Seleccione un municipio<br>
-                📊 Mostrando datos de todo el departamento
-            </div>
-            """,
-            unsafe_allow_html=True,
+        # Crear resumen de filtros activos mejorado
+        active_filters = create_filter_summary_enhanced(
+            filters_location, filters_content, filters_advanced, data
         )
 
-    st.sidebar.markdown("</div>", unsafe_allow_html=True)
+        # Mostrar filtros activos en sidebar
+        show_active_filters_sidebar_enhanced(active_filters)
 
-    return {
-        "municipio_display": municipio_selected,
-        "municipio_normalizado": municipio_norm_selected,
-        "vereda_display": vereda_selected,
-        "vereda_normalizada": vereda_norm_selected,
-    }
-
-def create_hierarchical_filters_with_map_sync_enhanced(data, map_changed):
-    """
-    CORREGIDO: Filtros jerárquicos con sincronización perfecta mejorada.
-    """
-    
-    # **PREVENIR LOOPS INFINITOS**: Detectar fuente del cambio
-    if map_changed:
-        st.sidebar.markdown(
-            """
-            <div class="map-sync-indicator">
-                🗺️ ✅ Actualizado desde mapa
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        # Limpiar bandera inmediatamente para prevenir loops
-        if 'map_filter_updated' in st.session_state:
-            st.session_state['map_filter_updated'] = False
-    
-    # **FILTRO DE MUNICIPIO CON SINCRONIZACIÓN ROBUSTA**
-    municipio_options = ["Todos"] + [
-        data["municipio_display_map"][norm] for norm in data["municipios_normalizados"]
-    ]
-
-    # Valor inicial desde session_state con validación
-    municipio_inicial = st.session_state.get("municipio_filter", "Todos")
-    
-    # VALIDACIÓN CRÍTICA: Asegurar que el valor esté en las opciones
-    if municipio_inicial not in municipio_options:
-        municipio_inicial = "Todos"
-        st.session_state["municipio_filter"] = "Todos"
-        logger.warning(f"⚠️ Municipio '{municipio_inicial}' no encontrado en opciones, reseteando a 'Todos'")
-
-    # Widget con key único para evitar conflictos
-    municipio_selected = st.sidebar.selectbox(
-        "📍 **MUNICIPIO**:",
-        municipio_options,
-        index=municipio_options.index(municipio_inicial),
-        key="municipio_filter_widget_main",  # Key único
-        help="🗺️ Seleccione un municipio o haga doble clic en el mapa",
-    )
-
-    # **SINCRONIZACIÓN BIDIRECCIONAL MEJORADA**
-    # Solo actualizar si hay cambio real y no viene del mapa
-    if municipio_selected != st.session_state.get("municipio_filter", "Todos"):
-        if not map_changed:  # Solo si NO viene del mapa
-            st.session_state["municipio_filter"] = municipio_selected
-            # Si el cambio viene del sidebar, resetear vereda
-            st.session_state["vereda_filter"] = "Todas"
-            logger.info(f"🔄 Municipio actualizado desde sidebar: {municipio_selected}")
-
-    # Determinar municipio normalizado
-    municipio_norm_selected = None
-    if municipio_selected != "Todos":
-        for norm, display in data["municipio_display_map"].items():
-            if display == municipio_selected:
-                municipio_norm_selected = norm
-                break
-
-    # **FILTRO DE VEREDA CON VALIDACIÓN MEJORADA**
-    vereda_options = ["Todas"]
-    vereda_disabled = municipio_selected == "Todos"
-    
-    if not vereda_disabled and municipio_norm_selected in data["veredas_por_municipio"]:
-        veredas_norm = data["veredas_por_municipio"][municipio_norm_selected]
-        if municipio_norm_selected in data["vereda_display_map"]:
-            vereda_options.extend([
-                data["vereda_display_map"][municipio_norm_selected].get(norm, norm)
-                for norm in veredas_norm
-            ])
-
-    # Valor inicial de vereda con validación robusta
-    vereda_inicial = st.session_state.get("vereda_filter", "Todas")
-    if vereda_disabled:
-        vereda_inicial = "Todas"
-        st.session_state["vereda_filter"] = "Todas"
-    elif vereda_inicial not in vereda_options:
-        vereda_inicial = "Todas"
-        st.session_state["vereda_filter"] = "Todas"
-        logger.warning(f"⚠️ Vereda '{vereda_inicial}' no encontrada en opciones del municipio, reseteando")
-
-    vereda_selected = st.sidebar.selectbox(
-        "🏘️ **VEREDA**:",
-        vereda_options,
-        index=vereda_options.index(vereda_inicial),
-        key="vereda_filter_widget_main",  # Key único
-        disabled=vereda_disabled,
-        help="🏘️ Las veredas se actualizan según el municipio seleccionado",
-    )
-
-    # **SINCRONIZACIÓN DE VEREDA**
-    if not vereda_disabled and vereda_selected != st.session_state.get("vereda_filter", "Todas"):
-        if not map_changed:  # Solo si NO viene del mapa
-            st.session_state["vereda_filter"] = vereda_selected
-            logger.info(f"🔄 Vereda actualizada desde sidebar: {vereda_selected}")
-
-    # Determinar vereda normalizada
-    vereda_norm_selected = None
-    if vereda_selected != "Todas" and municipio_norm_selected:
-        if municipio_norm_selected in data["vereda_display_map"]:
-            for norm, display in data["vereda_display_map"][municipio_norm_selected].items():
-                if display == vereda_selected:
-                    vereda_norm_selected = norm
-                    break
-
-    # **INFORMACIÓN CONTEXTUAL DETALLADA**
-    if municipio_selected != "Todos":
-        veredas_count = len(vereda_options) - 1  # -1 por "Todas"
-        info_color = "🟢" if vereda_selected != "Todas" else "🟡"
-        st.sidebar.markdown(
-            f"""
-            <div class="filter-help">
-                {info_color} <strong>{municipio_selected}</strong><br>
-                🏘️ {veredas_count} veredas disponibles<br>
-                🗺️ Nivel: {'Vereda específica' if vereda_selected != 'Todas' else 'Vista municipal'}<br>
-                🔄 Sincronizado con mapa interactivo
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        st.sidebar.markdown(
-            """
-            <div class="filter-help">
-                🗺️ Vista departamental completa del Tolima<br>
-                📍 Seleccione un municipio para ver sus veredas<br>
-                🖱️ O haga clic en cualquier municipio del mapa<br>
-                📊 Mostrando datos de todo el departamento
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    # **BOTÓN DE DEBUG** (opcional, solo en desarrollo)
-    if st.sidebar.checkbox("🔧 Modo Debug", value=False, key="debug_mode_checkbox"):
-        st.session_state['debug_mode'] = True
-        st.sidebar.markdown("**🔧 Estado de Filtros:**")
-        st.sidebar.code(f"""
-        municipio_filter: {st.session_state.get('municipio_filter')}
-        vereda_filter: {st.session_state.get('vereda_filter')}
-        map_changed: {map_changed}
-        municipio_selected: {municipio_selected}
-        vereda_selected: {vereda_selected}
-                """)
-    else:
-        st.session_state['debug_mode'] = False
-
-    return {
-        "municipio_display": municipio_selected,
-        "municipio_normalizado": municipio_norm_selected,
-        "vereda_display": vereda_selected,
-        "vereda_normalizada": vereda_norm_selected,
-    }
-    
-def verify_filter_sync():
-    """
-    NUEVA: Función de utilidad para verificar que la sincronización funcione.
-    Usar solo para debugging.
-    """
-    if st.session_state.get('debug_mode', False):
+        # Controles de gestión
         st.sidebar.markdown("---")
-        st.sidebar.markdown("**🔍 Verificación de Sincronización:**")
         
-        # Obtener todos los valores relacionados con filtros
-        filters_state = {}
-        for key in st.session_state.keys():
-            if 'filter' in key.lower():
-                filters_state[key] = st.session_state[key]
+        # Botones de control
+        col1, col2 = st.sidebar.columns([3, 1])
+
+        with col1:
+            if st.button(
+                "🔄 Restablecer Todo",
+                key="reset_all_filters_enhanced",
+                help="Limpiar todos los filtros y volver a vista completa",
+                use_container_width=True
+            ):
+                reset_all_filters_enhanced()
+                st.rerun()
+
+        with col2:
+            # Contador de filtros activos
+            filter_count = len(active_filters)
+            if filter_count > 0:
+                st.markdown(
+                    f"""
+                    <div style="
+                        background: linear-gradient(135deg, #7D0F2B, #F2A900); 
+                        color: white; 
+                        padding: 0.4rem 0.6rem; 
+                        border-radius: 50%; 
+                        text-align: center; 
+                        font-size: 0.8rem; 
+                        font-weight: 700;
+                        box-shadow: 0 3px 10px rgba(0,0,0,0.3);
+                        min-width: 30px;
+                        min-height: 30px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    ">
+                        {filter_count}
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
         
-        if filters_state:
-            st.sidebar.json(filters_state)
-        else:
-            st.sidebar.info("No hay filtros activos")
+        # Aplicar filtros con logging detallado
+        data_filtered = apply_all_filters_enhanced(
+            data, filters_location, filters_content, filters_advanced
+        )
         
-        # Botón para limpiar todo (para testing)
-        if st.sidebar.button("🧹 Limpiar Todo (Testing)", key="clear_all_debug"):
-            keys_to_clear = [key for key in st.session_state.keys() if 'filter' in key.lower()]
-            for key in keys_to_clear:
-                del st.session_state[key]
-            st.sidebar.success("✅ Todos los filtros limpiados")
-            st.rerun()
+        # Agregar copyright al final
+        from components.sidebar import add_copyright
+        add_copyright()
+        
+        # Combinar todos los filtros
+        all_filters = {
+            **filters_location,
+            **filters_content,
+            **filters_advanced,
+            "active_filters": active_filters,
+        }
 
-def show_filter_management_controls(active_filters):
+        return {"filters": all_filters, "data_filtered": data_filtered}
+
+    except Exception as e:
+        logger.error(f"❌ Error en create_complete_filter_system_with_maps: {str(e)}")
+        # Fallback básico
+        return create_basic_fallback_filter_system(data)
+
+
+def create_basic_fallback_filter_system(data):
     """
-    NUEVA: Controles de gestión de filtros con estadísticas.
+    Sistema de filtros básico como fallback en caso de errores.
     """
-    st.sidebar.markdown("---")
+    st.sidebar.subheader("🔍 Filtros (Modo Básico)")
 
-    # Botones de control
-    col1, col2 = st.sidebar.columns([3, 1])
+    # Filtro de municipio básico
+    municipio_options = ["Todos"] + data.get("municipios_normalizados", [])
+    municipio_selected = st.sidebar.selectbox(
+        "📍 Municipio:", municipio_options, key="municipio_filter_basic"
+    )
 
-    with col1:
-        if st.button(
-            "🔄 Restablecer Todo",
-            key="reset_all_filters_enhanced",
-            help="Limpiar todos los filtros y volver a vista completa",
-            use_container_width=True
-        ):
-            reset_all_filters_enhanced()
-            st.rerun()
-
-
-def apply_all_filters_with_logging(data, filters_location, filters_content, filters_advanced):
-    """
-    NUEVA: Aplicación de filtros con logging detallado para debugging.
-    """
+    # Aplicar filtros básicos
     casos_filtrados = data["casos"].copy()
     epizootias_filtradas = data["epizootias"].copy()
 
-    # Logging inicial
-    initial_casos = len(casos_filtrados)
-    initial_epizootias = len(epizootias_filtradas)
+    if municipio_selected != "Todos" and "municipio" in casos_filtrados.columns:
+        casos_filtrados = casos_filtrados[casos_filtrados["municipio"] == municipio_selected]
     
-    filtros_aplicados = []
+    if municipio_selected != "Todos" and "municipio" in epizootias_filtradas.columns:
+        epizootias_filtradas = epizootias_filtradas[epizootias_filtradas["municipio"] == municipio_selected]
 
-    # **APLICAR FILTROS DE UBICACIÓN CON LOGGING**
-    if filters_location["municipio_normalizado"]:
-        municipio_norm = filters_location["municipio_normalizado"]
-        
-        if "municipio_normalizado" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["municipio_normalizado"] == municipio_norm
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"📍 Municipio: {casos_antes} → {casos_despues} casos")
-
-        if "municipio_normalizado" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["municipio_normalizado"] == municipio_norm
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                filtros_aplicados.append(f"📍 Municipio: {epi_antes} → {epi_despues} epizootias")
-
-    if filters_location["vereda_normalizada"]:
-        vereda_norm = filters_location["vereda_normalizada"]
-        
-        if "vereda_normalizada" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["vereda_normalizada"] == vereda_norm
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"🏘️ Vereda: {casos_antes} → {casos_despues} casos")
-
-        if "vereda_normalizada" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                epizootias_filtradas["vereda_normalizada"] == vereda_norm
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                filtros_aplicados.append(f"🏘️ Vereda: {epi_antes} → {epi_despues} epizootias")
-
-    # **APLICAR FILTROS TEMPORALES**
-    if filters_content["fecha_rango"] and len(filters_content["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters_content["fecha_rango"]
-        fecha_inicio = pd.Timestamp(fecha_inicio)
-        fecha_fin = pd.Timestamp(fecha_fin) + pd.Timedelta(hours=23, minutes=59, seconds=59)
-
-        if "fecha_inicio_sintomas" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
-                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"📅 Fecha casos: {casos_antes} → {casos_despues}")
-
-        if "fecha_recoleccion" in epizootias_filtradas.columns:
-            epi_antes = len(epizootias_filtradas)
-            epizootias_filtradas = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
-                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
-            ]
-            epi_despues = len(epizootias_filtradas)
-            if epi_antes != epi_despues:
-                filtros_aplicados.append(f"📅 Fecha epizootias: {epi_antes} → {epi_despues}")
-
-    # **APLICAR FILTROS AVANZADOS**
-    if filters_advanced["condicion_final"] != "Todas" and not casos_filtrados.empty:
-        if "condicion_final" in casos_filtrados.columns:
-            casos_antes = len(casos_filtrados)
-            casos_filtrados = casos_filtrados[
-                casos_filtrados["condicion_final"] == filters_advanced["condicion_final"]
-            ]
-            casos_despues = len(casos_filtrados)
-            if casos_antes != casos_despues:
-                filtros_aplicados.append(f"⚰️ Condición: {casos_antes} → {casos_despues} casos")
-
-    # **GUARDAR ESTADÍSTICAS PARA DEBUGGING**
-    final_casos = len(casos_filtrados)
-    final_epizootias = len(epizootias_filtradas)
-    
-    st.session_state["filter_stats_detailed"] = {
-        "initial_casos": initial_casos,
-        "final_casos": final_casos,
-        "initial_epizootias": initial_epizootias,
-        "final_epizootias": final_epizootias,
-        "filtros_aplicados": filtros_aplicados,
-        "reduction_casos_pct": ((initial_casos - final_casos) / initial_casos * 100) if initial_casos > 0 else 0,
-        "reduction_epi_pct": ((initial_epizootias - final_epizootias) / initial_epizootias * 100) if initial_epizootias > 0 else 0,
-    }
-
-    return {
+    data_filtered = {
         "casos": casos_filtrados,
         "epizootias": epizootias_filtradas,
         **{k: v for k, v in data.items() if k not in ["casos", "epizootias"]},
     }
 
+    filters = {
+        "municipio_display": municipio_selected,
+        "municipio_normalizado": municipio_selected,
+        "vereda_display": "Todas",
+        "vereda_normalizada": None,
+        "active_filters": [f"Municipio: {municipio_selected}"] if municipio_selected != "Todos" else [],
+    }
 
-def show_filtering_statistics(data_original, data_filtered):
+    return {"filters": filters, "data_filtered": data_filtered}
+
+
+# FUNCIONES DE COMPATIBILIDAD (para evitar errores de importación)
+def create_unified_filter_system(data):
     """
-    NUEVA: Muestra estadísticas detalladas del filtrado en sidebar.
+    FUNCIÓN DE COMPATIBILIDAD: Wrapper para el sistema de filtros existente.
     """
-    if "filter_stats_detailed" in st.session_state:
-        stats = st.session_state["filter_stats_detailed"]
-        
-        # Solo mostrar si hay alguna reducción
-        if stats['reduction_casos_pct'] > 0 or stats['reduction_epi_pct'] > 0:
-            
-            if st.sidebar.checkbox("📊 Ver Estadísticas Filtrado", value=False):
-                st.sidebar.markdown("**📈 Impacto del Filtrado:**")
-                
-                # Métricas de casos
-                st.sidebar.metric(
-                    "🦠 Casos Filtrados",
-                    f"{stats['final_casos']}/{stats['initial_casos']}",
-                    delta=f"-{stats['reduction_casos_pct']:.1f}%" if stats['reduction_casos_pct'] > 0 else "Sin cambio",
-                    delta_color="inverse"
-                )
-                
-                # Métricas de epizootias
-                st.sidebar.metric(
-                    "🐒 Epizootias Filtradas", 
-                    f"{stats['final_epizootias']}/{stats['initial_epizootias']}",
-                    delta=f"-{stats['reduction_epi_pct']:.1f}%" if stats['reduction_epi_pct'] > 0 else "Sin cambio",
-                    delta_color="inverse"
-                )
-                
-                # Lista de filtros aplicados
-                if stats["filtros_aplicados"]:
-                    st.sidebar.markdown("**🔍 Filtros Aplicados:**")
-                    for filtro in stats["filtros_aplicados"][:4]:  # Máximo 4
-                        st.sidebar.caption(f"• {filtro}")
-                    
-                    if len(stats["filtros_aplicados"]) > 4:
-                        st.sidebar.caption(f"... y {len(stats['filtros_aplicados']) - 4} más")
+    try:
+        return create_complete_filter_system_with_maps(data)
+    except Exception as e:
+        logger.error(f"Error en create_unified_filter_system: {str(e)}")
+        return create_complete_filter_system_enhanced(data)
+
+
+def create_filter_system_enhanced(data):
+    """
+    FUNCIÓN ALTERNATIVA: Otra posible función que puede estar siendo importada.
+    """
+    try:
+        return create_complete_filter_system_with_maps(data)
+    except Exception as e:
+        logger.error(f"Error en create_filter_system_enhanced: {str(e)}")
+        return create_complete_filter_system_enhanced(data)
