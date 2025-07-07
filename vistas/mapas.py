@@ -845,11 +845,20 @@ def create_beautiful_information_cards_FIXED(casos_filtrados, epizootias_filtrad
     CORREGIDO: Tarjetas que GARANTIZAN uso de datos filtrados.
     Reemplazar la función original por esta versión.
     """
-    from utils.data_processor import calculate_basic_metrics, log_filter_application, verify_filtered_data_usage
+    # IMPORTACIÓN CORREGIDA - solo importar funciones que existen
+    from utils.data_processor import calculate_basic_metrics, verify_filtered_data_usage, debug_data_flow
     
     # VERIFICACIÓN: Asegurar que se usan datos filtrados
     verify_filtered_data_usage(casos_filtrados, "create_beautiful_information_cards - casos")
     verify_filtered_data_usage(epizootias_filtradas, "create_beautiful_information_cards - epizootias")
+    
+    # DEBUG: Verificar el flujo de datos
+    debug_data_flow(
+        {"casos": casos_filtrados, "epizootias": epizootias_filtradas}, 
+        {"casos": casos_filtrados, "epizootias": epizootias_filtradas},
+        filters, 
+        "tarjetas_informativas"
+    )
     
     # CALCULAR MÉTRICAS CON DATOS FILTRADOS GARANTIZADOS
     metrics = calculate_basic_metrics(casos_filtrados, epizootias_filtradas)

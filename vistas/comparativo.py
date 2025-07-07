@@ -54,11 +54,20 @@ def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtr
     CORREGIDO para vistas/comparativo.py - Análisis temporal con datos filtrados garantizados.
     Reemplazar la función original por esta versión.
     """
-    from utils.data_processor import verify_filtered_data_usage
+    # IMPORTACIÓN CORREGIDA - solo importar funciones que existen
+    from utils.data_processor import verify_filtered_data_usage, debug_data_flow
     
     # VERIFICACIÓN: Asegurar que se usan datos filtrados
     verify_filtered_data_usage(casos_filtrados, "create_temporal_analysis - casos")
     verify_filtered_data_usage(epizootias_filtradas, "create_temporal_analysis - epizootias")
+    
+    # DEBUG: Registrar el uso de datos filtrados
+    debug_data_flow(
+        {"casos": casos_filtrados, "epizootias": epizootias_filtradas},
+        {"casos": casos_filtrados, "epizootias": epizootias_filtradas},
+        {},
+        "analisis_temporal"
+    )
     
     temporal_data = []
 
@@ -227,6 +236,7 @@ def show_temporal_metrics_descriptive_FIXED(temporal_data, casos_filtrados, epiz
     CORREGIDO para vistas/comparativo.py - Usa datos filtrados garantizados.
     Reemplazar la función original por esta versión.
     """
+    # IMPORTACIÓN CORREGIDA
     from utils.data_processor import verify_filtered_data_usage
     
     # VERIFICACIÓN: Asegurar que se usan datos filtrados

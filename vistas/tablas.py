@@ -36,7 +36,7 @@ def show(data_filtered, filters, colors):
     show_detailed_excel_tables(casos, epizootias, colors)
 
     # Sección 3: Tabla resumen estética
-    show_aesthetic_summary_table(casos, epizootias, colors)
+    show_aesthetic_summary_table_FIXED(casos, epizootias, colors)
 
     # Sección 4: Análisis visual simplificado
     show_simplified_visual_analysis(casos, epizootias, colors)
@@ -306,26 +306,33 @@ def show_detailed_excel_tables(casos, epizootias, colors):
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-
-def show_aesthetic_summary_table(casos, epizootias, colors):
-    """Tabla resumen estéticamente mejorada."""
+def show_aesthetic_summary_table_FIXED(casos_filtrados, epizootias_filtradas, colors):
+    """
+    CORREGIDO para vistas/tablas.py - Usa datos filtrados garantizados.
+    Reemplazar la función original por esta versión.
+    """
+    from utils.data_processor import verify_filtered_data_usage
+    
+    # VERIFICACIÓN: Asegurar que se usan datos filtrados
+    verify_filtered_data_usage(casos_filtrados, "show_aesthetic_summary_table - casos")
+    verify_filtered_data_usage(epizootias_filtradas, "show_aesthetic_summary_table - epizootias")
+    
     st.markdown(
         """
         <div class="analysis-section">
             <div class="section-header">
-                📈 Resumen por Ubicación
+                📈 Resumen por Ubicación (Datos Filtrados)
             </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # Crear resumen por municipios
-    summary_data = create_location_summary(casos, epizootias)
+    # Crear resumen por municipios CON DATOS FILTRADOS
+    summary_data = create_location_summary_FIXED(casos_filtrados, epizootias_filtradas)
     
     if summary_data:
-        
         # Mostrar como DataFrame estético
-        summary_df = create_aesthetic_summary_html(summary_data, colors)
+        summary_df = create_aesthetic_summary_html_FIXED(summary_data, colors)
         if isinstance(summary_df, pd.DataFrame):
             st.dataframe(
                 summary_df,
@@ -336,7 +343,7 @@ def show_aesthetic_summary_table(casos, epizootias, colors):
         else:
             st.info("No hay datos suficientes para el resumen")
         
-        # Estadísticas generales del resumen
+        # Estadísticas generales del resumen DE DATOS FILTRADOS
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
@@ -354,12 +361,10 @@ def show_aesthetic_summary_table(casos, epizootias, colors):
         with col4:
             municipios_mixtos = len([m for m in summary_data if m["casos"] > 0 and m["epizootias"] > 0])
             st.metric("🔄 Ambos", municipios_mixtos)
-            
     else:
-        st.info("📊 No hay datos suficientes para crear el resumen por ubicación")
+        st.info("📊 No hay datos suficientes para crear el resumen por ubicación con los filtros aplicados")
 
     st.markdown("</div>", unsafe_allow_html=True)
-
 
 def show_simplified_visual_analysis(casos, epizootias, colors):
     """Análisis visual simplificado sin pestañas anidadas."""
@@ -463,7 +468,7 @@ def show_comprehensive_export_section(casos, epizootias, colors):
             st.button("🐒 Epizootias CSV", disabled=True, help="Sin epizootias")
 
     with col4:
-        summary_data = create_location_summary(casos, epizootias)
+        summary_data = create_location_summary_FIXED(casos, epizootias)
         if summary_data:
             summary_df = pd.DataFrame(summary_data)
             summary_csv = summary_df.to_csv(index=False)
@@ -637,35 +642,42 @@ def apply_table_filters_epizootias(epizootias_display):
     
     return epi_filtradas
 
-
-def create_location_summary(casos, epizootias):
-    """Crea resumen por ubicación."""
+def create_location_summary_FIXED(casos_filtrados, epizootias_filtradas):
+    """
+    CORREGIDO: Crea resumen de ubicación usando DATOS FILTRADOS garantizados.
+    """
+    from utils.data_processor import verify_filtered_data_usage
+    
+    # VERIFICACIÓN adicional
+    verify_filtered_data_usage(casos_filtrados, "create_location_summary - casos")
+    verify_filtered_data_usage(epizootias_filtradas, "create_location_summary - epizootias")
+    
     summary_data = []
     
-    # Obtener todas las ubicaciones únicas
+    # Obtener todas las ubicaciones únicas DE LOS DATOS FILTRADOS
     ubicaciones = set()
-    if not casos.empty and "municipio" in casos.columns:
-        ubicaciones.update(casos["municipio"].dropna())
-    if not epizootias.empty and "municipio" in epizootias.columns:
-        ubicaciones.update(epizootias["municipio"].dropna())
+    if not casos_filtrados.empty and "municipio" in casos_filtrados.columns:
+        ubicaciones.update(casos_filtrados["municipio"].dropna())
+    if not epizootias_filtradas.empty and "municipio" in epizootias_filtradas.columns:
+        ubicaciones.update(epizootias_filtradas["municipio"].dropna())
     
     for ubicacion in sorted(ubicaciones):
-        # Casos en esta ubicación
-        casos_ubi = casos[casos["municipio"] == ubicacion] if not casos.empty and "municipio" in casos.columns else pd.DataFrame()
-        epi_ubi = epizootias[epizootias["municipio"] == ubicacion] if not epizootias.empty and "municipio" in epizootias.columns else pd.DataFrame()
+        # Casos en esta ubicación DE LOS DATOS FILTRADOS
+        casos_ubi = casos_filtrados[casos_filtrados["municipio"] == ubicacion] if not casos_filtrados.empty and "municipio" in casos_filtrados.columns else pd.DataFrame()
+        epi_ubi = epizootias_filtradas[epizootias_filtradas["municipio"] == ubicacion] if not epizootias_filtradas.empty and "municipio" in epizootias_filtradas.columns else pd.DataFrame()
         
         casos_count = len(casos_ubi)
         epi_count = len(epi_ubi)
         
         if casos_count > 0 or epi_count > 0:
-            # Cálculos adicionales
+            # Cálculos adicionales DE DATOS FILTRADOS
             fallecidos = 0
             if not casos_ubi.empty and "condicion_final" in casos_ubi.columns:
                 fallecidos = (casos_ubi["condicion_final"] == "Fallecido").sum()
             
             letalidad = (fallecidos / casos_count * 100) if casos_count > 0 else 0
             
-            # Desglose de epizootias
+            # Desglose de epizootias DE DATOS FILTRADOS
             positivas = 0
             en_estudio = 0
             if not epi_ubi.empty and "descripcion" in epi_ubi.columns:
@@ -693,32 +705,32 @@ def create_location_summary(casos, epizootias):
     
     return summary_data
 
-
-def create_aesthetic_summary_html(summary_data, colors):
-    """Crea HTML estético para la tabla resumen."""
+def create_aesthetic_summary_html_FIXED(summary_data, colors):
+    """
+    CORREGIDO: Crea DataFrame estético para la tabla resumen usando datos filtrados.
+    """
     if not summary_data:
-        return "<p>No hay datos para mostrar</p>"
+        return None
     
     # Ordenar por casos descendente
     summary_data_sorted = sorted(summary_data, key=lambda x: x["casos"], reverse=True)
     
-    # USAR DATAFRAME EN LUGAR DE HTML CRUDO
+    # USAR DATAFRAME CON INDICACIÓN DE FILTRADO
     summary_df = pd.DataFrame(summary_data_sorted)
     
     # Renombrar columnas para mejor visualización
     summary_df = summary_df.rename(columns={
         'municipio': '📍 Municipio',
-        'casos': '🦠 Casos', 
-        'fallecidos': '⚰️ Fallecidos',
-        'letalidad': '📊 Letalidad (%)',
-        'epizootias': '🐒 Epizootias',
-        'positivas': '🔴 Positivas',
-        'en_estudio': '🔵 En Estudio',
+        'casos': '🦠 Casos (Filtrados)', 
+        'fallecidos': '⚰️ Fallecidos (Filtrados)',
+        'letalidad': '📊 Letalidad % (Filtrados)',
+        'epizootias': '🐒 Epizootias (Filtradas)',
+        'positivas': '🔴 Positivas (Filtradas)',
+        'en_estudio': '🔵 En Estudio (Filtradas)',
         'categoria': '🏷️ Tipo'
     })
     
-    return summary_df  # Retornar DataFrame en lugar de HTML
-
+    return summary_df
 
 def create_casos_distribution_chart(casos, colors):
     """Crea gráfico de distribución de casos simplificado."""
@@ -790,7 +802,7 @@ def create_comprehensive_excel_export(casos, epizootias):
             epizootias_export.to_excel(writer, sheet_name='Epizootias_Detalladas', index=False)
         
         # Hoja 3: Resumen por ubicación
-        summary_data = create_location_summary(casos, epizootias)
+        summary_data = create_location_summary_FIXED(casos, epizootias)
         if summary_data:
             summary_df = pd.DataFrame(summary_data)
             summary_df.to_excel(writer, sheet_name='Resumen_Ubicacion', index=False)
