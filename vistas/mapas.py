@@ -36,9 +36,11 @@ from utils.data_processor import (
 PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
 
 
+# TEMPORAL: Agrega esto al inicio de la función show() en vistas/mapas.py para debugging:
+
 def show(data_filtered, filters, colors):
     """
-    CORREGIDO: Vista completa de mapas que GARANTIZA uso de datos filtrados.
+    LIMPIA: Vista completa de mapas que GARANTIZA uso de datos filtrados.
     """
     # **VERIFICACIÓN CRÍTICA INICIAL**
     logger = logging.getLogger(__name__)
@@ -58,8 +60,11 @@ def show(data_filtered, filters, colors):
     
     verify_filtered_data_usage(casos_filtrados, "vista_mapas - casos_filtrados")
     verify_filtered_data_usage(epizootias_filtradas, "vista_mapas - epizootias_filtradas")
+
+    # **APLICAR CSS INMEDIATAMENTE AL INICIO**
+    apply_enhanced_cards_css_FIXED(colors)
     
-    # **DEBUG INFO PARA EL USUARIO**
+    # **DEBUG INFO PARA EL USUARIO (OPCIONAL - PUEDES COMENTAR ESTO)**
     with st.expander("🔧 Debug - Datos recibidos en vista mapas", expanded=False):
         st.write(f"**Casos filtrados:** {len(casos_filtrados)}")
         st.write(f"**Epizootias filtradas:** {len(epizootias_filtradas)}")
@@ -75,9 +80,6 @@ def show(data_filtered, filters, colors):
         if municipio_filter != "Todos" and not casos_filtrados.empty:
             municipios_en_datos = casos_filtrados["municipio"].unique() if "municipio" in casos_filtrados.columns else []
             st.write(f"**Municipios en casos:** {list(municipios_en_datos)}")
-    
-    # CSS para las nuevas tarjetas mejoradas
-    apply_enhanced_cards_css(colors)
 
     if not MAPS_AVAILABLE:
         show_maps_not_available()
@@ -113,6 +115,191 @@ def show(data_filtered, filters, colors):
         # **CRÍTICO: PASAR DATOS FILTRADOS VERIFICADOS A LAS TARJETAS**
         create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors)
 
+def apply_enhanced_cards_css_FIXED(colors):
+    """
+    CSS CORREGIDO Y MEJORADO para tarjetas - Con !important forzado
+    """
+    st.markdown(
+        f"""
+        <style>
+        /* DEBUGGING: Mensaje visible si el CSS se carga */
+        body::before {{
+            content: "🎨 CSS PERSONALIZADO CARGADO" !important;
+            position: fixed !important;
+            top: 0 !important;
+            right: 0 !important;
+            background: green !important;
+            color: white !important;
+            padding: 5px 10px !important;
+            z-index: 9999 !important;
+            font-size: 12px !important;
+        }}
+        
+        /* RESET para evitar conflictos */
+        .super-enhanced-card, .super-enhanced-card * {{
+            box-sizing: border-box !important;
+        }}
+        
+        /* Tarjetas súper mejoradas - FORZADAS CON !important */
+        .super-enhanced-card {{
+            background: linear-gradient(135deg, white 0%, #fafafa 100%) !important;
+            border-radius: 16px !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
+            overflow: hidden !important;
+            margin: 1.5rem 0 !important;
+            border: 1px solid #e1e5e9 !important;
+            transition: all 0.4s ease !important;
+            position: relative !important;
+            width: 100% !important;
+            display: block !important;
+        }}
+        
+        .super-enhanced-card:hover {{
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15) !important;
+            transform: translateY(-3px) !important;
+        }}
+        
+        .super-enhanced-card::before {{
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 4px !important;
+            background: linear-gradient(90deg, {colors['primary']}, {colors['secondary']}, {colors['accent']}) !important;
+        }}
+        
+        /* Headers específicos FORZADOS */
+        .cases-card .card-header {{
+            background: linear-gradient(135deg, {colors['danger']}, #e74c3c) !important;
+            color: white !important;
+            padding: 20px !important;
+        }}
+        
+        .epizootias-card .card-header {{
+            background: linear-gradient(135deg, {colors['warning']}, #f39c12) !important;
+            color: white !important;
+            padding: 20px !important;
+        }}
+        
+        .card-header {{
+            display: flex !important;
+            align-items: center !important;
+            gap: 15px !important;
+            position: relative !important;
+        }}
+        
+        .card-icon {{
+            font-size: 2.2rem !important;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)) !important;
+        }}
+        
+        .card-title {{
+            font-size: 1.3rem !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.5px !important;
+            margin: 0 !important;
+        }}
+        
+        .card-subtitle {{
+            font-size: 0.9rem !important;
+            opacity: 0.9 !important;
+            font-weight: 500 !important;
+            margin: 2px 0 0 0 !important;
+        }}
+        
+        /* Cuerpo de tarjetas FORZADO */
+        .card-body {{
+            padding: 25px !important;
+        }}
+        
+        .main-metrics-grid {{
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 15px !important;
+            margin-bottom: 20px !important;
+        }}
+        
+        .main-metric {{
+            background: #f8f9fa !important;
+            padding: 15px !important;
+            border-radius: 12px !important;
+            text-align: center !important;
+            border: 2px solid transparent !important;
+            transition: all 0.3s ease !important;
+            position: relative !important;
+            overflow: hidden !important;
+        }}
+        
+        .main-metric:hover {{
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        }}
+        
+        .metric-number {{
+            font-size: 1.8rem !important;
+            font-weight: 800 !important;
+            margin-bottom: 5px !important;
+            line-height: 1 !important;
+        }}
+        
+        .metric-number.primary {{ color: {colors['primary']} !important; }}
+        .metric-number.success {{ color: {colors['success']} !important; }}
+        .metric-number.danger {{ color: {colors['danger']} !important; }}
+        .metric-number.warning {{ color: {colors['warning']} !important; }}
+        .metric-number.info {{ color: {colors['info']} !important; }}
+        
+        .metric-label {{
+            font-size: 0.8rem !important;
+            color: #666 !important;
+            font-weight: 600 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
+        }}
+        
+        /* Información del último evento FORZADA */
+        .last-event-info {{
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff) !important;
+            border-radius: 12px !important;
+            padding: 15px !important;
+            border-left: 4px solid {colors['info']} !important;
+            margin-top: 15px !important;
+        }}
+        
+        .last-event-title {{
+            font-size: 0.9rem !important;
+            font-weight: 700 !important;
+            color: {colors['primary']} !important;
+            margin-bottom: 8px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
+        }}
+        
+        .last-event-details {{
+            font-size: 0.9rem !important;
+            line-height: 1.4 !important;
+        }}
+        
+        .last-event-date {{
+            color: {colors['info']} !important;
+            font-weight: 600 !important;
+        }}
+        
+        .last-event-time {{
+            color: {colors['accent']} !important;
+            font-weight: 500 !important;
+            font-style: italic !important;
+        }}
+        
+        .no-data {{
+            color: #999 !important;
+            font-style: italic !important;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    
 def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered):
     """
     CORREGIDO: Sistema de mapas con logging mejorado.
@@ -182,7 +369,7 @@ def create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epiz
 
 def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
     """
-    NUEVA: Tarjeta de casos que usa métricas de datos filtrados verificados.
+    CORREGIDA: Tarjeta de casos con HTML COMPLETO y bien formateado.
     """
     logger = logging.getLogger(__name__)
     
@@ -229,44 +416,63 @@ def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
         </div>
         """
     
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card cases-card">
-            <div class="card-header">
-                <div class="card-icon">🦠</div>
-                <div class="card-title">CASOS FIEBRE AMARILLA</div>
-                <div class="card-subtitle">{filter_context["title"]}</div>
+    # **HTML COMPLETO Y BIEN FORMATEADO**
+    card_html = f"""
+<div class="super-enhanced-card cases-card">
+    <div class="card-header">
+        <div class="card-icon">🦠</div>
+        <div>
+            <div class="card-title">CASOS FIEBRE AMARILLA</div>
+            <div class="card-subtitle">{filter_context["title"]}</div>
+        </div>
+    </div>
+    <div class="card-body">
+        {filter_indicator}
+        <div class="main-metrics-grid">
+            <div class="main-metric">
+                <div class="metric-number primary">{total_casos}</div>
+                <div class="metric-label">Total Casos</div>
             </div>
-            <div class="card-body">
-                {filter_indicator}
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number primary">{total_casos}</div>
-                        <div class="metric-label">Total Casos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number success">{vivos}</div>
-                        <div class="metric-label">Vivos</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{fallecidos}</div>
-                        <div class="metric-label">Fallecidos</div>
-                    </div>
-                    <div class="main-metric mortality">
-                        <div class="metric-number warning">{letalidad:.1f}%</div>
-                        <div class="metric-label">Mortalidad</div>
-                    </div>
-                </div>
-                {ultimo_info}
+            <div class="main-metric">
+                <div class="metric-number success">{vivos}</div>
+                <div class="metric-label">Vivos</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number danger">{fallecidos}</div>
+                <div class="metric-label">Fallecidos</div>
+            </div>
+            <div class="main-metric mortality">
+                <div class="metric-number warning">{letalidad:.1f}%</div>
+                <div class="metric-label">Mortalidad</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+        {ultimo_info}
+    </div>
+</div>
+    """
+    
+    # **RENDERIZAR CON DEBUGGING**
+    try:
+        st.markdown(card_html, unsafe_allow_html=True)
+        logger.info("✅ Tarjeta de casos renderizada exitosamente")
+    except Exception as e:
+        logger.error(f"❌ Error renderizando tarjeta de casos: {str(e)}")
+        # Fallback usando componentes nativos
+        st.error("Error renderizando tarjeta personalizada, usando fallback:")
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            st.metric("🦠 Casos", total_casos)
+        with col2:
+            st.metric("💚 Vivos", vivos)
+        with col3:
+            st.metric("⚰️ Fallecidos", fallecidos)
+        with col4:
+            st.metric("📊 Letalidad", f"{letalidad:.1f}%")
+
 
 def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
     """
-    NUEVA: Tarjeta de epizootias que usa métricas de datos filtrados verificados.
+    CORREGIDA: Tarjeta de epizootias con HTML COMPLETO y bien formateado.
     """
     logger = logging.getLogger(__name__)
     
@@ -312,37 +518,53 @@ def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
         </div>
         """
     
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card epizootias-card">
-            <div class="card-header">
-                <div class="card-icon">🐒</div>
-                <div class="card-title">EPIZOOTIAS</div>
-                <div class="card-subtitle">{filter_context["title"]}</div>
+    # **HTML COMPLETO Y BIEN FORMATEADO**
+    card_html = f"""
+<div class="super-enhanced-card epizootias-card">
+    <div class="card-header">
+        <div class="card-icon">🐒</div>
+        <div>
+            <div class="card-title">EPIZOOTIAS</div>
+            <div class="card-subtitle">{filter_context["title"]}</div>
+        </div>
+    </div>
+    <div class="card-body">
+        {filter_indicator}
+        <div class="main-metrics-grid">
+            <div class="main-metric">
+                <div class="metric-number warning">{total_epizootias}</div>
+                <div class="metric-label">Total</div>
             </div>
-            <div class="card-body">
-                {filter_indicator}
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number warning">{total_epizootias}</div>
-                        <div class="metric-label">Total</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{positivas}</div>
-                        <div class="metric-label">Positivas</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number info">{en_estudio}</div>
-                        <div class="metric-label">En Estudio</div>
-                    </div>
-                </div>
-                {ultimo_info}
+            <div class="main-metric">
+                <div class="metric-number danger">{positivas}</div>
+                <div class="metric-label">Positivas</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number info">{en_estudio}</div>
+                <div class="metric-label">En Estudio</div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+        {ultimo_info}
+    </div>
+</div>
+    """
+    
+    # **RENDERIZAR CON DEBUGGING**
+    try:
+        st.markdown(card_html, unsafe_allow_html=True)
+        logger.info("✅ Tarjeta de epizootias renderizada exitosamente")
+    except Exception as e:
+        logger.error(f"❌ Error renderizando tarjeta de epizootias: {str(e)}")
+        # Fallback usando componentes nativos
+        st.error("Error renderizando tarjeta personalizada, usando fallback:")
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("🐒 Total", total_epizootias)
+        with col2:
+            st.metric("🔴 Positivas", positivas)
+        with col3:
+            st.metric("🔵 En Estudio", en_estudio)
+        
 def get_filter_context_info(filters):
     """
     Obtiene información del contexto de filtrado para mostrar en tarjetas.
@@ -366,7 +588,32 @@ def get_filter_context_info(filters):
             "suffix": "en Tolima"
         }
 
-# === RESTO DE FUNCIONES EXISTENTES (sin cambios) ===
+def debug_css_rendering():
+    """
+    Función de debugging para verificar si el CSS personalizado funciona.
+    """
+    st.markdown(
+        """
+        <div class="super-enhanced-card cases-card" style="margin: 10px 0;">
+            <div class="card-header">
+                <div class="card-icon">🧪</div>
+                <div>
+                    <div class="card-title">TEST CSS</div>
+                    <div class="card-subtitle">Verificación de rendering</div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="main-metrics-grid">
+                    <div class="main-metric">
+                        <div class="metric-number primary">✅</div>
+                        <div class="metric-label">CSS Funciona</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 def determine_map_level(filters):
     """
@@ -1287,222 +1534,204 @@ def handle_vereda_click_safe(map_data, veredas_data, filters):
         st.warning("⚠️ Error procesando clic en el mapa. Intente usar los filtros del sidebar.")
 
 
-def apply_enhanced_cards_css(colors):
+def apply_enhanced_cards_css_FIXED(colors):
     """
-    CSS súper mejorado para tarjetas hermosas y funcionales.
+    CSS CORREGIDO para tarjetas hermosas y funcionales - SIN CONFLICTOS.
     """
     st.markdown(
         f"""
         <style>
-        /* Título principal sin espaciado excesivo */
-        .maps-title {{
-            color: {colors['primary']};
-            font-size: clamp(1.8rem, 5vw, 2.2rem);
-            font-weight: 700;
-            text-align: center;
-            margin: 0.5rem 0 1rem 0;
-            padding: 1rem;
-            border-radius: 12px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-left: 6px solid {colors['secondary']};
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        /* RESET para evitar conflictos */
+        .super-enhanced-card * {{
+            box-sizing: border-box;
         }}
         
-        /* Tarjetas súper mejoradas */
+        /* Tarjetas súper mejoradas - CORREGIDAS */
         .super-enhanced-card {{
-            background: linear-gradient(135deg, white 0%, #fafafa 100%);
-            border-radius: 16px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-            overflow: hidden;
-            margin-bottom: 1.5rem;
-            border: 1px solid #e1e5e9;
-            transition: all 0.4s ease;
-            position: relative;
+            background: linear-gradient(135deg, white 0%, #fafafa 100%) !important;
+            border-radius: 16px !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
+            overflow: hidden !important;
+            margin-bottom: 1.5rem !important;
+            border: 1px solid #e1e5e9 !important;
+            transition: all 0.4s ease !important;
+            position: relative !important;
+            width: 100% !important;
+            display: block !important;
         }}
         
         .super-enhanced-card:hover {{
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-            transform: translateY(-3px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15) !important;
+            transform: translateY(-3px) !important;
         }}
         
         .super-enhanced-card::before {{
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 4px;
-            background: linear-gradient(90deg, {colors['primary']}, {colors['secondary']}, {colors['accent']});
+            content: '' !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            height: 4px !important;
+            background: linear-gradient(90deg, {colors['primary']}, {colors['secondary']}, {colors['accent']}) !important;
         }}
         
         /* Headers específicos por tipo de tarjeta */
         .cases-card .card-header {{
-            background: linear-gradient(135deg, {colors['danger']}, #e74c3c);
-            color: white;
-            padding: 20px;
+            background: linear-gradient(135deg, {colors['danger']}, #e74c3c) !important;
+            color: white !important;
+            padding: 20px !important;
         }}
         
         .epizootias-card .card-header {{
-            background: linear-gradient(135deg, {colors['warning']}, #f39c12);
-            color: white;
-            padding: 20px;
-        }}
-        
-        .location-card .card-header {{
-            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
-            color: white;
-            padding: 20px;
+            background: linear-gradient(135deg, {colors['warning']}, #f39c12) !important;
+            color: white !important;
+            padding: 20px !important;
         }}
         
         .card-header {{
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            position: relative;
+            display: flex !important;
+            align-items: center !important;
+            gap: 15px !important;
+            position: relative !important;
         }}
         
         .card-icon {{
-            font-size: 2.2rem;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+            font-size: 2.2rem !important;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)) !important;
         }}
         
         .card-title {{
-            font-size: 1.3rem;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            margin: 0;
+            font-size: 1.3rem !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.5px !important;
+            margin: 0 !important;
         }}
         
         .card-subtitle {{
-            font-size: 0.9rem;
-            opacity: 0.9;
-            font-weight: 500;
-            margin: 2px 0 0 0;
+            font-size: 0.9rem !important;
+            opacity: 0.9 !important;
+            font-weight: 500 !important;
+            margin: 2px 0 0 0 !important;
         }}
         
         /* Cuerpo de tarjetas */
         .card-body {{
-            padding: 25px;
+            padding: 25px !important;
         }}
         
         .main-metrics-grid {{
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            margin-bottom: 20px;
+            display: grid !important;
+            grid-template-columns: repeat(2, 1fr) !important;
+            gap: 15px !important;
+            margin-bottom: 20px !important;
         }}
         
         .main-metric {{
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            border: 2px solid transparent;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
+            background: #f8f9fa !important;
+            padding: 15px !important;
+            border-radius: 12px !important;
+            text-align: center !important;
+            border: 2px solid transparent !important;
+            transition: all 0.3s ease !important;
+            position: relative !important;
+            overflow: hidden !important;
         }}
         
         .main-metric:hover {{
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transform: translateY(-2px) !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
         }}
         
         .main-metric.mortality {{
-            border-color: {colors['warning']};
-            background: linear-gradient(135deg, #fff8e1, #ffecb3);
-        }}
-        
-        .main-metric.laboratory {{
-            border-color: {colors['info']};
-            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            border-color: {colors['warning']} !important;
+            background: linear-gradient(135deg, #fff8e1, #ffecb3) !important;
         }}
         
         .metric-number {{
-            font-size: 1.8rem;
-            font-weight: 800;
-            margin-bottom: 5px;
-            line-height: 1;
+            font-size: 1.8rem !important;
+            font-weight: 800 !important;
+            margin-bottom: 5px !important;
+            line-height: 1 !important;
         }}
         
-        .metric-number.primary {{ color: {colors['primary']}; }}
-        .metric-number.success {{ color: {colors['success']}; }}
-        .metric-number.danger {{ color: {colors['danger']}; }}
-        .metric-number.warning {{ color: {colors['warning']}; }}
-        .metric-number.info {{ color: {colors['info']}; }}
+        .metric-number.primary {{ color: {colors['primary']} !important; }}
+        .metric-number.success {{ color: {colors['success']} !important; }}
+        .metric-number.danger {{ color: {colors['danger']} !important; }}
+        .metric-number.warning {{ color: {colors['warning']} !important; }}
+        .metric-number.info {{ color: {colors['info']} !important; }}
         
         .metric-label {{
-            font-size: 0.8rem;
-            color: #666;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
+            font-size: 0.8rem !important;
+            color: #666 !important;
+            font-weight: 600 !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.3px !important;
         }}
         
         /* Información del último evento */
         .last-event-info {{
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
-            border-radius: 12px;
-            padding: 15px;
-            border-left: 4px solid {colors['info']};
-            margin-top: 15px;
+            background: linear-gradient(135deg, #f0f8ff, #e6f3ff) !important;
+            border-radius: 12px !important;
+            padding: 15px !important;
+            border-left: 4px solid {colors['info']} !important;
+            margin-top: 15px !important;
         }}
         
         .last-event-title {{
-            font-size: 0.9rem;
-            font-weight: 700;
-            color: {colors['primary']};
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            font-size: 0.9rem !important;
+            font-weight: 700 !important;
+            color: {colors['primary']} !important;
+            margin-bottom: 8px !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.5px !important;
         }}
         
         .last-event-details {{
-            font-size: 0.9rem;
-            line-height: 1.4;
+            font-size: 0.9rem !important;
+            line-height: 1.4 !important;
         }}
         
         .last-event-date {{
-            color: {colors['info']};
-            font-weight: 600;
+            color: {colors['info']} !important;
+            font-weight: 600 !important;
         }}
         
         .last-event-time {{
-            color: {colors['accent']};
-            font-weight: 500;
-            font-style: italic;
+            color: {colors['accent']} !important;
+            font-weight: 500 !important;
+            font-style: italic !important;
         }}
         
         .no-data {{
-            color: #999;
-            font-style: italic;
+            color: #999 !important;
+            font-style: italic !important;
         }}
         
         /* Responsive design */
         @media (max-width: 768px) {{
             .main-metrics-grid {{
-                grid-template-columns: 1fr;
-                gap: 10px;
+                grid-template-columns: 1fr !important;
+                gap: 10px !important;
             }}
             
             .card-header {{
-                padding: 15px;
+                padding: 15px !important;
             }}
             
             .card-body {{
-                padding: 20px;
+                padding: 20px !important;
             }}
             
             .card-icon {{
-                font-size: 1.8rem;
+                font-size: 1.8rem !important;
             }}
             
             .card-title {{
-                font-size: 1.1rem;
+                font-size: 1.1rem !important;
             }}
             
             .metric-number {{
-                font-size: 1.5rem;
+                font-size: 1.5rem !important;
             }}
         }}
         </style>

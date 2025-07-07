@@ -55,6 +55,69 @@ def get_responsive_css():
     """
     return """
     <style>
+    /* =============== CORRECCIÓN SCROLL INFINITO =============== */
+    
+    /* Contenedor principal con altura limitada */
+    .main .block-container {
+        max-height: calc(100vh - 100px) !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+    }
+    
+    /* Limitar altura de elementos que pueden crecer */
+    .stDataFrame > div {
+        max-height: 400px !important;
+        overflow-y: auto !important;
+    }
+    
+    .element-container {
+        max-height: none !important; /* Permitir que los contenedores se ajusten */
+    }
+    
+    /* =============== BASE RESPONSIVE STYLES (SIN CAMBIOS) =============== */
+    
+    /* Variables CSS para consistencia */
+    :root {
+        --primary-color: #7D0F2B;
+        --secondary-color: #F2A900;
+        --accent-color: #5A4214;
+        --success-color: #509E2F;
+        --warning-color: #F7941D;
+        --danger-color: #E51937;
+        --info-color: #4682B4;
+        --light-color: #F9F6E9;
+        --dark-color: #2C2C2C;
+        
+        /* Responsive spacing */
+        --spacing-xs: clamp(0.25rem, 1vw, 0.5rem);
+        --spacing-sm: clamp(0.5rem, 2vw, 1rem);
+        --spacing-md: clamp(1rem, 3vw, 1.5rem);
+        --spacing-lg: clamp(1.5rem, 4vw, 2rem);
+        --spacing-xl: clamp(2rem, 5vw, 3rem);
+        
+        /* Responsive font sizes */
+        --font-xs: clamp(0.7rem, 2vw, 0.8rem);
+        --font-sm: clamp(0.8rem, 2vw, 0.9rem);
+        --font-md: clamp(0.9rem, 2.5vw, 1rem);
+        --font-lg: clamp(1rem, 3vw, 1.2rem);
+        --font-xl: clamp(1.2rem, 4vw, 1.5rem);
+        --font-xxl: clamp(1.5rem, 5vw, 2rem);
+        --font-title: clamp(1.8rem, 6vw, 2.5rem);
+    }
+    
+    /* =============== CHARTS RESPONSIVE =============== */
+    
+    /* Plotly charts CON ALTURA LIMITADA */
+    .js-plotly-plot {
+        width: 100% !important;
+        max-height: 500px !important;
+        overflow: hidden !important;
+    }
+    
+    /* El resto del CSS permanece igual... */
+    /* (mantén todo lo demás de la función original sin cambios) */
+    
+    </style>
     /* =============== BASE RESPONSIVE STYLES =============== */
     
     /* Variables CSS para consistencia */

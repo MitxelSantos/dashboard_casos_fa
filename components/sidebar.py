@@ -20,10 +20,9 @@ DATA_DIR = ROOT_DIR / "data"
 ASSETS_DIR = ROOT_DIR / "assets"
 IMAGES_DIR = ASSETS_DIR / "images"
 
-
 def create_sidebar():
     """
-    Crea la barra lateral del dashboard minimalista.
+    Crea la barra lateral del dashboard.
     """
     with st.sidebar:
         # Logo de la Gobernación
@@ -35,21 +34,16 @@ def create_sidebar():
 
 def display_logo():
     """
-    Muestra el logo de manera responsive con búsqueda corregida.
+    Muestra el logo de manera responsive.
     """
     logo_displayed = False
 
     # Lista de rutas posibles para el logo
     possible_logo_paths = [
-        ROOT_DIR / "Gobernacion.png",
-        ROOT_DIR / "gobernacion.png",
-        ROOT_DIR / "logo.png",
         DATA_DIR / "Gobernacion.png",
         DATA_DIR / "gobernacion.png",
         DATA_DIR / "logo.png",
         IMAGES_DIR / "Gobernacion.png",
-        IMAGES_DIR / "logo_gobernacion.png",
-        IMAGES_DIR / "gobernacion.png",
     ]
 
     # Buscar logo en las rutas definidas
@@ -126,7 +120,6 @@ def create_logo_placeholder():
 def add_copyright():
     """
     Agrega copyright minimalista al final de la sidebar.
-    MOVIDO AL FINAL para que aparezca después de los filtros.
     """
     st.sidebar.markdown("---")
     st.sidebar.markdown(

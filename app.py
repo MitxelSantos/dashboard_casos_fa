@@ -351,7 +351,7 @@ def create_empty_data_structure():
     }
 
 def configure_page():
-    """Configura la página con espaciado optimizado."""
+    """Configura la página con espaciado optimizado y SIN scroll infinito."""
     st.set_page_config(
         page_title=DASHBOARD_CONFIG["page_title"],
         page_icon=DASHBOARD_CONFIG["page_icon"],
@@ -359,7 +359,7 @@ def configure_page():
         initial_sidebar_state=DASHBOARD_CONFIG["initial_sidebar_state"],
     )
 
-    # CSS optimizado
+    # CSS optimizado - CORREGIDO para evitar scroll infinito
     st.markdown(
         f"""
         <style>
@@ -372,12 +372,40 @@ def configure_page():
             --info-color: {COLORS['info']};
         }}
         
+        /* CORRECCIÓN CRÍTICA: Prevenir scroll infinito */
+        html, body, [data-testid="stApp"] {{
+            height: 100vh !important;
+            max-height: 100vh !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+        }}
+        
         .block-container {{
             padding-top: 0.5rem !important;
             padding-bottom: 1rem !important;
             padding-left: 1rem !important;
             padding-right: 1rem !important;
             max-width: 100% !important;
+            max-height: calc(100vh - 2rem) !important;
+            overflow-y: auto !important;
+        }}
+        
+        /* Limitar altura de gráficos */
+        .js-plotly-plot {{
+            max-height: 500px !important;
+            overflow: hidden !important;
+        }}
+        
+        /* Limitar altura de dataframes */
+        .stDataFrame {{
+            max-height: 400px !important;
+            overflow-y: auto !important;
+        }}
+        
+        /* Asegurar que las tabs no crezcan infinitamente */
+        .stTabs [data-baseweb="tab-panel"] {{
+            max-height: calc(100vh - 200px) !important;
+            overflow-y: auto !important;
         }}
         
         .main-title {{
