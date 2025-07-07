@@ -83,7 +83,7 @@ def show(data_filtered, filters, colors):
     
     with col_tarjetas:
         # **PASAR DATOS FILTRADOS A LAS TARJETAS**
-        create_beautiful_information_cards(casos, epizootias, filters, colors)
+        create_beautiful_information_cards_FIXED(casos, epizootias, filters, colors)
 
 def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered):
     """
@@ -840,27 +840,36 @@ def create_vereda_detail_view(casos, epizootias, filters, colors):
         - Use los botones de navegación para volver a la vista municipal o departamental
         """)
 
-def create_beautiful_information_cards(casos, epizootias, filters, colors):
+def create_beautiful_information_cards_FIXED(casos_filtrados, epizootias_filtradas, filters, colors):
     """
-    CORREGIDO: Tarjetas que usan datos filtrados en lugar de datos totales.
+    CORREGIDO: Tarjetas que GARANTIZAN uso de datos filtrados.
+    Reemplazar la función original por esta versión.
     """
+    from utils.data_processor import calculate_basic_metrics, log_filter_application, verify_filtered_data_usage
     
-    # USAR DATOS FILTRADOS para calcular métricas
-    metrics = calculate_basic_metrics(casos, epizootias)
+    # VERIFICACIÓN: Asegurar que se usan datos filtrados
+    verify_filtered_data_usage(casos_filtrados, "create_beautiful_information_cards - casos")
+    verify_filtered_data_usage(epizootias_filtradas, "create_beautiful_information_cards - epizootias")
+    
+    # CALCULAR MÉTRICAS CON DATOS FILTRADOS GARANTIZADOS
+    metrics = calculate_basic_metrics(casos_filtrados, epizootias_filtradas)
+    
+    # Log para debugging del problema reportado
+    logging.info(f"🏷️ Tarjetas informativas: {metrics['total_casos']} casos, {metrics['total_epizootias']} epizootias de datos filtrados")
     
     # **TARJETA DE CASOS MEJORADA** con datos filtrados
-    create_enhanced_cases_card_filtered(metrics, filters, colors)
+    create_enhanced_cases_card_filtered_FIXED(metrics, filters, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
     # **TARJETA DE EPIZOOTIAS MEJORADA** con datos filtrados
-    create_enhanced_epizootias_card_filtered(metrics, filters, colors)
+    create_enhanced_epizootias_card_filtered_FIXED(metrics, filters, colors)
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-def create_enhanced_cases_card_filtered(metrics, filters, colors):
+def create_enhanced_cases_card_filtered_FIXED(metrics, filters, colors):
     """
-    NUEVA: Tarjeta de casos con información de filtrado aplicado.
+    CORREGIDO: Tarjeta de casos que especifica claramente el uso de datos filtrados.
     """
     total_casos = metrics["total_casos"]
     vivos = metrics["vivos"]
@@ -869,7 +878,7 @@ def create_enhanced_cases_card_filtered(metrics, filters, colors):
     ultimo_caso = metrics["ultimo_caso"]
     
     # Determinar contexto de filtrado
-    filter_context = get_filter_context_info(filters)
+    filter_context = get_filter_context_info_FIXED(filters)
     
     # Información del último caso
     if ultimo_caso["existe"]:
@@ -893,6 +902,15 @@ def create_enhanced_cases_card_filtered(metrics, filters, colors):
         </div>
         """
     
+    # INDICADOR CLARO DE FILTRADO
+    filter_indicator = ""
+    if len(filters.get("active_filters", [])) > 0:
+        filter_indicator = f"""
+        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0;">
+            🎯 <strong>Datos filtrados:</strong> {filter_context["title"]}
+        </div>
+        """
+    
     st.markdown(
         f"""
         <div class="super-enhanced-card cases-card">
@@ -902,6 +920,7 @@ def create_enhanced_cases_card_filtered(metrics, filters, colors):
                 <div class="card-subtitle">{filter_context["title"]}</div>
             </div>
             <div class="card-body">
+                {filter_indicator}
                 <div class="main-metrics-grid">
                     <div class="main-metric">
                         <div class="metric-number primary">{total_casos}</div>
@@ -927,9 +946,9 @@ def create_enhanced_cases_card_filtered(metrics, filters, colors):
         unsafe_allow_html=True,
     )
 
-def create_enhanced_epizootias_card_filtered(metrics, filters, colors):
+def create_enhanced_epizootias_card_filtered_FIXED(metrics, filters, colors):
     """
-    NUEVA: Tarjeta de epizootias con información de filtrado aplicado.
+    CORREGIDO: Tarjeta de epizootias que especifica claramente el uso de datos filtrados.
     """
     total_epizootias = metrics["total_epizootias"]
     positivas = metrics["epizootias_positivas"]
@@ -937,7 +956,7 @@ def create_enhanced_epizootias_card_filtered(metrics, filters, colors):
     ultima_epizootia = metrics["ultima_epizootia_positiva"]
     
     # Determinar contexto de filtrado
-    filter_context = get_filter_context_info(filters)
+    filter_context = get_filter_context_info_FIXED(filters)
     
     # Información de la última epizootia positiva
     if ultima_epizootia["existe"]:
@@ -961,6 +980,15 @@ def create_enhanced_epizootias_card_filtered(metrics, filters, colors):
         </div>
         """
     
+    # INDICADOR CLARO DE FILTRADO
+    filter_indicator = ""
+    if len(filters.get("active_filters", [])) > 0:
+        filter_indicator = f"""
+        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00;">
+            🎯 <strong>Datos filtrados:</strong> {filter_context["title"]}
+        </div>
+        """
+    
     st.markdown(
         f"""
         <div class="super-enhanced-card epizootias-card">
@@ -970,6 +998,7 @@ def create_enhanced_epizootias_card_filtered(metrics, filters, colors):
                 <div class="card-subtitle">{filter_context["title"]}</div>
             </div>
             <div class="card-body">
+                {filter_indicator}
                 <div class="main-metrics-grid">
                     <div class="main-metric">
                         <div class="metric-number warning">{total_epizootias}</div>
@@ -989,11 +1018,11 @@ def create_enhanced_epizootias_card_filtered(metrics, filters, colors):
         </div>
         """,
         unsafe_allow_html=True,
-    )  
+    )
 
-def get_filter_context_info(filters):
+def get_filter_context_info_FIXED(filters):
     """
-    NUEVA: Obtiene información del contexto de filtrado para mostrar en tarjetas.
+    CORREGIDO: Obtiene información del contexto de filtrado para mostrar en tarjetas.
     """
     municipio = filters.get("municipio_display", "Todos")
     vereda = filters.get("vereda_display", "Todas")
@@ -1079,69 +1108,6 @@ def create_enhanced_cases_card(metrics, colors):
         """,
         unsafe_allow_html=True,
     )
-
-
-def create_enhanced_epizootias_card(metrics, colors):
-    """
-    NUEVA: Tarjeta súper mejorada para epizootias con positivas + en estudio.
-    """
-    total_epizootias = metrics["total_epizootias"]
-    positivas = metrics["epizootias_positivas"]
-    en_estudio = metrics["epizootias_en_estudio"]
-    ultima_epizootia = metrics["ultima_epizootia_positiva"]
-    
-    # Información de la última epizootia positiva
-    if ultima_epizootia["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo</div>
-            <div class="last-event-details">
-                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
-            </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin epizootias positivas</span>
-            </div>
-        </div>
-        """
-    
-    st.markdown(
-        f"""
-        <div class="super-enhanced-card epizootias-card">
-            <div class="card-header">
-                <div class="card-icon">🐒</div>
-                <div class="card-title">EPIZOOTIAS</div>
-                <div class="card-subtitle">Vigilancia en fauna silvestre</div>
-            </div>
-            <div class="card-body">
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number warning">{total_epizootias}</div>
-                        <div class="metric-label">Total</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number danger">{positivas}</div>
-                        <div class="metric-label">Positivas</div>
-                    </div>
-                    <div class="main-metric">
-                        <div class="metric-number info">{en_estudio}</div>
-                        <div class="metric-label">En Estudio</div>
-                    </div>
-                </div>
-                {ultimo_info}
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )  
-
 
 def apply_enhanced_cards_css(colors):
     """

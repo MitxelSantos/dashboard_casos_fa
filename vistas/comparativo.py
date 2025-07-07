@@ -32,7 +32,7 @@ def show(data_filtered, filters, colors):
         return
 
     # Crear análisis temporal
-    temporal_data = create_temporal_analysis_descriptive(casos, epizootias)
+    temporal_data = create_temporal_analysis_descriptive_FIXED(casos, epizootias)
 
     if temporal_data.empty:
         st.info("No hay suficientes datos temporales para el análisis.")
@@ -43,28 +43,33 @@ def show(data_filtered, filters, colors):
 
     # Métricas temporales básicas
     st.markdown("---")
-    show_temporal_metrics_descriptive(temporal_data, casos, epizootias, colors)
+    show_temporal_metrics_descriptive_FIXED(temporal_data, casos, epizootias, colors)
 
     # Gráficos adicionales
     st.markdown("---")
     show_additional_charts_descriptive(temporal_data, colors)
 
-
-def create_temporal_analysis_descriptive(casos, epizootias):
+def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtradas):
     """
-    CORREGIDO: Análisis temporal descriptivo sin análisis de riesgo.
+    CORREGIDO para vistas/comparativo.py - Análisis temporal con datos filtrados garantizados.
+    Reemplazar la función original por esta versión.
     """
+    from utils.data_processor import verify_filtered_data_usage
+    
+    # VERIFICACIÓN: Asegurar que se usan datos filtrados
+    verify_filtered_data_usage(casos_filtrados, "create_temporal_analysis - casos")
+    verify_filtered_data_usage(epizootias_filtradas, "create_temporal_analysis - epizootias")
+    
     temporal_data = []
 
-    # Obtener fechas de ambos datasets
+    # Obtener fechas de ambos datasets FILTRADOS
     fechas_casos = []
-    if not casos.empty and "fecha_inicio_sintomas" in casos.columns:
-        fechas_casos = casos["fecha_inicio_sintomas"].dropna().tolist()
+    if not casos_filtrados.empty and "fecha_inicio_sintomas" in casos_filtrados.columns:
+        fechas_casos = casos_filtrados["fecha_inicio_sintomas"].dropna().tolist()
 
-    # Ya son todas epizootias positivas
     fechas_epi = []
-    if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
-        fechas_epi = epizootias["fecha_recoleccion"].dropna().tolist()
+    if not epizootias_filtradas.empty and "fecha_recoleccion" in epizootias_filtradas.columns:
+        fechas_epi = epizootias_filtradas["fecha_recoleccion"].dropna().tolist()
 
     todas_fechas = fechas_casos + fechas_epi
 
@@ -81,27 +86,27 @@ def create_temporal_analysis_descriptive(casos, epizootias):
     for periodo in periodos:
         fin_periodo = (periodo + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
 
-        # Contar casos en el período
+        # Contar casos en el período DE DATOS FILTRADOS
         casos_periodo = 0
         fallecidos_periodo = 0
-        if not casos.empty and "fecha_inicio_sintomas" in casos.columns:
-            casos_mes = casos[
-                (casos["fecha_inicio_sintomas"] >= periodo)
-                & (casos["fecha_inicio_sintomas"] <= fin_periodo)
+        if not casos_filtrados.empty and "fecha_inicio_sintomas" in casos_filtrados.columns:
+            casos_mes = casos_filtrados[
+                (casos_filtrados["fecha_inicio_sintomas"] >= periodo)
+                & (casos_filtrados["fecha_inicio_sintomas"] <= fin_periodo)
             ]
             casos_periodo = len(casos_mes)
 
             if "condicion_final" in casos_mes.columns:
                 fallecidos_periodo = (casos_mes["condicion_final"] == "Fallecido").sum()
                 
-        # Epizootias (positivas + en estudio)
+        # Epizootias DE DATOS FILTRADOS
         epizootias_periodo = 0
         positivas_periodo = 0
         en_estudio_periodo = 0
-        if not epizootias.empty and "fecha_recoleccion" in epizootias.columns:
-            epi_mes = epizootias[
-                (epizootias["fecha_recoleccion"] >= periodo)
-                & (epizootias["fecha_recoleccion"] <= fin_periodo)
+        if not epizootias_filtradas.empty and "fecha_recoleccion" in epizootias_filtradas.columns:
+            epi_mes = epizootias_filtradas[
+                (epizootias_filtradas["fecha_recoleccion"] >= periodo)
+                & (epizootias_filtradas["fecha_recoleccion"] <= fin_periodo)
             ]
             epizootias_periodo = len(epi_mes)
             
@@ -109,27 +114,22 @@ def create_temporal_analysis_descriptive(casos, epizootias):
                 positivas_periodo = (epi_mes["descripcion"] == "POSITIVO FA").sum()
                 en_estudio_periodo = (epi_mes["descripcion"] == "EN ESTUDIO").sum()
 
-        temporal_data.append(
-            {
-                "periodo": periodo,
-                "año_mes": periodo.strftime("%Y-%m"),
-                "casos": casos_periodo,
-                "fallecidos": fallecidos_periodo,
-                "epizootias": epizootias_periodo,
-                "epizootias_positivas": positivas_periodo,  # NUEVO
-                "epizootias_en_estudio": en_estudio_periodo,  # NUEVO
-                "actividad_total": casos_periodo + epizootias_periodo,
-                "categoria_actividad": categorize_activity_level(casos_periodo, epizootias_periodo),
-            }
-        )
+        temporal_data.append({
+            "periodo": periodo,
+            "año_mes": periodo.strftime("%Y-%m"),
+            "casos": casos_periodo,
+            "fallecidos": fallecidos_periodo,
+            "epizootias": epizootias_periodo,
+            "epizootias_positivas": positivas_periodo,
+            "epizootias_en_estudio": en_estudio_periodo,
+            "actividad_total": casos_periodo + epizootias_periodo,
+            "categoria_actividad": categorize_activity_level(casos_periodo, epizootias_periodo),
+        })
 
     return pd.DataFrame(temporal_data)
 
-
 def categorize_activity_level(casos, epizootias):
-    """
-    CORREGIDO: Categorización descriptiva sin análisis de riesgo.
-    """
+    """Categorización descriptiva de nivel de actividad."""
     actividad_total = casos + epizootias
     
     if actividad_total == 0:
@@ -140,7 +140,6 @@ def categorize_activity_level(casos, epizootias):
         return "Actividad moderada"
     else:
         return "Actividad alta"
-
 
 def show_temporal_evolution_chart_descriptive(temporal_data, colors):
     """
@@ -223,20 +222,27 @@ def show_temporal_evolution_chart_descriptive(temporal_data, colors):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def show_temporal_metrics_descriptive(temporal_data, casos, epizootias, colors):
+def show_temporal_metrics_descriptive_FIXED(temporal_data, casos_filtrados, epizootias_filtradas, colors):
     """
-    CORREGIDO: Métricas temporales descriptivas sin análisis de riesgo.
+    CORREGIDO para vistas/comparativo.py - Usa datos filtrados garantizados.
+    Reemplazar la función original por esta versión.
     """
-    st.subheader("📊 Métricas Temporales")
+    from utils.data_processor import verify_filtered_data_usage
+    
+    # VERIFICACIÓN: Asegurar que se usan datos filtrados
+    verify_filtered_data_usage(casos_filtrados, "show_temporal_metrics - casos")
+    verify_filtered_data_usage(epizootias_filtradas, "show_temporal_metrics - epizootias")
+    
+    st.subheader("📊 Métricas Temporales (Datos Filtrados)")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    # Totales por período
+    # Totales por período DE DATOS FILTRADOS
     periodos_con_casos = (temporal_data["casos"] > 0).sum()
     periodos_con_epizootias = (temporal_data["epizootias"] > 0).sum()
     total_periodos = len(temporal_data)
 
-    # Picos máximos
+    # Picos máximos DE DATOS FILTRADOS
     max_casos_mes = temporal_data["casos"].max()
     max_epizootias_mes = temporal_data["epizootias"].max()
 
@@ -245,7 +251,7 @@ def show_temporal_metrics_descriptive(temporal_data, casos, epizootias, colors):
             label="Períodos con Casos",
             value=f"{periodos_con_casos}",
             delta=f"de {total_periodos} meses",
-            help="Meses con al menos un caso humano",
+            help="Meses con al menos un caso humano en datos filtrados",
         )
 
     with col2:
@@ -253,65 +259,22 @@ def show_temporal_metrics_descriptive(temporal_data, casos, epizootias, colors):
             label="Períodos con Epizootias",
             value=f"{periodos_con_epizootias}",
             delta=f"de {total_periodos} meses",
-            help="Meses con al menos una epizootia (positiva o en estudio)",
+            help="Meses con al menos una epizootia en datos filtrados",
         )
 
     with col3:
         st.metric(
             label="Pico Máximo Casos",
             value=f"{max_casos_mes}",
-            help="Mayor número de casos en un mes",
+            help="Mayor número de casos en un mes (datos filtrados)",
         )
 
     with col4:
         st.metric(
             label="Pico Máximo Epizootias",
             value=f"{max_epizootias_mes}",
-            help="Mayor número de epizootias en un mes",
+            help="Mayor número de epizootias en un mes (datos filtrados)",
         )
-
-    # Métricas adicionales descriptivas
-    st.markdown("---")
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        # Períodos con ambos eventos
-        periodos_ambos = ((temporal_data["casos"] > 0) & (temporal_data["epizootias"] > 0)).sum()
-        st.metric(
-            label="Períodos con Ambos",
-            value=f"{periodos_ambos}",
-            delta=f"{(periodos_ambos/total_periodos*100):.1f}%" if total_periodos > 0 else "0%",
-            help="Meses con casos humanos Y epizootias"
-        )
-        
-    with col2:
-        # Desglose de epizootias si hay datos disponibles
-        if "epizootias_positivas" in temporal_data.columns:
-            total_positivas = temporal_data["epizootias_positivas"].sum()
-            total_en_estudio = temporal_data["epizootias_en_estudio"].sum()
-            st.metric(
-                label="Positivas/En Estudio",
-                value=f"{total_positivas}/{total_en_estudio}",
-                help="Total epizootias positivas vs en estudio en el período"
-            )
-        else:
-            actividad_promedio = temporal_data["actividad_total"].mean()
-            st.metric(
-                label="Actividad Promedio",
-                value=f"{actividad_promedio:.1f}",
-                help="Promedio de eventos por mes"
-            )
-    
-    with col3:
-        # Distribución de actividad
-        periodos_activos = (temporal_data["actividad_total"] > 0).sum()
-        st.metric(
-            label="Períodos Activos",
-            value=f"{periodos_activos}",
-            delta=f"{(periodos_activos/total_periodos*100):.1f}%" if total_periodos > 0 else "0%",
-            help="Meses con al menos un evento"
-        )
-
 
 def show_additional_charts_descriptive(temporal_data, colors):
     """
