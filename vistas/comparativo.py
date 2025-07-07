@@ -1,9 +1,10 @@
 """
 Vista de seguimiento temporal CORREGIDA del dashboard de Fiebre Amarilla.
-CORRECCIONES:
-- Eliminado completamente el análisis de riesgo
-- Enfoque en información descriptiva y temporal
-- Sin términos alarmantes
+CORRECCIÓN CRÍTICA:
+- TODAS las funciones garantizan uso de datos filtrados recibidos
+- Verificación explícita en cada función de análisis temporal
+- Eliminación completa de accesos a datos originales
+- Logging detallado para debugging de filtros temporales
 """
 
 import streamlit as st
@@ -12,66 +13,101 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import logging
 
+# Configurar logging
+logger = logging.getLogger(__name__)
 
 def show(data_filtered, filters, colors):
     """
-    Muestra la vista de seguimiento temporal SIN análisis de riesgo.
+    Vista de seguimiento temporal CORREGIDA - GARANTIZA USO DE DATOS FILTRADOS.
 
     Args:
-        data_filtered (dict): Datos filtrados
-        filters (dict): Filtros aplicados
+        data_filtered (dict): DATOS YA FILTRADOS por el sistema principal
+        filters (dict): Filtros aplicados (para información)
         colors (dict): Colores institucionales
     """
-
-    casos = data_filtered["casos"]
-    epizootias = data_filtered["epizootias"]  # Ya solo son positivas
-
-    if casos.empty and epizootias.empty:
-        st.warning("No hay datos disponibles para el seguimiento temporal.")
+    logger.info("📈 INICIANDO VISTA TEMPORAL CON DATOS FILTRADOS")
+    
+    # **VERIFICACIÓN CRÍTICA INICIAL**
+    casos_filtrados = data_filtered["casos"]
+    epizootias_filtradas = data_filtered["epizootias"]  # Ya solo son positivas + en estudio
+    
+    # **LOG DE VERIFICACIÓN**
+    logger.info(f"📈 Vista temporal recibió: {len(casos_filtrados)} casos filtrados, {len(epizootias_filtradas)} epizootias filtradas")
+    
+    # **VERIFICAR QUE SON DATAFRAMES VÁLIDOS**
+    if not isinstance(casos_filtrados, pd.DataFrame):
+        logger.error(f"❌ casos_filtrados no es DataFrame: {type(casos_filtrados)}")
+        st.error("Error: datos de casos no válidos")
+        return
+    
+    if not isinstance(epizootias_filtradas, pd.DataFrame):
+        logger.error(f"❌ epizootias_filtradas no es DataFrame: {type(epizootias_filtradas)}")
+        st.error("Error: datos de epizootias no válidos")
         return
 
-    # Crear análisis temporal
-    temporal_data = create_temporal_analysis_descriptive_FIXED(casos, epizootias)
+    # **MOSTRAR INFO DE CONTEXTO DE FILTRADO**
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        st.info(f"📈 Análisis temporal de datos filtrados: {' • '.join(active_filters[:2])}")
+        logger.info(f"📈 Mostrando análisis temporal con filtros: {active_filters}")
+    else:
+        st.info("📈 Análisis temporal de datos completos del Tolima")
+        logger.info("📈 Mostrando análisis temporal sin filtros (datos completos)")
+
+    if casos_filtrados.empty and epizootias_filtradas.empty:
+        st.warning("No hay datos disponibles para el seguimiento temporal con los filtros aplicados.")
+        return
+
+    # **CREAR ANÁLISIS TEMPORAL CON DATOS FILTRADOS VERIFICADOS**
+    temporal_data = create_temporal_analysis_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas)
 
     if temporal_data.empty:
-        st.info("No hay suficientes datos temporales para el análisis.")
+        st.info("No hay suficientes datos temporales para el análisis con los filtros aplicados.")
         return
 
-    # Gráfico temporal principal
-    show_temporal_evolution_chart_descriptive(temporal_data, colors)
+    # **SECCIÓN 1: Gráfico temporal principal con datos filtrados**
+    show_temporal_evolution_chart_VERIFIED(temporal_data, colors, filters)
 
-    # Métricas temporales básicas
+    # **SECCIÓN 2: Métricas temporales básicas con datos filtrados**
     st.markdown("---")
-    show_temporal_metrics_descriptive_FIXED(temporal_data, casos, epizootias, colors)
+    show_temporal_metrics_GUARANTEED_FILTERED(temporal_data, casos_filtrados, epizootias_filtradas, colors, filters)
 
-    # Gráficos adicionales
+    # **SECCIÓN 3: Gráficos adicionales con datos filtrados**
     st.markdown("---")
-    show_additional_charts_descriptive(temporal_data, colors)
+    show_additional_charts_VERIFIED(temporal_data, colors, filters)
 
-def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtradas):
+def create_temporal_analysis_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas):
     """
-    CORREGIDO para vistas/comparativo.py - Análisis temporal con datos filtrados garantizados.
-    Reemplazar la función original por esta versión.
+    CORREGIDO: Análisis temporal que GARANTIZA uso de datos filtrados.
+    
+    Args:
+        casos_filtrados (pd.DataFrame): Casos filtrados por el sistema principal
+        epizootias_filtradas (pd.DataFrame): Epizootias filtradas por el sistema principal
+        
+    Returns:
+        pd.DataFrame: Análisis temporal de los datos filtrados
     """
-    # IMPORTACIÓN CORREGIDA - solo importar funciones que existen
+    logger.info(f"🔄 Creando análisis temporal con datos filtrados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
+    
+    # **VERIFICACIÓN EXPLÍCITA**
     from utils.data_processor import verify_filtered_data_usage, debug_data_flow
     
-    # VERIFICACIÓN: Asegurar que se usan datos filtrados
-    verify_filtered_data_usage(casos_filtrados, "create_temporal_analysis - casos")
-    verify_filtered_data_usage(epizootias_filtradas, "create_temporal_analysis - epizootias")
+    verify_filtered_data_usage(casos_filtrados, "create_temporal_analysis - casos_filtrados")
+    verify_filtered_data_usage(epizootias_filtradas, "create_temporal_analysis - epizootias_filtradas")
     
     # DEBUG: Registrar el uso de datos filtrados
     debug_data_flow(
         {"casos": casos_filtrados, "epizootias": epizootias_filtradas},
         {"casos": casos_filtrados, "epizootias": epizootias_filtradas},
         {},
-        "analisis_temporal"
+        "ANALISIS_TEMPORAL_FILTRADO"
     )
     
     temporal_data = []
 
-    # Obtener fechas de ambos datasets FILTRADOS
+    # **OBTENER FECHAS DE AMBOS DATASETS FILTRADOS ÚNICAMENTE**
     fechas_casos = []
     if not casos_filtrados.empty and "fecha_inicio_sintomas" in casos_filtrados.columns:
         fechas_casos = casos_filtrados["fecha_inicio_sintomas"].dropna().tolist()
@@ -83,7 +119,10 @@ def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtr
     todas_fechas = fechas_casos + fechas_epi
 
     if not todas_fechas:
+        logger.warning("⚠️ No hay fechas válidas en los datos filtrados para análisis temporal")
         return pd.DataFrame()
+
+    logger.info(f"📅 Rango temporal en datos filtrados: {min(todas_fechas).strftime('%Y-%m-%d')} a {max(todas_fechas).strftime('%Y-%m-%d')}")
 
     # Crear rango mensual desde la primera fecha hasta la última
     fecha_min = min(todas_fechas).replace(day=1)
@@ -91,11 +130,12 @@ def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtr
 
     # Generar períodos mensuales
     periodos = pd.date_range(start=fecha_min, end=fecha_max, freq="MS")
+    logger.info(f"📊 Generando análisis para {len(periodos)} períodos mensuales")
 
     for periodo in periodos:
         fin_periodo = (periodo + pd.DateOffset(months=1)) - pd.DateOffset(days=1)
 
-        # Contar casos en el período DE DATOS FILTRADOS
+        # **CONTAR CASOS EN EL PERÍODO DE DATOS FILTRADOS ÚNICAMENTE**
         casos_periodo = 0
         fallecidos_periodo = 0
         if not casos_filtrados.empty and "fecha_inicio_sintomas" in casos_filtrados.columns:
@@ -108,7 +148,7 @@ def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtr
             if "condicion_final" in casos_mes.columns:
                 fallecidos_periodo = (casos_mes["condicion_final"] == "Fallecido").sum()
                 
-        # Epizootias DE DATOS FILTRADOS
+        # **EPIZOOTIAS DE DATOS FILTRADOS ÚNICAMENTE**
         epizootias_periodo = 0
         positivas_periodo = 0
         en_estudio_periodo = 0
@@ -135,6 +175,7 @@ def create_temporal_analysis_descriptive_FIXED(casos_filtrados, epizootias_filtr
             "categoria_actividad": categorize_activity_level(casos_periodo, epizootias_periodo),
         })
 
+    logger.info(f"✅ Análisis temporal creado: {len(temporal_data)} períodos analizados")
     return pd.DataFrame(temporal_data)
 
 def categorize_activity_level(casos, epizootias):
@@ -150,16 +191,27 @@ def categorize_activity_level(casos, epizootias):
     else:
         return "Actividad alta"
 
-def show_temporal_evolution_chart_descriptive(temporal_data, colors):
+def show_temporal_evolution_chart_VERIFIED(temporal_data, colors, filters):
     """
-    CORREGIDO: Gráfico de evolución temporal descriptivo.
+    CORREGIDO: Gráfico de evolución temporal que especifica datos filtrados.
     """
-    st.subheader("📊 Evolución Temporal: Casos vs Epizootias")
+    logger.info(f"📊 Creando gráfico temporal con {len(temporal_data)} períodos")
+    
+    # **TÍTULO CONTEXTUAL SEGÚN FILTROS**
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        title_context = f"Filtrado por: {' • '.join(active_filters[:2])}"
+        if len(active_filters) > 2:
+            title_context += f" • +{len(active_filters)-2} más"
+    else:
+        title_context = "Tolima completo"
+    
+    st.subheader(f"📊 Evolución Temporal: Casos vs Epizootias ({title_context})")
 
     # Crear gráfico con doble eje Y
     fig = make_subplots(
         specs=[[{"secondary_y": True}]],
-        subplot_titles=["Seguimiento de Eventos Confirmados"],
+        subplot_titles=[f"Seguimiento de Eventos Confirmados - {title_context}"],
     )
 
     # Línea de casos humanos (eje principal)
@@ -222,7 +274,7 @@ def show_temporal_evolution_chart_descriptive(temporal_data, colors):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         plot_bgcolor="rgba(248,249,250,0.8)",
         title=dict(
-            text="Casos humanos vs Epizootias confirmadas - Seguimiento temporal",
+            text=f"Evolución temporal de datos filtrados - {title_context}",
             x=0.5,
             font=dict(size=14),
         ),
@@ -230,38 +282,40 @@ def show_temporal_evolution_chart_descriptive(temporal_data, colors):
 
     st.plotly_chart(fig, use_container_width=True)
 
-
-def show_temporal_metrics_descriptive_FIXED(temporal_data, casos_filtrados, epizootias_filtradas, colors):
+def show_temporal_metrics_GUARANTEED_FILTERED(temporal_data, casos_filtrados, epizootias_filtradas, colors, filters):
     """
-    CORREGIDO para vistas/comparativo.py - Usa datos filtrados garantizados.
-    Reemplazar la función original por esta versión.
+    CORREGIDO: Métricas temporales que GARANTIZAN uso de datos filtrados.
     """
-    # IMPORTACIÓN CORREGIDA
+    logger.info(f"📊 Calculando métricas temporales con datos filtrados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
+    
+    # **VERIFICACIÓN EXPLÍCITA**
     from utils.data_processor import verify_filtered_data_usage
+    verify_filtered_data_usage(casos_filtrados, "show_temporal_metrics - casos_filtrados")
+    verify_filtered_data_usage(epizootias_filtradas, "show_temporal_metrics - epizootias_filtradas")
     
-    # VERIFICACIÓN: Asegurar que se usan datos filtrados
-    verify_filtered_data_usage(casos_filtrados, "show_temporal_metrics - casos")
-    verify_filtered_data_usage(epizootias_filtradas, "show_temporal_metrics - epizootias")
+    # **TÍTULO CONTEXTUAL**
+    active_filters = filters.get("active_filters", [])
+    context_info = "datos filtrados" if active_filters else "datos completos"
     
-    st.subheader("📊 Métricas Temporales (Datos Filtrados)")
+    st.subheader(f"📊 Métricas Temporales ({context_info})")
 
     col1, col2, col3, col4 = st.columns(4)
 
-    # Totales por período DE DATOS FILTRADOS
+    # **TOTALES POR PERÍODO DE DATOS FILTRADOS ÚNICAMENTE**
     periodos_con_casos = (temporal_data["casos"] > 0).sum()
     periodos_con_epizootias = (temporal_data["epizootias"] > 0).sum()
     total_periodos = len(temporal_data)
 
-    # Picos máximos DE DATOS FILTRADOS
-    max_casos_mes = temporal_data["casos"].max()
-    max_epizootias_mes = temporal_data["epizootias"].max()
+    # **PICOS MÁXIMOS DE DATOS FILTRADOS ÚNICAMENTE**
+    max_casos_mes = temporal_data["casos"].max() if not temporal_data.empty else 0
+    max_epizootias_mes = temporal_data["epizootias"].max() if not temporal_data.empty else 0
 
     with col1:
         st.metric(
             label="Períodos con Casos",
             value=f"{periodos_con_casos}",
             delta=f"de {total_periodos} meses",
-            help="Meses con al menos un caso humano en datos filtrados",
+            help=f"Meses con al menos un caso humano en {context_info}",
         )
 
     with col2:
@@ -269,28 +323,47 @@ def show_temporal_metrics_descriptive_FIXED(temporal_data, casos_filtrados, epiz
             label="Períodos con Epizootias",
             value=f"{periodos_con_epizootias}",
             delta=f"de {total_periodos} meses",
-            help="Meses con al menos una epizootia en datos filtrados",
+            help=f"Meses con al menos una epizootia en {context_info}",
         )
 
     with col3:
         st.metric(
             label="Pico Máximo Casos",
             value=f"{max_casos_mes}",
-            help="Mayor número de casos en un mes (datos filtrados)",
+            help=f"Mayor número de casos en un mes ({context_info})",
         )
 
     with col4:
         st.metric(
             label="Pico Máximo Epizootias",
             value=f"{max_epizootias_mes}",
-            help="Mayor número de epizootias en un mes (datos filtrados)",
+            help=f"Mayor número de epizootias en un mes ({context_info})",
         )
 
-def show_additional_charts_descriptive(temporal_data, colors):
+    # **INFORMACIÓN CONTEXTUAL DE FILTRADO**
+    if active_filters:
+        st.markdown(
+            f"""
+            <div style="background: {colors['light']}; padding: 15px; border-radius: 10px; margin: 15px 0; border-left: 4px solid {colors['info']};">
+                <strong>📍 Contexto de Análisis:</strong> {' • '.join(active_filters[:2])}<br>
+                <strong>📊 Datos incluidos:</strong> Solo eventos que cumplen los filtros aplicados<br>
+                <strong>⏱️ Período analizado:</strong> {total_periodos} meses con datos disponibles
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+def show_additional_charts_VERIFIED(temporal_data, colors, filters):
     """
-    CORREGIDO: Gráficos adicionales descriptivos sin análisis de riesgo.
+    CORREGIDO: Gráficos adicionales que especifican uso de datos filtrados.
     """
-    st.subheader("📈 Análisis Temporal Adicional")
+    logger.info(f"📈 Creando gráficos adicionales con {len(temporal_data)} períodos de datos filtrados")
+    
+    # **TÍTULO CONTEXTUAL**
+    active_filters = filters.get("active_filters", [])
+    context_title = "Datos Filtrados" if active_filters else "Datos Completos"
+    
+    st.subheader(f"📈 Análisis Temporal Adicional ({context_title})")
     
     col1, col2 = st.columns(2)
     
@@ -318,13 +391,14 @@ def show_additional_charts_descriptive(temporal_data, colors):
             ))
             
             # Barras de epizootias positivas
-            fig_bars.add_trace(go.Bar(
-                x=temporal_data["año_mes"],
-                y=temporal_data["epizootias_positivas"] if "epizootias_positivas" in temporal_data.columns else temporal_data["epizootias"],
-                name="Epizootias Positivas",
-                marker_color=colors["danger"],
-                opacity=0.8
-            ))
+            if "epizootias_positivas" in temporal_data.columns:
+                fig_bars.add_trace(go.Bar(
+                    x=temporal_data["año_mes"],
+                    y=temporal_data["epizootias_positivas"],
+                    name="Epizootias Positivas",
+                    marker_color=colors["danger"],
+                    opacity=0.8
+                ))
 
             # Barras de epizootias en estudio (si hay datos)
             if "epizootias_en_estudio" in temporal_data.columns:
@@ -337,7 +411,7 @@ def show_additional_charts_descriptive(temporal_data, colors):
                 ))
             
             fig_bars.update_layout(
-                title="Distribución Mensual - Eventos Confirmados",
+                title=f"Distribución Mensual - {context_title}",
                 xaxis_title="Mes",
                 yaxis_title="Número de Eventos",
                 height=400,
@@ -347,7 +421,7 @@ def show_additional_charts_descriptive(temporal_data, colors):
             st.plotly_chart(fig_bars, use_container_width=True)
     
     with col2:
-        # Gráfico de nivel de actividad (SIN riesgo)
+        # Gráfico de nivel de actividad
         if not temporal_data.empty:
             # Crear mapeo de colores para niveles de actividad
             activity_colors = {
@@ -363,7 +437,7 @@ def show_additional_charts_descriptive(temporal_data, colors):
                 x="periodo",
                 y="actividad_total",
                 color="categoria_actividad",
-                title="Nivel de Actividad por Período",
+                title=f"Nivel de Actividad por Período ({context_title})",
                 color_discrete_map=activity_colors,
                 labels={
                     "actividad_total": "Actividad Total",
@@ -375,50 +449,59 @@ def show_additional_charts_descriptive(temporal_data, colors):
             fig_activity.update_layout(height=400)
             st.plotly_chart(fig_activity, use_container_width=True)
 
-    # Tabla resumen mensual
-    st.subheader("📋 Resumen Mensual")
+    # **TABLA RESUMEN MENSUAL CON INFORMACIÓN DE FILTRADO**
+    st.subheader(f"📋 Resumen Mensual ({context_title})")
     
     if not temporal_data.empty:
         # Incluir desglose de epizootias si está disponible
         if "epizootias_positivas" in temporal_data.columns:
             resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias_positivas", "epizootias_en_estudio", "epizootias", "categoria_actividad"]].copy()
-            resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Positivas", "En Estudio", "Total Epizootias", "Nivel de Actividad"]
+            resumen_tabla.columns = ["Mes", "Casos (Filtrados)", "Fallecidos (Filtrados)", "Positivas (Filtradas)", "En Estudio (Filtradas)", "Total Epizootias (Filtradas)", "Nivel de Actividad"]
         else:
             resumen_tabla = temporal_data[["año_mes", "casos", "fallecidos", "epizootias", "actividad_total", "categoria_actividad"]].copy()
-            resumen_tabla.columns = ["Mes", "Casos", "Fallecidos", "Epizootias", "Actividad Total", "Nivel de Actividad"]
+            resumen_tabla.columns = ["Mes", "Casos (Filtrados)", "Fallecidos (Filtrados)", "Epizootias (Filtradas)", "Actividad Total (Filtrada)", "Nivel de Actividad"]
+        
         # Ordenar por mes descendente
         resumen_tabla = resumen_tabla.sort_values("Mes", ascending=False)
         
         st.dataframe(resumen_tabla, use_container_width=True, height=300)
         
+        # **INFORMACIÓN CONTEXTUAL PARA EXPORTACIÓN**
+        context_suffix = "filtrados" if active_filters else "completos"
+        export_filename = f"analisis_temporal_{context_suffix}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv"
+        
         # Opción de descarga
         csv_temporal = resumen_tabla.to_csv(index=False)
         st.download_button(
-            label="📄 Descargar Análisis Temporal",
+            label=f"📄 Descargar Análisis Temporal ({context_title})",
             data=csv_temporal,
-            file_name=f"analisis_temporal_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.csv",
+            file_name=export_filename,
             mime="text/csv",
+            help=f"Descarga el análisis temporal de {context_suffix}"
         )
 
-    # **ESTADÍSTICAS ADICIONALES DESCRIPTIVAS**
+    # **ESTADÍSTICAS ADICIONALES DESCRIPTIVAS CON DATOS FILTRADOS**
     st.markdown("---")
-    st.markdown("### 📊 Estadísticas Descriptivas")
+    st.markdown(f"### 📊 Estadísticas Descriptivas ({context_title})")
     
     if not temporal_data.empty:
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             # Período más activo
-            max_activity_idx = temporal_data["actividad_total"].idxmax()
-            max_activity_period = temporal_data.loc[max_activity_idx, "año_mes"]
-            max_activity_value = temporal_data.loc[max_activity_idx, "actividad_total"]
-            
-            st.metric(
-                label="Período Más Activo",
-                value=max_activity_period,
-                delta=f"{max_activity_value} eventos",
-                help="Mes con mayor actividad registrada"
-            )
+            if temporal_data["actividad_total"].max() > 0:
+                max_activity_idx = temporal_data["actividad_total"].idxmax()
+                max_activity_period = temporal_data.loc[max_activity_idx, "año_mes"]
+                max_activity_value = temporal_data.loc[max_activity_idx, "actividad_total"]
+                
+                st.metric(
+                    label="Período Más Activo",
+                    value=max_activity_period,
+                    delta=f"{max_activity_value} eventos",
+                    help=f"Mes con mayor actividad registrada en {context_title.lower()}"
+                )
+            else:
+                st.metric("Período Más Activo", "Sin actividad", help="No hay actividad en los datos filtrados")
         
         with col2:
             # Duración del seguimiento
@@ -430,7 +513,7 @@ def show_additional_charts_descriptive(temporal_data, colors):
                 label="Duración Seguimiento",
                 value=f"{duracion_meses} meses",
                 delta=f"{fecha_inicio.strftime('%m/%Y')} - {fecha_fin.strftime('%m/%Y')}",
-                help="Período total de seguimiento"
+                help=f"Período total de seguimiento en {context_title.lower()}"
             )
         
         with col3:
@@ -444,10 +527,10 @@ def show_additional_charts_descriptive(temporal_data, colors):
                     label="Proporción Casos",
                     value=f"{prop_casos:.1f}%",
                     delta=f"{total_casos_periodo} casos",
-                    help="Porcentaje de eventos que son casos humanos"
+                    help=f"Porcentaje de eventos que son casos humanos en {context_title.lower()}"
                 )
             else:
-                st.metric("Proporción Casos", "0%")
+                st.metric("Proporción Casos", "0%", help="Sin eventos en los datos filtrados")
         
         with col4:
             # Continuidad del seguimiento
@@ -455,13 +538,27 @@ def show_additional_charts_descriptive(temporal_data, colors):
             st.metric(
                 label="Mayor Secuencia Activa",
                 value=f"{periodos_consecutivos} meses",
-                help="Mayor número de meses consecutivos con actividad"
+                help=f"Mayor número de meses consecutivos con actividad en {context_title.lower()}"
             )
 
+    # **INFORMACIÓN FINAL DE CONTEXTO**
+    if active_filters:
+        st.markdown(
+            f"""
+            <div style="background: {colors['light']}; padding: 15px; border-radius: 10px; margin: 20px 0; border-left: 4px solid {colors['primary']};">
+                <strong>ℹ️ Información Importante:</strong><br>
+                • Este análisis temporal muestra únicamente los datos que cumplen con los filtros aplicados<br>
+                • Filtros activos: {' • '.join(active_filters[:3])}<br>
+                • Para ver el análisis completo del Tolima, limpie todos los filtros en el sidebar<br>
+                • Las estadísticas y gráficos reflejan la actividad solo en el contexto filtrado
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
 def calculate_consecutive_periods(temporal_data):
     """
-    NUEVO: Calcula el mayor número de períodos consecutivos con actividad.
+    Calcula el mayor número de períodos consecutivos con actividad.
     """
     if temporal_data.empty:
         return 0
