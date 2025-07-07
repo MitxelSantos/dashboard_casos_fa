@@ -369,7 +369,7 @@ def create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epiz
 
 def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
     """
-    CORREGIDA: Tarjeta de casos con HTML COMPLETO y bien formateado.
+    CORREGIDO: Misma estética exacta, solo HTML dividido en partes más pequeñas
     """
     logger = logging.getLogger(__name__)
     
@@ -379,13 +379,57 @@ def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
     letalidad = metrics["letalidad"]
     ultimo_caso = metrics["ultimo_caso"]
     
-    # **LOG DE VERIFICACIÓN DE MÉTRICAS FILTRADAS**
-    logger.info(f"🏷️ Tarjeta casos - métricas filtradas: {total_casos} casos, {fallecidos} fallecidos")
-    
     # Determinar contexto de filtrado
     filter_context = get_filter_context_info(filters)
     
-    # Información del último caso FILTRADO
+    # **PARTE 1: Contenedor y header (igual que antes)**
+    header_html = f"""
+<div class="super-enhanced-card cases-card">
+    <div class="card-header">
+        <div class="card-icon">🦠</div>
+        <div>
+            <div class="card-title">CASOS FIEBRE AMARILLA</div>
+            <div class="card-subtitle">{filter_context["title"]}</div>
+        </div>
+    </div>
+    <div class="card-body">
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+    
+    # **PARTE 2: Indicador de filtros (si aplica)**
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        filter_indicator = f"""
+        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0; border-left: 3px solid #2196f3;">
+            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
+        </div>
+        """
+        st.markdown(filter_indicator, unsafe_allow_html=True)
+    
+    # **PARTE 3: Grid de métricas (HTML igual que antes, pero separado)**
+    metrics_grid_html = f"""
+        <div class="main-metrics-grid">
+            <div class="main-metric">
+                <div class="metric-number primary">{total_casos}</div>
+                <div class="metric-label">Total Casos</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number success">{vivos}</div>
+                <div class="metric-label">Vivos</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number danger">{fallecidos}</div>
+                <div class="metric-label">Fallecidos</div>
+            </div>
+            <div class="main-metric mortality">
+                <div class="metric-number warning">{letalidad:.1f}%</div>
+                <div class="metric-label">Mortalidad</div>
+            </div>
+        </div>
+    """
+    st.markdown(metrics_grid_html, unsafe_allow_html=True)
+    
+    # **PARTE 4: Información del último caso (HTML igual que antes)**
     if ultimo_caso["existe"]:
         ultimo_info = f"""
         <div class="last-event-info">
@@ -407,72 +451,21 @@ def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
         </div>
         """
     
-    # **INDICADOR CLARO DE QUE SON DATOS FILTRADOS**
-    filter_indicator = ""
-    if len(filters.get("active_filters", [])) > 0:
-        filter_indicator = f"""
-        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0; border-left: 3px solid #2196f3;">
-            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
-        </div>
-        """
+    st.markdown(ultimo_info, unsafe_allow_html=True)
     
-    # **HTML COMPLETO Y BIEN FORMATEADO**
-    card_html = f"""
-<div class="super-enhanced-card cases-card">
-    <div class="card-header">
-        <div class="card-icon">🦠</div>
-        <div>
-            <div class="card-title">CASOS FIEBRE AMARILLA</div>
-            <div class="card-subtitle">{filter_context["title"]}</div>
-        </div>
-    </div>
-    <div class="card-body">
-        {filter_indicator}
-        <div class="main-metrics-grid">
-            <div class="main-metric">
-                <div class="metric-number primary">{total_casos}</div>
-                <div class="metric-label">Total Casos</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number success">{vivos}</div>
-                <div class="metric-label">Vivos</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number danger">{fallecidos}</div>
-                <div class="metric-label">Fallecidos</div>
-            </div>
-            <div class="main-metric mortality">
-                <div class="metric-number warning">{letalidad:.1f}%</div>
-                <div class="metric-label">Mortalidad</div>
-            </div>
-        </div>
-        {ultimo_info}
+    # **PARTE 5: Cerrar contenedores**
+    closing_html = """
     </div>
 </div>
     """
+    st.markdown(closing_html, unsafe_allow_html=True)
     
-    # **RENDERIZAR CON DEBUGGING**
-    try:
-        st.markdown(card_html, unsafe_allow_html=True)
-        logger.info("✅ Tarjeta de casos renderizada exitosamente")
-    except Exception as e:
-        logger.error(f"❌ Error renderizando tarjeta de casos: {str(e)}")
-        # Fallback usando componentes nativos
-        st.error("Error renderizando tarjeta personalizada, usando fallback:")
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("🦠 Casos", total_casos)
-        with col2:
-            st.metric("💚 Vivos", vivos)
-        with col3:
-            st.metric("⚰️ Fallecidos", fallecidos)
-        with col4:
-            st.metric("📊 Letalidad", f"{letalidad:.1f}%")
+    logger.info("✅ Tarjeta de casos (HTML dividido) renderizada exitosamente")
 
 
 def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
     """
-    CORREGIDA: Tarjeta de epizootias con HTML COMPLETO y bien formateado.
+    CORREGIDO: Misma estética exacta, solo HTML dividido en partes más pequeñas
     """
     logger = logging.getLogger(__name__)
     
@@ -481,13 +474,53 @@ def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
     en_estudio = metrics["epizootias_en_estudio"]
     ultima_epizootia = metrics["ultima_epizootia_positiva"]
     
-    # **LOG DE VERIFICACIÓN DE MÉTRICAS FILTRADAS**
-    logger.info(f"🏷️ Tarjeta epizootias - métricas filtradas: {total_epizootias} epizootias, {positivas} positivas")
-    
     # Determinar contexto de filtrado
     filter_context = get_filter_context_info(filters)
     
-    # Información de la última epizootia positiva FILTRADA
+    # **PARTE 1: Contenedor y header (igual que antes)**
+    header_html = f"""
+<div class="super-enhanced-card epizootias-card">
+    <div class="card-header">
+        <div class="card-icon">🐒</div>
+        <div>
+            <div class="card-title">EPIZOOTIAS</div>
+            <div class="card-subtitle">{filter_context["title"]}</div>
+        </div>
+    </div>
+    <div class="card-body">
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+    
+    # **PARTE 2: Indicador de filtros (si aplica)**
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        filter_indicator = f"""
+        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00; border-left: 3px solid #ff9800;">
+            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
+        </div>
+        """
+        st.markdown(filter_indicator, unsafe_allow_html=True)
+    
+    # **PARTE 3: Grid de métricas (HTML igual que antes, pero separado)**
+    metrics_grid_html = f"""
+        <div class="main-metrics-grid">
+            <div class="main-metric">
+                <div class="metric-number warning">{total_epizootias}</div>
+                <div class="metric-label">Total</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number danger">{positivas}</div>
+                <div class="metric-label">Positivas</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number info">{en_estudio}</div>
+                <div class="metric-label">En Estudio</div>
+            </div>
+        </div>
+    """
+    st.markdown(metrics_grid_html, unsafe_allow_html=True)
+    
+    # **PARTE 4: Información de la última epizootia (HTML igual que antes)**
     if ultima_epizootia["existe"]:
         ultimo_info = f"""
         <div class="last-event-info">
@@ -509,61 +542,16 @@ def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
         </div>
         """
     
-    # **INDICADOR CLARO DE QUE SON DATOS FILTRADOS**
-    filter_indicator = ""
-    if len(filters.get("active_filters", [])) > 0:
-        filter_indicator = f"""
-        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00; border-left: 3px solid #ff9800;">
-            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
-        </div>
-        """
+    st.markdown(ultimo_info, unsafe_allow_html=True)
     
-    # **HTML COMPLETO Y BIEN FORMATEADO**
-    card_html = f"""
-<div class="super-enhanced-card epizootias-card">
-    <div class="card-header">
-        <div class="card-icon">🐒</div>
-        <div>
-            <div class="card-title">EPIZOOTIAS</div>
-            <div class="card-subtitle">{filter_context["title"]}</div>
-        </div>
-    </div>
-    <div class="card-body">
-        {filter_indicator}
-        <div class="main-metrics-grid">
-            <div class="main-metric">
-                <div class="metric-number warning">{total_epizootias}</div>
-                <div class="metric-label">Total</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number danger">{positivas}</div>
-                <div class="metric-label">Positivas</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number info">{en_estudio}</div>
-                <div class="metric-label">En Estudio</div>
-            </div>
-        </div>
-        {ultimo_info}
+    # **PARTE 5: Cerrar contenedores**
+    closing_html = """
     </div>
 </div>
     """
+    st.markdown(closing_html, unsafe_allow_html=True)
     
-    # **RENDERIZAR CON DEBUGGING**
-    try:
-        st.markdown(card_html, unsafe_allow_html=True)
-        logger.info("✅ Tarjeta de epizootias renderizada exitosamente")
-    except Exception as e:
-        logger.error(f"❌ Error renderizando tarjeta de epizootias: {str(e)}")
-        # Fallback usando componentes nativos
-        st.error("Error renderizando tarjeta personalizada, usando fallback:")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("🐒 Total", total_epizootias)
-        with col2:
-            st.metric("🔴 Positivas", positivas)
-        with col3:
-            st.metric("🔵 En Estudio", en_estudio)
+    logger.info("✅ Tarjeta de epizootias (HTML dividido) renderizada exitosamente")
         
 def get_filter_context_info(filters):
     """
