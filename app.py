@@ -351,7 +351,7 @@ def create_empty_data_structure():
     }
 
 def configure_page():
-    """Configura la página con espaciado optimizado y SIN scroll infinito."""
+    """Configura la página con scroll único - SOLUCIÓN ESPECÍFICA."""
     st.set_page_config(
         page_title=DASHBOARD_CONFIG["page_title"],
         page_icon=DASHBOARD_CONFIG["page_icon"],
@@ -359,7 +359,7 @@ def configure_page():
         initial_sidebar_state=DASHBOARD_CONFIG["initial_sidebar_state"],
     )
 
-    # CSS optimizado - CORREGIDO para evitar scroll infinito
+    # CSS súper específico para atacar el problema exacto
     st.markdown(
         f"""
         <style>
@@ -372,41 +372,77 @@ def configure_page():
             --info-color: {COLORS['info']};
         }}
         
-        /* CORRECCIÓN CRÍTICA: Prevenir scroll infinito */
-        html, body, [data-testid="stApp"] {{
-            height: 100vh !important;
-            max-height: 100vh !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
+        /* =============== SOLUCIÓN ESPECÍFICA SCROLL DOBLE =============== */
+        
+        /* ATACAR ESPECÍFICAMENTE los tab-panels problemáticos */
+        div[data-baseweb="tab-panel"] {{
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            overflow-y: visible !important;
         }}
         
-        .block-container {{
-            padding-top: 0.5rem !important;
-            padding-bottom: 1rem !important;
-            padding-left: 1rem !important;
-            padding-right: 1rem !important;
-            max-width: 100% !important;
-            max-height: calc(100vh - 2rem) !important;
-            overflow-y: auto !important;
+        /* ATACAR el contenedor principal problemático */
+        .stMainBlockContainer {{
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            overflow-y: visible !important;
         }}
         
-        /* Limitar altura de gráficos */
-        .js-plotly-plot {{
-            max-height: 500px !important;
-            overflow: hidden !important;
+        /* ATACAR contenedores de Streamlit específicos */
+        .st-emotion-cache-zy6yx3 {{
+            max-height: none !important;
+            overflow: visible !important;
         }}
         
-        /* Limitar altura de dataframes */
+        /* ATACAR clases específicas que viste en el debug */
+        .st-bv.st-cg.st-e9.st-cl.st-cj.st-ck {{
+            max-height: none !important;
+            overflow: visible !important;
+        }}
+        
+        /* FORZAR que el contenedor principal crezca */
+        [data-testid="stMainBlockContainer"] {{
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+        }}
+        
+        /* PERMITIR que las pestañas crezcan naturalmente */
+        .stTabs {{
+            height: auto !important;
+        }}
+        
+        .stTabs > div {{
+            height: auto !important;
+        }}
+        
+        .stTabs [data-baseweb="tab-list"] + div {{
+            max-height: none !important;
+            overflow: visible !important;
+        }}
+        
+        /* =============== LÍMITES ESPECÍFICOS PARA EVITAR SCROLL INFINITO =============== */
+        
+        /* SOLO estos elementos pueden tener scroll interno */
         .stDataFrame {{
             max-height: 400px !important;
             overflow-y: auto !important;
         }}
         
-        /* Asegurar que las tabs no crezcan infinitamente */
-        .stTabs [data-baseweb="tab-panel"] {{
-            max-height: calc(100vh - 200px) !important;
+        .js-plotly-plot {{
+            max-height: 500px !important;
+            overflow: hidden !important;
+        }}
+        
+        /* Sidebar SÍ puede tener scroll */
+        .css-1d391kg {{
+            max-height: 100vh !important;
             overflow-y: auto !important;
         }}
+        
+        /* =============== ESTILOS GENERALES =============== */
         
         .main-title {{
             color: var(--primary-color);
@@ -420,11 +456,168 @@ def configure_page():
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }}
+        
+        /* =============== DEBUGGING - TEMPORAL =============== */
+        
+        /* Agregar borde rojo temporal para ver qué elementos tienen scroll */
+        div[style*="overflow-y: auto"], 
+        div[style*="overflow: auto"] {{
+            border: 2px solid red !important;
+        }}
+        
+        div[style*="max-height"] {{
+            border: 2px solid orange !important;
+        }}
+        
         </style>
         """,
         unsafe_allow_html=True,
     )
 
+def apply_scroll_fix_javascript():
+    """
+    Aplica fix JavaScript para eliminar scroll doble dinámicamente.
+    Agregar esto DESPUÉS de mostrar el contenido principal.
+    """
+    
+    js_code = """
+    <script>
+    // Función para eliminar scroll doble
+    function fixScrollIssue() {
+        console.log('🔧 Iniciando fix de scroll...');
+        
+        // 1. ATACAR tab-panels específicos
+        const tabPanels = document.querySelectorAll('[data-baseweb="tab-panel"]');
+        tabPanels.forEach((panel, index) => {
+            console.log(`📋 Tab panel ${index}:`, panel);
+            
+            // Remover limitaciones de altura
+            panel.style.maxHeight = 'none';
+            panel.style.height = 'auto';
+            panel.style.overflow = 'visible';
+            panel.style.overflowY = 'visible';
+            
+            console.log(`✅ Tab panel ${index} fixed`);
+        });
+        
+        // 2. ATACAR contenedor principal
+        const mainContainers = document.querySelectorAll('[data-testid="stMainBlockContainer"]');
+        mainContainers.forEach((container, index) => {
+            console.log(`📦 Main container ${index}:`, container);
+            
+            container.style.maxHeight = 'none';
+            container.style.height = 'auto';
+            container.style.overflow = 'visible';
+            container.style.overflowY = 'visible';
+            
+            console.log(`✅ Main container ${index} fixed`);
+        });
+        
+        // 3. ATACAR elementos con clases específicas del debug
+        const problematicElements = document.querySelectorAll('.st-bv.st-cg.st-e9.st-cl.st-cj.st-ck');
+        problematicElements.forEach((el, index) => {
+            console.log(`🎯 Problematic element ${index}:`, el);
+            
+            el.style.maxHeight = 'none';
+            el.style.height = 'auto';
+            el.style.overflow = 'visible';
+            el.style.overflowY = 'visible';
+            
+            console.log(`✅ Problematic element ${index} fixed`);
+        });
+        
+        // 4. BUSCAR Y ATACAR cualquier elemento con style inline problemático
+        const allElements = document.querySelectorAll('*');
+        let fixedCount = 0;
+        
+        allElements.forEach(el => {
+            const style = el.style;
+            
+            // Si tiene max-height específico que cause problemas
+            if (style.maxHeight && (
+                style.maxHeight.includes('639px') ||
+                style.maxHeight.includes('807px') ||
+                style.maxHeight.includes('vh')
+            )) {
+                // PERO permitir que DataFrames y gráficos mantengan sus límites
+                if (!el.classList.contains('stDataFrame') && 
+                    !el.classList.contains('js-plotly-plot') &&
+                    !el.closest('.stDataFrame') &&
+                    !el.closest('.js-plotly-plot')) {
+                    
+                    console.log('🔧 Fixing element with problematic max-height:', el, style.maxHeight);
+                    style.maxHeight = 'none';
+                    style.height = 'auto';
+                    style.overflow = 'visible';
+                    fixedCount++;
+                }
+            }
+            
+            // Si tiene overflow problemático
+            if (style.overflowY === 'auto' || style.overflow === 'auto') {
+                // PERO permitir que DataFrames, sidebar y gráficos mantengan scroll
+                if (!el.classList.contains('stDataFrame') && 
+                    !el.classList.contains('css-1d391kg') &&
+                    !el.classList.contains('js-plotly-plot') &&
+                    !el.closest('.stDataFrame') &&
+                    !el.closest('.css-1d391kg') &&
+                    !el.closest('.js-plotly-plot')) {
+                    
+                    console.log('🔧 Fixing element with problematic overflow:', el);
+                    style.overflow = 'visible';
+                    style.overflowY = 'visible';
+                    fixedCount++;
+                }
+            }
+        });
+        
+        console.log(`✅ Scroll fix completed! Fixed ${fixedCount} elements`);
+        
+        // 5. VERIFICACIÓN FINAL
+        setTimeout(() => {
+            const stillProblematic = document.querySelectorAll('[style*="max-height: 639px"], [style*="max-height: 807px"]');
+            if (stillProblematic.length > 0) {
+                console.warn('⚠️ Still some problematic elements found:', stillProblematic);
+                stillProblematic.forEach(el => {
+                    if (!el.closest('.stDataFrame') && !el.closest('.js-plotly-plot')) {
+                        el.style.maxHeight = 'none';
+                    }
+                });
+            } else {
+                console.log('🎉 All problematic elements fixed!');
+            }
+        }, 1000);
+    }
+    
+    // Ejecutar el fix inmediatamente
+    fixScrollIssue();
+    
+    // Ejecutar cada vez que Streamlit actualice contenido
+    const observer = new MutationObserver((mutations) => {
+        let shouldFix = false;
+        mutations.forEach(mutation => {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                shouldFix = true;
+            }
+        });
+        
+        if (shouldFix) {
+            console.log('🔄 Content updated, re-applying scroll fix...');
+            setTimeout(fixScrollIssue, 100);
+        }
+    });
+    
+    observer.observe(document.body, {
+        childList: true,
+        subtree: true
+    });
+    
+    console.log('👀 Scroll fix observer installed');
+    </script>
+    """
+    
+    st.markdown(js_code, unsafe_allow_html=True)
+    
 def main():
     """
     FUNCIÓN PRINCIPAL CORREGIDA - Flujo de datos unificado CON DEBUG COMPLETO
@@ -438,7 +631,7 @@ def main():
         init_responsive_sidebar()
     except ImportError:
         with st.sidebar:
-            st.title("Dashboard Tolima v3.4")
+            st.title("Dashboard Tolima v1.0")
 
     # Cargar datos
     logger.info("🔄 INICIANDO CARGA DE DATOS ORIGINALES")
