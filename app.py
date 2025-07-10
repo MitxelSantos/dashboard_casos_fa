@@ -14,6 +14,11 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
+from gdrive_utils import (
+    check_google_drive_availability, 
+    load_data_from_google_drive
+)
+
 # Configurar logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -190,14 +195,50 @@ def verify_vista_receives_filtered_data(vista_name, data_filtered, filters):
 
 def load_enhanced_datasets():
     """
-    CORREGIDO: Carga de datos con estructura simplificada y consistente.
+    ACTUALIZADO: Carga de datos con Google Drive como prioridad.
+    Fallback inteligente a archivos locales para desarrollo.
     """
     try:
+        # Crear contenedores para UI
+        loading_container = st.container()
+        
+        with loading_container:
+            st.info("🔄 Iniciando carga de datos...")
+        
+        # === ESTRATEGIA 1: GOOGLE DRIVE (PRIORIDAD) ===
+        if check_google_drive_availability():
+            logger.info("🌐 Google Drive disponible - intentando carga remota")
+            
+            with loading_container:
+                st.info("🌐 Cargando datos desde Google Drive...")
+            
+            data_gdrive = load_data_from_google_drive()
+            
+            if data_gdrive:
+                loading_container.empty()
+                st.success("✅ Datos cargados exitosamente desde Google Drive")
+                
+                # Log para debugging
+                logger.info(f"✅ Google Drive exitoso: {len(data_gdrive['casos'])} casos, {len(data_gdrive['epizootias'])} epizootias")
+                
+                return data_gdrive
+            else:
+                logger.warning("⚠️ Google Drive falló, intentando carga local")
+                with loading_container:
+                    st.warning("⚠️ Google Drive falló, intentando archivos locales...")
+        else:
+            logger.info("📁 Google Drive no disponible, usando archivos locales")
+            with loading_container:
+                st.info("📁 Google Drive no configurado, usando archivos locales...")
+        
+        # === ESTRATEGIA 2: ARCHIVOS LOCALES (FALLBACK) ===
         progress_bar = st.progress(0)
         status_text = st.empty()
-        status_text.text("🔄 Cargando datos...")
         
-        # Configuración de rutas
+        with loading_container:
+            status_text.text("🔄 Cargando desde archivos locales...")
+        
+        # Configuración de rutas locales
         casos_filename = "BD_positivos.xlsx"
         epizootias_filename = "Información_Datos_FA.xlsx"
 
@@ -208,7 +249,7 @@ def load_enhanced_datasets():
 
         progress_bar.progress(20)
         
-        # Estrategia de carga de archivos
+        # Estrategia de carga local
         casos_df = None
         epizootias_df = None
 
@@ -217,7 +258,7 @@ def load_enhanced_datasets():
             try:
                 casos_df = pd.read_excel(data_casos_path, sheet_name="ACUMU", engine="openpyxl")
                 epizootias_df = pd.read_excel(data_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
-                logger.info("✅ Datos cargados desde carpeta data/")
+                logger.info("✅ Datos cargados desde carpeta data/ local")
             except Exception as e:
                 logger.warning(f"⚠️ Error cargando desde data/: {str(e)}")
 
@@ -226,17 +267,70 @@ def load_enhanced_datasets():
             try:
                 casos_df = pd.read_excel(root_casos_path, sheet_name="ACUMU", engine="openpyxl")
                 epizootias_df = pd.read_excel(root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
-                logger.info("✅ Datos cargados desde directorio raíz")
+                logger.info("✅ Datos cargados desde directorio raíz local")
             except Exception as e:
                 logger.warning(f"⚠️ Error cargando desde raíz: {str(e)}")
 
         if casos_df is None or epizootias_df is None:
+            loading_container.empty()
+            
+            # Mostrar instrucciones detalladas
             st.error("❌ No se pudieron cargar los archivos de datos")
+            
+            with st.expander("📋 Instrucciones de configuración", expanded=True):
+                st.markdown("""
+                ### 🌐 Para Streamlit Cloud (Recomendado):
+                1. **Configura Google Drive:**
+                   - Ejecuta: `python get_shapefiles_ids.py`
+                   - Copia los IDs resultantes a `.streamlit/secrets.toml`
+                   - Sube a Streamlit Cloud
+                
+                ### 📁 Para desarrollo local:
+                1. **Coloca los archivos en una de estas ubicaciones:**
+                   - `📁 data/BD_positivos.xlsx`
+                   - `📁 data/Información_Datos_FA.xlsx`
+                   
+                   **O en el directorio raíz:**
+                   - `📄 BD_positivos.xlsx`
+                   - `📄 Información_Datos_FA.xlsx`
+                
+                ### 🔧 Verificación de archivos:
+                """)
+                
+                # Mostrar estado de archivos
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("**📁 Carpeta data/:**")
+                    st.write(f"✅ BD_positivos.xlsx" if data_casos_path.exists() else "❌ BD_positivos.xlsx")
+                    st.write(f"✅ Información_Datos_FA.xlsx" if data_epizootias_path.exists() else "❌ Información_Datos_FA.xlsx")
+                
+                with col2:
+                    st.markdown("**📄 Directorio raíz:**")
+                    st.write(f"✅ BD_positivos.xlsx" if root_casos_path.exists() else "❌ BD_positivos.xlsx")
+                    st.write(f"✅ Información_Datos_FA.xlsx" if root_epizootias_path.exists() else "❌ Información_Datos_FA.xlsx")
+                
+                # Información de Google Drive
+                if not check_google_drive_availability():
+                    st.markdown("**🌐 Estado Google Drive:**")
+                    st.write("❌ No configurado o no disponible")
+                    st.markdown("""
+                    **Para habilitar Google Drive:**
+                    1. Configura `.streamlit/secrets.toml` con las credenciales
+                    2. Ejecuta `python get_shapefiles_ids.py` para obtener IDs
+                    3. Reinicia la aplicación
+                    """)
+                else:
+                    st.write("✅ Google Drive configurado pero falló la descarga")
+            
             return create_empty_data_structure()
 
         progress_bar.progress(50)
-        status_text.text("🔧 Procesando datos...")
+        status_text.text("🔧 Procesando datos locales...")
 
+        # Procesar datos locales usando la misma lógica
+        # [Resto del código de procesamiento existente...]
+        
         # Limpiar datos
         for df in [casos_df, epizootias_df]:
             df.drop(columns=[col for col in df.columns if 'Unnamed' in col], inplace=True, errors='ignore')
@@ -319,11 +413,10 @@ def load_enhanced_datasets():
 
         progress_bar.progress(100)
         time.sleep(1)
-        status_text.empty()
-        progress_bar.empty()
+        loading_container.empty()
 
-        logger.info(f"✅ Datos cargados: {len(casos_df)} casos, {len(epizootias_df)} epizootias")
-        logger.info(f"🗺️ Municipios: {len(todos_municipios)}")
+        logger.info(f"✅ Datos locales cargados: {len(casos_df)} casos, {len(epizootias_df)} epizootias")
+        st.success("✅ Datos cargados desde archivos locales")
 
         return {
             "casos": casos_df,
@@ -338,7 +431,7 @@ def load_enhanced_datasets():
         logger.error(f"💥 Error crítico cargando datos: {str(e)}")
         st.error(f"❌ Error crítico: {str(e)}")
         return create_empty_data_structure()
-
+    
 def create_empty_data_structure():
     """Estructura de datos vacía para casos de error."""
     return {
