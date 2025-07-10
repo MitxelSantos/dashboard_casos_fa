@@ -1,5 +1,5 @@
-# Dependencias optimizadas del Dashboard Fiebre Amarilla v2.1
-# Instalar con: pip install -r requirements.txt
+# Dependencias del Dashboard Fiebre Amarilla v3.4 + Google Drive
+# Para Streamlit Cloud deployment
 
 # Framework principal
 streamlit>=1.28.0
@@ -17,19 +17,46 @@ openpyxl>=3.1.0
 # Manipulación de imágenes (para logos)
 Pillow>=10.0.0
 
-# Utilidades de red (para Google Drive opcional)
+# Utilidades de red
 requests>=2.31.0
 
-# NUEVAS DEPENDENCIAS PARA MAPAS
+# ===== DEPENDENCIAS PARA MAPAS =====
 geopandas>=0.14.0
 folium>=0.15.0
 streamlit-folium>=0.15.0
 
-# NOTA: matplotlib eliminado intencionalmente
-# Era causa del error: "background_gradient requires matplotlib"
-# El dashboard funciona completamente sin matplotlib usando solo Plotly
+# Dependencias geoespaciales requeridas por geopandas
+fiona>=1.8.22
+pyproj>=3.4.0
+shapely>=2.0.0
 
-# DEPENDENCIAS REMOVIDAS:
-# - matplotlib (causaba errores y no es necesario)
-# - scipy (análisis estadístico avanzado removido)
-# - seaborn (no usado en versión simplificada)
+# ===== DEPENDENCIAS PARA GOOGLE DRIVE =====
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.1
+google-api-python-client>=2.100.0
+
+# Dependencias adicionales de Google (por compatibilidad)
+google-cloud-core>=2.3.0
+googleapis-common-protos>=1.60.0
+
+# ===== DEPENDENCIAS DE LOGGING Y UTILIDADES =====
+python-dateutil>=2.8.0
+pytz>=2023.3
+
+# ===== OPCIONAL: Para mejores gráficos =====
+kaleido>=0.2.1
+
+# ===== NOTAS SOBRE VERSIONES =====
+# Se especifican versiones mínimas para compatibilidad
+# Streamlit Cloud manejará automáticamente las versiones más recientes compatibles
+
+# ===== TROUBLESHOOTING =====
+# Si tienes errores con geopandas en Streamlit Cloud, puedes probar:
+# geopandas==0.13.2
+# fiona==1.8.22
+# pyproj==3.4.1
+
+# Si tienes errores con Google Auth:
+# google-auth==2.22.0
+# google-api-python-client==2.97.0
