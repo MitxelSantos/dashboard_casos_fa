@@ -1,4 +1,4 @@
-# Dependencias del Dashboard Fiebre Amarilla v3.4 + Google Drive
+# Dependencias del Dashboard Fiebre Amarilla v1.0
 # Para Streamlit Cloud deployment
 
 # Framework principal

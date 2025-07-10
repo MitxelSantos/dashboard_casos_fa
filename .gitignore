@@ -55,6 +55,11 @@ desktop.ini
 *.swo
 *~
 
+
+.streamlit/secrets.toml
+*.json
+
+
 # Archivos de log
 *.log
 logs/
