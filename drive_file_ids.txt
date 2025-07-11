@@ -1,0 +1,4 @@
+[drive_files]
+casos_excel = "11JqMuNotFts8VPcPOz3jI5BbdZJ6Eh4C"
+epizootias_excel = "1xH2qwv0GbNh7bxNIRr55svQgZVsoaQ1i"
+logo_gobernacion = "1oi07z32n1ecbmJJIfU97NVLGHE50Agbj"
