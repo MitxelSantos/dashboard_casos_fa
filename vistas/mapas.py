@@ -51,8 +51,8 @@ def show(data_filtered, filters, colors):
     Vista completa de mapas CORREGIDA con carga híbrida de shapefiles.
     """
     # **VERIFICACIÓN CRÍTICA INICIAL**
-    logger = logging.getLogger(__name__)
-    logger.info("🗺️ INICIANDO VISTA DE MAPAS CON SISTEMA HÍBRIDO")
+    logging = logging.getLogger(__name__)
+    logging.info("🗺️ INICIANDO VISTA DE MAPAS CON SISTEMA HÍBRIDO")
     
     # Debug detallado del flujo de datos
     debug_data_flow(
@@ -89,7 +89,7 @@ def show(data_filtered, filters, colors):
         return
 
     # **LOG DE VERIFICACIÓN ADICIONAL**
-    logger.info(f"🗺️ Vista mapas híbrida - Datos filtrados verificados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
+    logging.info(f"🗺️ Vista mapas híbrida - Datos filtrados verificados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
     
     # Mostrar información de filtrado si hay filtros activos
     active_filters = filters.get("active_filters", [])
@@ -226,10 +226,10 @@ def create_enhanced_map_system_hybrid(casos, epizootias, geo_data, filters, colo
     """
     CORREGIDO: Sistema de mapas que usa datos geográficos híbridos.
     """
-    logger = logging.getLogger(__name__)
+    logging = logging.getLogger(__name__)
     
     # Log de datos recibidos
-    logger.info(f"🗺️ Sistema mapas híbrido recibió: {len(casos)} casos, {len(epizootias)} epizootias")
+    logging.info(f"🗺️ Sistema mapas híbrido recibió: {len(casos)} casos, {len(epizootias)} epizootias")
     
     # Determinar nivel de mapa actual
     current_level = determine_map_level(filters)
@@ -249,12 +249,12 @@ def create_enhanced_map_system_hybrid(casos, epizootias, geo_data, filters, colo
     has_municipios = 'municipios' in geo_data and not geo_data['municipios'].empty
     has_veredas = 'veredas' in geo_data and not geo_data['veredas'].empty
     
-    logger.info(f"🗺️ Datos geográficos disponibles: municipios={has_municipios}, veredas={has_veredas}")
+    logging.info(f"🗺️ Datos geográficos disponibles: municipios={has_municipios}, veredas={has_veredas}")
     
     # Crear mapa según nivel con datos filtrados
     if current_level == "departamento":
         if has_municipios:
-            logger.info("🏛️ Creando mapa departamental con datos filtrados")
+            logging.info("🏛️ Creando mapa departamental con datos filtrados")
             create_departmental_map_enhanced_hybrid(casos, epizootias, geo_data, colors)
         else:
             st.warning("🏛️ Mapa departamental no disponible (faltan datos de municipios)")
@@ -262,14 +262,14 @@ def create_enhanced_map_system_hybrid(casos, epizootias, geo_data, filters, colo
             
     elif current_level == "municipio":
         if has_veredas:
-            logger.info(f"🏘️ Creando mapa municipal para {filters.get('municipio_display')} con datos filtrados")
+            logging.info(f"🏘️ Creando mapa municipal para {filters.get('municipio_display')} con datos filtrados")
             create_municipal_map_enhanced_hybrid(casos, epizootias, geo_data, filters, colors)
         else:
             st.warning(f"🏘️ Mapa de veredas no disponible para {filters.get('municipio_display')}")
             show_fallback_summary_table(casos, epizootias, "municipal", filters.get('municipio_display'))
             
     elif current_level == "vereda":
-        logger.info(f"📍 Creando vista de vereda {filters.get('vereda_display')} con datos filtrados")
+        logging.info(f"📍 Creando vista de vereda {filters.get('vereda_display')} con datos filtrados")
         create_vereda_detail_view_hybrid(casos, epizootias, filters, colors)
 
 
@@ -957,7 +957,7 @@ def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
 
 def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
     """Tarjeta de epizootias (sin cambios)"""
-    logger = logging.getLogger(__name__)
+    logging = logging.getLogger(__name__)
     
     total_epizootias = metrics["total_epizootias"]
     positivas = metrics["epizootias_positivas"]
@@ -1041,7 +1041,7 @@ def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
     """
     st.markdown(closing_html, unsafe_allow_html=True)
     
-    logger.info("✅ Tarjeta de epizootias (HTML dividido) renderizada exitosamente")
+    logging.info("✅ Tarjeta de epizootias (HTML dividido) renderizada exitosamente")
 
 def get_filter_context_info(filters):
     """Obtiene información del contexto de filtrado para mostrar en tarjetas."""
