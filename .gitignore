@@ -26,6 +26,7 @@ data/FIBRE*
 *.feather
 *.sqlite
 *.db
+.data
 
 # Secretos y configuración
 .streamlit/secrets.toml
