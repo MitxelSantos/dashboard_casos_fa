@@ -30,7 +30,7 @@ fiona>=1.8.22
 pyproj>=3.4.0
 shapely>=2.0.0
 
-# ===== DEPENDENCIAS PARA GOOGLE DRIVE =====
+# ===== DEPENDENCIAS PARA GOOGLE DRIVE (CRÍTICAS) =====
 google-auth>=2.23.0
 google-auth-oauthlib>=1.1.0
 google-auth-httplib2>=0.1.1
@@ -40,23 +40,29 @@ google-api-python-client>=2.100.0
 google-cloud-core>=2.3.0
 googleapis-common-protos>=1.60.0
 
+# ===== DEPENDENCIAS PARA CONFIGURACIÓN =====
+# Para leer secrets.toml en scripts de verificación
+toml>=0.10.2
+
 # ===== DEPENDENCIAS DE LOGGING Y UTILIDADES =====
-python-dateutil>=2.8.0
-pytz>=2023.3
+python-dateutil>=2.9.0
+pytz>=2025.2
 
 # ===== OPCIONAL: Para mejores gráficos =====
 kaleido>=0.2.1
 
-# ===== NOTAS SOBRE VERSIONES =====
-# Se especifican versiones mínimas para compatibilidad
-# Streamlit Cloud manejará automáticamente las versiones más recientes compatibles
-
-# ===== TROUBLESHOOTING =====
-# Si tienes errores con geopandas en Streamlit Cloud, puedes probar:
-# geopandas==0.13.2
-# fiona==1.8.22
-# pyproj==3.4.1
-
-# Si tienes errores con Google Auth:
+# ===== VERSIONES ESPECÍFICAS PARA STREAMLIT CLOUD =====
+# Si tienes problemas con versiones más recientes, usa estas:
 # google-auth==2.22.0
 # google-api-python-client==2.97.0
+# geopandas==0.13.2
+
+# ===== TROUBLESHOOTING =====
+# Si hay errores con geopandas en Streamlit Cloud:
+# 1. Reduce la versión: geopandas==0.13.2
+# 2. Reduce fiona: fiona==1.8.22
+# 3. Reduce pyproj: pyproj==3.4.1
+
+# Si hay errores con Google Auth:
+# 1. Fija la versión: google-auth==2.22.0
+# 2. Fija google-api-python-client==2.97.0
