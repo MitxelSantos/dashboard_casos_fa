@@ -113,7 +113,7 @@ class ShapefileLoader:
             
             # Mostrar progreso al usuario
             with st.container():
-                st.info("🌐 Descargando mapas desde Google Drive...")
+                #st.info("🌐 Descargando mapas desde Google Drive...")
                 progress_bar = st.progress(0)
                 status_text = st.empty()
             
@@ -132,7 +132,7 @@ class ShapefileLoader:
             geo_data = self._process_downloaded_shapefiles(shapefiles_result)
             
             progress_bar.progress(100)
-            st.success("✅ Mapas cargados desde Google Drive")
+            #st.success("✅ Mapas cargados desde Google Drive")
             
             # Limpiar UI
             progress_bar.empty()

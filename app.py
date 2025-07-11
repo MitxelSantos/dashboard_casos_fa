@@ -799,15 +799,11 @@ def main():
     if active_filters:
         reduction_casos = len(data["casos"]) - len(data_filtered["casos"])
         reduction_epi = len(data["epizootias"]) - len(data_filtered["epizootias"])
-        
-        if reduction_casos > 0 or reduction_epi > 0:
-            st.info(f"🎯 Filtros aplicados: {' • '.join(active_filters[:2])} {'• +' + str(len(active_filters)-2) + ' más' if len(active_filters) > 2 else ''}")
-            st.caption(f"📊 Reducción: {reduction_casos} casos, {reduction_epi} epizootias filtradas")
 
     # **PESTAÑAS PRINCIPALES CON VERIFICACIÓN**
     tab1, tab2, tab3 = st.tabs([
         "🗺️ Mapas Interactivos",
-        "📊 Análisis Detallado", 
+        "📊 Información Detallada", 
         "📈 Seguimiento Temporal",
     ])
 
@@ -913,7 +909,7 @@ def main():
 
 def show_fallback_summary(data_filtered, filters):
     """
-    CORREGIDO: Resumen usando DATOS FILTRADOS con verificación explícita.
+    Resumen usando DATOS FILTRADOS con verificación explícita.
     """
     logger.info("📋 Mostrando resumen fallback con datos filtrados")
     

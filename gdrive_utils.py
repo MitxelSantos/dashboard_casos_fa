@@ -329,26 +329,15 @@ def load_data_from_google_drive():
         progress_bar = st.progress(0)
         status_text = st.empty()
     
-    try:
-        # PASO 1: Verificar autenticación (0-20%)
-        status_text.text("🔐 Verificando autenticación...")
-        progress_bar.progress(10)
-        
+    try:        
         if not manager.test_authentication():
             raise Exception("Falló la autenticación con Google Drive")
-        
-        progress_bar.progress(20)
-        
-        # PASO 2: Descargar archivos Excel (20-70%)
-        status_text.text("📥 Descargando archivos de datos...")
-        
+               
         casos_path = manager.download_file(
             drive_files["casos_excel"],
             "BD_positivos.xlsx"
         )
-        
-        progress_bar.progress(40)
-        
+               
         if not casos_path:
             raise Exception("No se pudo descargar BD_positivos.xlsx")
         
@@ -357,20 +346,13 @@ def load_data_from_google_drive():
             "Información_Datos_FA.xlsx"
         )
         
-        progress_bar.progress(60)
-        
         if not epizootias_path:
             raise Exception("No se pudo descargar Información_Datos_FA.xlsx")
-        
-        # PASO 3: Cargar DataFrames (70-85%)
-        status_text.text("📊 Cargando y procesando datos...")
         
         casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
         epizootias_df = pd.read_excel(epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
         
         processed_data = process_gdrive_data(casos_df, epizootias_df, None)
-        
-        progress_bar.progress(90)
         
         # Limpiar UI
         time.sleep(1)
