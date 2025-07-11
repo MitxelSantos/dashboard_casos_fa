@@ -1,8 +1,5 @@
 """
-app.py CORREGIDO - Flujo de datos unificado con DEBUGGING COMPLETO
-ELIMINADOS: Múltiples sistemas de filtrado
-CORREGIDO: Solo datos filtrados pasan a las vistas + logging detallado
-AGREGADO: Verificación explícita de que las vistas reciben datos filtrados
+app.py
 """
 
 import os
@@ -23,7 +20,7 @@ from gdrive_utils import (
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
-logger = logging.getLogger("FiebreAmarilla-Dashboard-v3.4-DEBUG")
+logger = logging.getLogger("FiebreAmarilla-Dashboard-v1.0")
 
 # Configuraciones
 os.environ["STREAMLIT_PAGES_ENABLED"] = "false"
@@ -67,7 +64,7 @@ except ImportError as e:
     st.error(f"Error en utilidades: {str(e)}")
     st.stop()
 
-# Importar sistema de filtros UNIFICADO
+# Importar sistema de filtros
 try:
     from components.filters import create_unified_filter_system
     logger.info("✅ Sistema de filtros unificado importado")
@@ -76,7 +73,7 @@ except ImportError as e:
     st.error(f"Error en sistema de filtros: {str(e)}")
     st.stop()
 
-# Importar vistas con manejo de errores
+# Importar vistas
 vista_modules = ["mapas", "tablas", "comparativo"]
 vistas_modules = {}
 
@@ -100,7 +97,7 @@ for module_name in vista_modules:
 
 def debug_filter_application_ENHANCED(data, data_filtered, filters, stage):
     """
-    DEBUG SÚPER DETALLADO para verificar aplicación de filtros
+    DEBUG para verificar aplicación de filtros
     """
     logger.info(f"🔧 DEBUG DETALLADO {stage}:")
     logger.info(f"   📊 Datos originales: {len(data.get('casos', []))} casos, {len(data.get('epizootias', []))} epizootias")
@@ -109,7 +106,7 @@ def debug_filter_application_ENHANCED(data, data_filtered, filters, stage):
     active_filters = filters.get("active_filters", [])
     logger.info(f"   🎛️ Filtros activos: {len(active_filters)} - {active_filters[:3] if active_filters else 'Ninguno'}")
     
-    # VERIFICAR SI REALMENTE HAY FILTRADO
+    # VERIFICAR SI HAY FILTRADO
     casos_orig = len(data.get('casos', []))
     casos_filt = len(data_filtered.get('casos', []))
     epi_orig = len(data.get('epizootias', []))
@@ -155,7 +152,7 @@ def debug_filter_application_ENHANCED(data, data_filtered, filters, stage):
 
 def verify_vista_receives_filtered_data(vista_name, data_filtered, filters):
     """
-    NUEVA: Verifica específicamente que la vista reciba datos filtrados
+    Verifica específicamente que la vista reciba datos filtrados
     """
     logger.info(f"🎯 VERIFICACIÓN PRE-VISTA {vista_name.upper()}:")
     
@@ -195,28 +192,21 @@ def verify_vista_receives_filtered_data(vista_name, data_filtered, filters):
 
 def load_enhanced_datasets():
     """
-    ACTUALIZADO: Carga de datos con Google Drive como prioridad.
+    Carga de datos con Google Drive como prioridad.
     Fallback inteligente a archivos locales para desarrollo.
     """
     try:
         # Crear contenedores para UI
         loading_container = st.container()
         
-        with loading_container:
-            st.info("🔄 Iniciando carga de datos...")
-        
         # === ESTRATEGIA 1: GOOGLE DRIVE (PRIORIDAD) ===
         if check_google_drive_availability():
             logger.info("🌐 Google Drive disponible - intentando carga remota")
-            
-            with loading_container:
-                st.info("🌐 Cargando datos desde Google Drive...")
             
             data_gdrive = load_data_from_google_drive()
             
             if data_gdrive:
                 loading_container.empty()
-                st.success("✅ Datos cargados exitosamente desde Google Drive")
                 
                 # Log para debugging
                 logger.info(f"✅ Google Drive exitoso: {len(data_gdrive['casos'])} casos, {len(data_gdrive['epizootias'])} epizootias")
@@ -327,9 +317,6 @@ def load_enhanced_datasets():
 
         progress_bar.progress(50)
         status_text.text("🔧 Procesando datos locales...")
-
-        # Procesar datos locales usando la misma lógica
-        # [Resto del código de procesamiento existente...]
         
         # Limpiar datos
         for df in [casos_df, epizootias_df]:
@@ -711,13 +698,58 @@ def apply_scroll_fix_javascript():
     
     st.markdown(js_code, unsafe_allow_html=True)
     
+def apply_scroll_fix_maps_specific():
+        """CSS específico para corregir scroll en pestañas de mapas únicamente."""
+        st.markdown("""
+            <style>
+            /* Corrección específica para scroll infinito en mapas */
+            div[data-baseweb="tab-panel"]:has(.maps-view-container) {
+                max-height: none !important;
+                height: auto !important;
+                overflow: visible !important;
+                overflow-y: visible !important;
+            }
+            
+            .stApp .main .block-container:has(.maps-view-container) {
+                max-height: none !important;
+                height: auto !important;
+                overflow-y: visible !important;
+            }
+            
+            .element-container:has(.maps-view-container) {
+                max-height: none !important;
+                height: auto !important;
+                overflow: visible !important;
+            }
+            
+            @media (max-width: 768px) {
+                .row-widget.stHorizontal {
+                    flex-direction: column !important;
+                }
+                
+                .row-widget.stHorizontal > div {
+                    width: 100% !important;
+                    margin-bottom: 1rem !important;
+                }
+                
+                .css-1r6slb0 {
+                    flex: 1 1 100% !important;
+                    width: 100% !important;
+                    margin-bottom: 1rem !important;
+                }
+            }
+            </style>
+        """, unsafe_allow_html=True)
+    
 def main():
     """
-    FUNCIÓN PRINCIPAL CORREGIDA - Flujo de datos unificado CON DEBUG COMPLETO
+    Flujo de datos unificado CON DEBUG COMPLETO
     """
     # Configurar página
     configure_page()
-
+    
+    apply_scroll_fix_maps_specific()
+    
     # Sidebar básico
     try:
         from components.sidebar import init_responsive_sidebar

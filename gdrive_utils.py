@@ -368,18 +368,9 @@ def load_data_from_google_drive():
         casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
         epizootias_df = pd.read_excel(epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
         
-        progress_bar.progress(80)
-        
-        # PASO 4: Procesar datos (85-90%)
-        status_text.text("🔧 Procesando y organizando datos...")
-        
         processed_data = process_gdrive_data(casos_df, epizootias_df, None)
         
         progress_bar.progress(90)
-        
-        # PASO 5: Finalizar (90-100%)
-        status_text.text("✅ Completando carga de datos...")
-        progress_bar.progress(100)
         
         # Limpiar UI
         time.sleep(1)
@@ -387,7 +378,6 @@ def load_data_from_google_drive():
         
         if processed_data:
             logger.info("✅ Datos cargados exitosamente desde Google Drive")
-            st.success("✅ Datos cargados desde Google Drive")
             return processed_data
         else:
             raise Exception("Error procesando datos descargados")
