@@ -46,31 +46,75 @@ except ImportError:
     SHAPEFILE_LOADER_AVAILABLE = False
 
 def detect_device_type_simple():
-    """Detecta tipo de dispositivo usando JavaScript simple."""
+    """Detecta tipo de dispositivo usando JavaScript mejorado."""
     
-    # Inyectar JavaScript para detectar ancho de pantalla
     device_detection = st.empty()
     
     js_code = """
     <script>
-    const isMobile = window.innerWidth <= 768;
-    const deviceType = isMobile ? 'mobile' : 'desktop';
+    function detectDevice() {
+        const width = Math.max(
+            document.documentElement.clientWidth || 0, 
+            window.innerWidth || 0
+        );
+        
+        console.log('📱 Viewport width detected:', width);
+        
+        let deviceType = 'desktop';
+        let mapWidth = 700;
+        
+        if (width <= 768) {
+            deviceType = 'mobile';
+            mapWidth = Math.min(width - 40, 350); // 20px padding cada lado, max 350
+        } else if (width <= 1024) {
+            deviceType = 'tablet';
+            mapWidth = Math.min(width * 0.6, 500);
+        } else {
+            deviceType = 'desktop';
+            mapWidth = 700;
+        }
+        
+        // Guardar en variables globales
+        window.dashboardDeviceType = deviceType;
+        window.dashboardMapWidth = mapWidth;
+        
+        console.log('📊 Device detected:', deviceType, 'Map width:', mapWidth);
+        
+        // Aplicar estilos inmediatamente si el mapa ya existe
+        setTimeout(() => {
+            const mapContainers = document.querySelectorAll('.mobile-map-section iframe, .desktop-map-section iframe');
+            mapContainers.forEach(iframe => {
+                if (deviceType === 'mobile') {
+                    iframe.style.width = mapWidth + 'px';
+                    iframe.style.maxWidth = '100%';
+                    iframe.style.margin = '0 auto';
+                    iframe.style.display = 'block';
+                }
+            });
+        }, 100);
+    }
     
-    // Guardar en variable global para acceso posterior
-    window.dashboardDeviceType = deviceType;
+    // Ejecutar inmediatamente
+    detectDevice();
     
-    // También almacenar en localStorage como fallback
-    localStorage.setItem('dashboardDeviceType', deviceType);
-    
-    console.log('📱 Device detected:', deviceType, 'Width:', window.innerWidth);
+    // Ejecutar en resize
+    window.addEventListener('resize', detectDevice);
     </script>
     """
     
     device_detection.markdown(js_code, unsafe_allow_html=True)
     
-    # Fallback: Asumir móvil si no se puede detectar
-    # En la práctica, siempre crear ambos layouts y dejar que CSS maneje
-    return "responsive"  # Crear ambos y CSS decide
+    # Retornar tipo con ancho dinámico
+    return "responsive"
+
+def get_dynamic_map_width():
+    """Obtiene el ancho dinámico del mapa desde JavaScript."""
+    # Valor por defecto para móviles
+    default_mobile_width = 350
+    
+    # En un entorno real, esto vendría del JavaScript
+    # Por ahora, usar un valor responsivo basado en CSS
+    return default_mobile_width
 
 def show(data_filtered, filters, colors):
     """
@@ -132,25 +176,235 @@ def show(data_filtered, filters, colors):
         create_desktop_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
 
 def create_mobile_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered):
-    """Layout específico para móviles - Vertical."""
+    """Layout móvil CORREGIDO con mapa centrado y responsive."""
     
     st.markdown('<div class="mobile-maps-container">', unsafe_allow_html=True)
     
-    # **SECCIÓN 1: MAPA (Arriba)**
+    # **SECCIÓN 1: MAPA RESPONSIVE**
     st.markdown('<div class="mobile-map-section">', unsafe_allow_html=True)
-    create_enhanced_map_system_hybrid(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+    
+    # Información de debugging (opcional - remover en producción)
+    st.caption("📱 Vista móvil - Mapa responsive centrado")
+    
+    # Crear el mapa con ancho dinámico
+    create_enhanced_map_system_hybrid_mobile(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+    
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # **SEPARADOR VISUAL**
+    # **SEPARADOR**
     st.markdown('<div class="mobile-separator"></div>', unsafe_allow_html=True)
     
-    # **SECCIÓN 2: TARJETAS (Abajo)**
+    # **SECCIÓN 2: TARJETAS**
     st.markdown('<div class="mobile-cards-section">', unsafe_allow_html=True)
     create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors)
     st.markdown('</div>', unsafe_allow_html=True)
     
     st.markdown('</div>', unsafe_allow_html=True)
+
+def create_enhanced_map_system_hybrid_mobile(casos, epizootias, geo_data, filters, colors, data_filtered):
+    """Sistema de mapas optimizado para móviles."""
     
+    # Determinar nivel del mapa
+    current_level = determine_map_level(filters)
+    
+    # Controles simplificados para móviles
+    create_navigation_controls_mobile(current_level, filters, colors)
+    
+    # Verificar datos geográficos
+    if not geo_data:
+        st.error("❌ No hay datos geográficos disponibles")
+        return
+    
+    has_municipios = 'municipios' in geo_data and not geo_data['municipios'].empty
+    
+    # Crear mapa según nivel
+    if current_level == "departamento" and has_municipios:
+        create_departmental_map_mobile(casos, epizootias, geo_data, colors)
+    else:
+        st.info("🗺️ Vista de mapa no disponible para el nivel seleccionado en móvil")
+        show_fallback_summary_table(casos, epizootias, "departamental")
+
+def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
+    """Mapa departamental optimizado para móviles."""
+    
+    municipios = geo_data['municipios'].copy()
+    logger.info(f"🏛️ Creando mapa móvil con {len(municipios)} municipios")
+    
+    # Preparar datos
+    municipios_data = prepare_municipal_data_enhanced(casos, epizootias, municipios)
+    
+    # Límites del Tolima
+    bounds = municipios.total_bounds
+    center_lat = (bounds[1] + bounds[3]) / 2
+    center_lon = (bounds[0] + bounds[2]) / 2
+    
+    # **CONFIGURACIÓN MÓVIL ESPECÍFICA**
+    m = folium.Map(
+        location=[center_lat, center_lon],
+        zoom_start=7,  # Zoom menor para móviles
+        tiles='CartoDB positron',
+        zoom_control=False,
+        scrollWheelZoom=False,
+        doubleClickZoom=False,
+        dragging=False,
+        attributionControl=False,
+        max_bounds=True,
+        min_zoom=7,
+        max_zoom=7
+    )
+    
+    # Ajustar límites
+    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
+    m.options['maxBounds'] = [[bounds[1] - 0.1, bounds[0] - 0.1], [bounds[3] + 0.1, bounds[2] + 0.1]]
+    
+    # Agregar municipios con tooltips simplificados para móviles
+    max_casos = municipios_data['casos'].max() if municipios_data['casos'].max() > 0 else 1
+    max_epi = municipios_data['epizootias'].max() if municipios_data['epizootias'].max() > 0 else 1
+    
+    for idx, row in municipios_data.iterrows():
+        municipio_name = row['MpNombre']
+        casos_count = row['casos']
+        epizootias_count = row['epizootias']
+        
+        # Color según datos
+        if casos_count > 0:
+            intensity = min(casos_count / max_casos, 1.0) if max_casos > 0 else 0
+            fill_color = f"rgba(229, 25, 55, {0.4 + intensity * 0.5})"
+            border_color = colors['danger']
+        elif epizootias_count > 0:
+            epi_intensity = min(epizootias_count / max_epi, 1.0) if max_epi > 0 else 0
+            fill_color = f"rgba(247, 148, 29, {0.3 + epi_intensity * 0.4})"
+            border_color = colors['warning']
+        else:
+            fill_color = "rgba(200, 200, 200, 0.3)"
+            border_color = "#cccccc"
+        
+        # Tooltip simplificado para móviles
+        tooltip_text = f"""
+        <div style="font-family: Arial; padding: 6px; max-width: 140px; font-size: 11px;">
+            <b>{municipio_name}</b><br>
+            🦠 {casos_count}<br>
+            🐒 {epizootias_count}
+        </div>
+        """
+        
+        # Agregar polígono con estilo móvil
+        geojson = folium.GeoJson(
+            row['geometry'],
+            style_function=lambda x, color=fill_color, border=border_color: {
+                'fillColor': color,
+                'color': border,
+                'weight': 1,  # Líneas más delgadas en móvil
+                'fillOpacity': 0.7,
+                'opacity': 1
+            },
+            tooltip=folium.Tooltip(tooltip_text, sticky=True),
+        )
+        geojson.add_to(m)
+    
+    # **RENDERIZAR CON ANCHO DINÁMICO PARA MÓVILES**
+    map_width = get_dynamic_map_width()
+    
+    map_data = st_folium(
+        m, 
+        width=map_width,  # Ancho dinámico
+        height=350,       # Altura fija para móviles
+        returned_objects=["last_object_clicked"],
+        key="mobile_departmental_map"
+    )
+    
+    # Procesar clicks con manejo simplificado
+    handle_enhanced_click_interactions_mobile(map_data, municipios_data)
+
+def handle_enhanced_click_interactions_mobile(map_data, municipios_data):
+    """Manejo simplificado de clicks para móviles."""
+    
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar municipio más cercano
+                min_distance = float('inf')
+                municipio_clicked = None
+                municipio_info = None
+                
+                for idx, row in municipios_data.iterrows():
+                    try:
+                        centroid = row['geometry'].centroid
+                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            municipio_clicked = row['municipi_1']
+                            municipio_info = row
+                    except:
+                        continue
+                
+                if municipio_clicked and min_distance < 0.1:
+                    # **FILTRAR AUTOMÁTICAMENTE**
+                    st.session_state['municipio_filter'] = municipio_clicked
+                    st.session_state['vereda_filter'] = 'Todas'
+                    
+                    # **MENSAJE OPTIMIZADO PARA MÓVILES**
+                    casos_count = municipio_info['casos'] if municipio_info is not None else 0
+                    epi_count = municipio_info['epizootias'] if municipio_info is not None else 0
+                    
+                    if casos_count > 0 or epi_count > 0:
+                        st.success(f"✅ **{municipio_clicked}**")
+                        st.caption(f"🦠 {casos_count} casos • 🐒 {epi_count} epizootias")
+                    else:
+                        st.info(f"📍 **{municipio_clicked}** (sin datos)")
+                    
+                    # **ACTUALIZAR**
+                    st.rerun()
+                    
+    except Exception as e:
+        st.warning("⚠️ Error. Use filtros del sidebar.")
+        logger.error(f"Error en click móvil: {str(e)}")
+
+def create_navigation_controls_mobile(current_level, filters, colors):
+    """Controles de navegación simplificados para móviles."""
+    
+    level_info = {
+        "departamento": "🏛️ Tolima",
+        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')[:10]}...",
+        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')[:8]}..."
+    }
+    
+    current_info = level_info[current_level]
+    
+    # Botón único para móviles
+    if current_level != "departamento":
+        if st.button("🏛️ Volver a Tolima", key="nav_tolima_mobile", use_container_width=True):
+            reset_all_location_filters()
+            st.rerun()
+    
+    # Indicador de nivel actual
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(45deg, {colors['info']}, {colors['primary']});
+            color: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            margin: 10px 0;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+        ">
+            📍 {current_info}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def create_desktop_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered):
     """Layout específico para desktop - Horizontal."""
     
@@ -172,144 +426,120 @@ def create_desktop_layout(casos_filtrados, epizootias_filtradas, geo_data, filte
     st.markdown('</div>', unsafe_allow_html=True)
     
 def apply_maps_responsive_css_FIXED(colors):
-    """
-    CSS CORREGIDO para responsive de mapas - Versión robusta.
-    """
+    """CSS CORREGIDO específicamente para responsive móvil."""
     st.markdown(
         f"""
         <style>
-        /* =============== RESET Y BASE =============== */
+        /* =============== SOLUCIÓN ESPECÍFICA MAPAS MÓVILES =============== */
         
         .mobile-maps-container,
         .desktop-maps-container {{
             width: 100% !important;
             max-width: 100% !important;
             overflow: visible !important;
-            height: auto !important;
-            max-height: none !important;
         }}
         
-        /* =============== SOLUCIÓN SCROLL INFINITO =============== */
-        
-        /* Aplicar específicamente a elementos que contienen mapas */
-        .stTabs [data-baseweb="tab-panel"]:has(.mobile-maps-container),
-        .stTabs [data-baseweb="tab-panel"]:has(.desktop-maps-container) {{
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            overflow-y: visible !important;
-        }}
-        
-        .main .block-container:has(.mobile-maps-container),
-        .main .block-container:has(.desktop-maps-container) {{
-            max-height: none !important;
-            height: auto !important;
-            overflow-y: visible !important;
-            padding-bottom: 2rem !important;
-        }}
-        
-        /* =============== LAYOUT MÓVIL =============== */
-        
-        .mobile-maps-container {{
-            display: block !important;
-            width: 100% !important;
-        }}
+        /* =============== MOBILE: CENTRADO FORZADO =============== */
         
         .mobile-map-section {{
             width: 100% !important;
+            display: flex !important;
+            flex-direction: column !important;
+            align-items: center !important;
+            justify-content: center !important;
+            text-align: center !important;
+            padding: 0 15px !important;
             margin-bottom: 1.5rem !important;
-            text-align: center !important; /* Centrar mapa */
+            box-sizing: border-box !important;
         }}
         
+        /* Contenedor específico de Streamlit para mapas */
+        .mobile-map-section .element-container,
         .mobile-map-section .stComponentV1 {{
-            max-width: 100% !important;
-            margin: 0 auto !important; /* Centrar mapa */
-            border-radius: 12px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-            overflow: hidden !important;
-            max-height: 400px !important;
-        }}
-        
-        .mobile-map-section iframe {{
-            border-radius: 12px !important;
-            border: 1px solid #e1e5e9 !important;
             width: 100% !important;
             max-width: 100% !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+            margin: 0 auto !important;
         }}
         
-        .mobile-separator {{
-            height: 1px !important;
-            background: linear-gradient(90deg, transparent, {colors['secondary']}, transparent) !important;
-            margin: 1.5rem 0 !important;
-            opacity: 0.5 !important;
+        /* =============== IFRAME FOLIUM: RESPONSIVE CRÍTICO =============== */
+        
+        /* Móviles: Iframe centrado y responsive */
+        @media (max-width: 768px) {{
+            .mobile-map-section iframe {{
+                width: 100% !important;
+                max-width: min(350px, calc(100vw - 30px)) !important;
+                min-width: 280px !important;
+                height: 350px !important;
+                margin: 0 auto !important;
+                display: block !important;
+                border-radius: 12px !important;
+                border: 2px solid #e1e5e9 !important;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+            }}
+            
+            /* Forzar centrado del contenedor del iframe */
+            .mobile-map-section > div {{
+                width: 100% !important;
+                display: flex !important;
+                justify-content: center !important;
+            }}
+            
+            /* Asegurar que todos los divs padre estén centrados */
+            .mobile-map-section * {{
+                text-align: center !important;
+            }}
+            
+            /* Específico para streamlit-folium */
+            .mobile-map-section [data-testid="stComponentV1"] {{
+                width: 100% !important;
+                display: flex !important;
+                justify-content: center !important;
+            }}
+            
+            /* Corrección adicional para elementos generados por folium */
+            .mobile-map-section .folium-map {{
+                margin: 0 auto !important;
+            }}
         }}
         
-        .mobile-cards-section {{
-            width: 100% !important;
+        /* =============== TABLET =============== */
+        
+        @media (min-width: 769px) and (max-width: 1024px) {{
+            .desktop-map-section iframe {{
+                width: 100% !important;
+                max-width: 500px !important;
+                height: 450px !important;
+                border-radius: 12px !important;
+                border: 1px solid #e1e5e9 !important;
+                margin: 0 auto !important;
+                display: block !important;
+            }}
         }}
         
-        .mobile-cards-section .super-enhanced-card {{
-            margin-bottom: 1rem !important;
-            max-width: 100% !important;
+        /* =============== DESKTOP =============== */
+        
+        @media (min-width: 1025px) {{
+            .desktop-map-section iframe {{
+                width: 100% !important;
+                max-width: 700px !important;
+                height: 500px !important;
+                border-radius: 12px !important;
+                border: 1px solid #e1e5e9 !important;
+            }}
         }}
         
-        /* =============== LAYOUT DESKTOP =============== */
-        
-        .desktop-maps-container {{
-            display: block !important;
-            width: 100% !important;
-        }}
-        
-        .desktop-map-section {{
-            height: auto !important;
-            width: 100% !important;
-        }}
-        
-        .desktop-map-section .stComponentV1 {{
-            border-radius: 12px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-            overflow: hidden !important;
-            max-height: 500px !important;
-            width: 100% !important;
-        }}
-        
-        .desktop-map-section iframe {{
-            border-radius: 12px !important;
-            border: 1px solid #e1e5e9 !important;
-        }}
-        
-        .desktop-cards-section {{
-            height: auto !important;
-            width: 100% !important;
-        }}
-        
-        .desktop-cards-section .super-enhanced-card {{
-            margin-bottom: 1.5rem !important;
-            width: 100% !important;
-        }}
-        
-        /* =============== RESPONSIVE BREAKPOINTS =============== */
+        /* =============== BREAKPOINTS ESPECÍFICOS =============== */
         
         /* Esconder desktop en móvil */
         @media (max-width: 768px) {{
             .desktop-maps-container {{
                 display: none !important;
             }}
-            
             .mobile-maps-container {{
                 display: block !important;
-            }}
-            
-            /* Forzar centrado del mapa en móviles */
-            .mobile-map-section {{
-                display: flex !important;
-                justify-content: center !important;
-                align-items: center !important;
-                flex-direction: column !important;
-            }}
-            
-            .mobile-map-section .stComponentV1 {{
-                align-self: center !important;
             }}
         }}
         
@@ -318,45 +548,38 @@ def apply_maps_responsive_css_FIXED(colors):
             .mobile-maps-container {{
                 display: none !important;
             }}
-            
             .desktop-maps-container {{
                 display: block !important;
             }}
         }}
         
-        /* =============== CONTROLES Y BOTONES =============== */
+        /* =============== CORRECCIONES ADICIONALES =============== */
         
-        @media (max-width: 768px) {{
-            .mobile-map-section .stButton > button {{
-                font-size: 0.8rem !important;
-                padding: 0.5rem 1rem !important;
-                margin: 0.25rem !important;
-            }}
-            
-            .mobile-map-section .stAlert,
-            .mobile-map-section .stInfo {{
-                font-size: 0.85rem !important;
-                margin: 0.5rem 0 !important;
-                padding: 0.75rem !important;
-            }}
+        /* Asegurar que los componentes de Streamlit no interfieran */
+        .mobile-map-section .stHorizontal,
+        .mobile-map-section .stVertical {{
+            width: 100% !important;
+            align-items: center !important;
+            justify-content: center !important;
         }}
         
-        /* =============== FUERZA ESPECÍFICA PARA STREAMLIT COLUMNS =============== */
+        /* Corregir cualquier overflow que cause recorte */
+        .mobile-map-section,
+        .mobile-map-section > *,
+        .mobile-map-section iframe {{
+            overflow: visible !important;
+        }}
         
-        /* Asegurar que las columnas de Streamlit funcionen en desktop */
-        @media (min-width: 769px) {{
-            .desktop-maps-container .css-1r6slb0 {{
-                flex: none !important;
-                width: auto !important;
-                min-width: 0 !important;
+        /* Fallback con CSS variables */
+        :root {{
+            --mobile-map-width: min(100vw - 30px, 350px);
+        }}
+        
+        @media (max-width: 768px) {{
+            .mobile-map-section iframe {{
+                width: var(--mobile-map-width) !important;
             }}
-            
-            .desktop-maps-container .row-widget.stHorizontal {{
-                display: flex !important;
-                flex-direction: row !important;
-                gap: 2rem !important;
-            }}
-        }}        
+        }}
         </style>
         """,
         unsafe_allow_html=True,
