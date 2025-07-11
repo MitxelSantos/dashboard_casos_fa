@@ -1,0 +1,15 @@
+[drive_files]
+# Archivos existentes
+casos_excel = "11JqMuNotFts8VPcPOz3jI5BbdZJ6Eh4C"
+epizootias_excel = "1xH2qwv0GbNh7bxNIRr55svQgZVsoaQ1i"
+logo_gobernacion = "1oi07z32n1ecbmJJIfU97NVLGHE50Agbj"
+
+# Shapefiles para mapas
+municipios_shp = "1N_NrjQLQdSyPP1EPyNeoKfzUaN11BMYi"
+municipios_shx = "1YdWnqvCRAwd0Lq806bx8FuzTYykuQqpB"
+municipios_dbf = "1-f6Yq5eqX2MlIPyYk-_eJqHfuktwlQqC"
+municipios_prj = "1GJfVxOqzdJd8uHCpQ5yWIFkm2AQYmC4v"
+veredas_shp = "1BcJcPwkvAEoo7Z8fDayp2juSlnuky8u-"
+veredas_shx = "1OCIMiG2HsSVKQ3yjEAzaKqFGf6Z7esZP"
+veredas_dbf = "1SFH8UDtaoRijHDHdtXc_NWV7snoRxnQd"
+veredas_prj = "1UJOopVTfh4LYONlNm00hCd247ulRRFtf"
