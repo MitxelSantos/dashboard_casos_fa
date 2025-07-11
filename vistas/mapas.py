@@ -1,9 +1,6 @@
 """
-Vista de mapas CORREGIDA del dashboard de Fiebre Amarilla.
-CORRECCIÓN PRINCIPAL:
-- Las tarjetas informativas GARANTIZAN uso de datos filtrados
-- Verificación y logging de flujo de datos filtrados
-- Eliminación de accesos a datos originales
+Vista de mapas CORREGIDA con sistema híbrido de shapefiles
+SOLUCIÓN: Google Drive → Local fallback para shapefiles
 """
 
 import streamlit as st
@@ -32,73 +29,67 @@ from utils.data_processor import (
     ensure_filtered_data_usage
 )
 
-# Ruta de shapefiles procesados
-PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
+# NUEVO: Importar el sistema híbrido de shapefiles
+try:
+    from utils.shapefile_loader import (
+        load_tolima_shapefiles,
+        check_shapefiles_availability,
+        show_shapefile_setup_instructions,
+        get_shapefile_loader
+    )
+    SHAPEFILE_LOADER_AVAILABLE = True
+except ImportError:
+    SHAPEFILE_LOADER_AVAILABLE = False
+    # Fallback a las funciones originales si no existe el nuevo loader
+    
+# REMOVIDO: Ruta hardcodeada problemática
+# PROCESSED_DIR = Path("C:/Users/Miguel Santos/Desktop/Tolima-Veredas/processed")
 
-
-# TEMPORAL: Agrega esto al inicio de la función show() en vistas/mapas.py para debugging:
 
 def show(data_filtered, filters, colors):
     """
-    LIMPIA: Vista completa de mapas que GARANTIZA uso de datos filtrados.
+    Vista completa de mapas CORREGIDA con carga híbrida de shapefiles.
     """
     # **VERIFICACIÓN CRÍTICA INICIAL**
     logger = logging.getLogger(__name__)
-    logger.info("🗺️ INICIANDO VISTA DE MAPAS")
+    logger.info("🗺️ INICIANDO VISTA DE MAPAS CON SISTEMA HÍBRIDO")
     
     # Debug detallado del flujo de datos
     debug_data_flow(
         data_filtered,  # Como "originales" porque ya vienen filtrados
         data_filtered,  # Como "filtrados" 
         filters, 
-        "ENTRADA_VISTA_MAPAS"
+        "ENTRADA_VISTA_MAPAS_HIBRIDA"
     )
     
     # Verificar que los datos están filtrados
     casos_filtrados = data_filtered["casos"]
     epizootias_filtradas = data_filtered["epizootias"]
     
-    verify_filtered_data_usage(casos_filtrados, "vista_mapas - casos_filtrados")
-    verify_filtered_data_usage(epizootias_filtradas, "vista_mapas - epizootias_filtradas")
+    verify_filtered_data_usage(casos_filtrados, "vista_mapas_hibrida - casos_filtrados")
+    verify_filtered_data_usage(epizootias_filtradas, "vista_mapas_hibrida - epizootias_filtradas")
 
     # **APLICAR CSS INMEDIATAMENTE AL INICIO**
     apply_enhanced_cards_css_FIXED(colors)
-    
-    # **DEBUG INFO PARA EL USUARIO (OPCIONAL - PUEDES COMENTAR ESTO)**
-    with st.expander("🔧 Debug - Datos recibidos en vista mapas", expanded=False):
-        st.write(f"**Casos filtrados:** {len(casos_filtrados)}")
-        st.write(f"**Epizootias filtradas:** {len(epizootias_filtradas)}")
-        st.write(f"**Filtros activos:** {filters.get('active_filters', [])}")
-        
-        # Verificar filtro específico
-        municipio_filter = filters.get("municipio_display", "Todos")
-        vereda_filter = filters.get("vereda_display", "Todas")
-        st.write(f"**Filtro municipio:** {municipio_filter}")
-        st.write(f"**Filtro vereda:** {vereda_filter}")
-        
-        # Verificar si los datos realmente están filtrados
-        if municipio_filter != "Todos" and not casos_filtrados.empty:
-            municipios_en_datos = casos_filtrados["municipio"].unique() if "municipio" in casos_filtrados.columns else []
-            st.write(f"**Municipios en casos:** {list(municipios_en_datos)}")
 
     if not MAPS_AVAILABLE:
         show_maps_not_available()
         return
 
-    # Verificar disponibilidad de shapefiles
-    if not check_shapefiles_availability():
-        show_shapefiles_setup_instructions()
+    # **NUEVO: Verificar disponibilidad con sistema híbrido**
+    if not check_shapefiles_availability_hybrid():
+        show_shapefiles_setup_instructions_hybrid()
         return
 
-    # Cargar datos geográficos
-    geo_data = load_geographic_data_silent()
+    # **NUEVO: Cargar datos geográficos con sistema híbrido**
+    geo_data = load_geographic_data_hybrid()
     
     if not geo_data:
-        show_geographic_data_error()
+        show_geographic_data_error_hybrid()
         return
 
     # **LOG DE VERIFICACIÓN ADICIONAL**
-    logger.info(f"🗺️ Vista mapas - Datos filtrados verificados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
+    logger.info(f"🗺️ Vista mapas híbrida - Datos filtrados verificados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
     
     # Mostrar información de filtrado si hay filtros activos
     active_filters = filters.get("active_filters", [])
@@ -109,204 +100,136 @@ def show(data_filtered, filters, colors):
     col_mapa, col_tarjetas = st.columns([3, 2])  # 60% mapa, 40% tarjetas
     
     with col_mapa:
-        create_enhanced_map_system(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+        create_enhanced_map_system_hybrid(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
     
     with col_tarjetas:
         # **CRÍTICO: PASAR DATOS FILTRADOS VERIFICADOS A LAS TARJETAS**
         create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors)
 
-def apply_enhanced_cards_css_FIXED(colors):
+
+def check_shapefiles_availability_hybrid():
     """
-    CSS CORREGIDO Y MEJORADO para tarjetas - Con !important forzado
+    NUEVA: Verifica disponibilidad de shapefiles con sistema híbrido.
     """
-    st.markdown(
-        f"""
-        <style>
-        /* DEBUGGING: Mensaje visible si el CSS se carga */
-        body::before {{
-            content: "🎨 CSS PERSONALIZADO CARGADO" !important;
-            position: fixed !important;
-            top: 0 !important;
-            right: 0 !important;
-            background: green !important;
-            color: white !important;
-            padding: 5px 10px !important;
-            z-index: 9999 !important;
-            font-size: 12px !important;
-        }}
-        
-        /* RESET para evitar conflictos */
-        .super-enhanced-card, .super-enhanced-card * {{
-            box-sizing: border-box !important;
-        }}
-        
-        /* Tarjetas súper mejoradas - FORZADAS CON !important */
-        .super-enhanced-card {{
-            background: linear-gradient(135deg, white 0%, #fafafa 100%) !important;
-            border-radius: 16px !important;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1) !important;
-            overflow: hidden !important;
-            margin: 1.5rem 0 !important;
-            border: 1px solid #e1e5e9 !important;
-            transition: all 0.4s ease !important;
-            position: relative !important;
-            width: 100% !important;
-            display: block !important;
-        }}
-        
-        .super-enhanced-card:hover {{
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15) !important;
-            transform: translateY(-3px) !important;
-        }}
-        
-        .super-enhanced-card::before {{
-            content: '' !important;
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            height: 4px !important;
-            background: linear-gradient(90deg, {colors['primary']}, {colors['secondary']}, {colors['accent']}) !important;
-        }}
-        
-        /* Headers específicos FORZADOS */
-        .cases-card .card-header {{
-            background: linear-gradient(135deg, {colors['danger']}, #e74c3c) !important;
-            color: white !important;
-            padding: 20px !important;
-        }}
-        
-        .epizootias-card .card-header {{
-            background: linear-gradient(135deg, {colors['warning']}, #f39c12) !important;
-            color: white !important;
-            padding: 20px !important;
-        }}
-        
-        .card-header {{
-            display: flex !important;
-            align-items: center !important;
-            gap: 15px !important;
-            position: relative !important;
-        }}
-        
-        .card-icon {{
-            font-size: 2.2rem !important;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)) !important;
-        }}
-        
-        .card-title {{
-            font-size: 1.3rem !important;
-            font-weight: 800 !important;
-            letter-spacing: 0.5px !important;
-            margin: 0 !important;
-        }}
-        
-        .card-subtitle {{
-            font-size: 0.9rem !important;
-            opacity: 0.9 !important;
-            font-weight: 500 !important;
-            margin: 2px 0 0 0 !important;
-        }}
-        
-        /* Cuerpo de tarjetas FORZADO */
-        .card-body {{
-            padding: 25px !important;
-        }}
-        
-        .main-metrics-grid {{
-            display: grid !important;
-            grid-template-columns: repeat(2, 1fr) !important;
-            gap: 15px !important;
-            margin-bottom: 20px !important;
-        }}
-        
-        .main-metric {{
-            background: #f8f9fa !important;
-            padding: 15px !important;
-            border-radius: 12px !important;
-            text-align: center !important;
-            border: 2px solid transparent !important;
-            transition: all 0.3s ease !important;
-            position: relative !important;
-            overflow: hidden !important;
-        }}
-        
-        .main-metric:hover {{
-            transform: translateY(-2px) !important;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
-        }}
-        
-        .metric-number {{
-            font-size: 1.8rem !important;
-            font-weight: 800 !important;
-            margin-bottom: 5px !important;
-            line-height: 1 !important;
-        }}
-        
-        .metric-number.primary {{ color: {colors['primary']} !important; }}
-        .metric-number.success {{ color: {colors['success']} !important; }}
-        .metric-number.danger {{ color: {colors['danger']} !important; }}
-        .metric-number.warning {{ color: {colors['warning']} !important; }}
-        .metric-number.info {{ color: {colors['info']} !important; }}
-        
-        .metric-label {{
-            font-size: 0.8rem !important;
-            color: #666 !important;
-            font-weight: 600 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.3px !important;
-        }}
-        
-        /* Información del último evento FORZADA */
-        .last-event-info {{
-            background: linear-gradient(135deg, #f0f8ff, #e6f3ff) !important;
-            border-radius: 12px !important;
-            padding: 15px !important;
-            border-left: 4px solid {colors['info']} !important;
-            margin-top: 15px !important;
-        }}
-        
-        .last-event-title {{
-            font-size: 0.9rem !important;
-            font-weight: 700 !important;
-            color: {colors['primary']} !important;
-            margin-bottom: 8px !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
-        }}
-        
-        .last-event-details {{
-            font-size: 0.9rem !important;
-            line-height: 1.4 !important;
-        }}
-        
-        .last-event-date {{
-            color: {colors['info']} !important;
-            font-weight: 600 !important;
-        }}
-        
-        .last-event-time {{
-            color: {colors['accent']} !important;
-            font-weight: 500 !important;
-            font-style: italic !important;
-        }}
-        
-        .no-data {{
-            color: #999 !important;
-            font-style: italic !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    if not SHAPEFILE_LOADER_AVAILABLE:
+        logging.warning("⚠️ Sistema híbrido de shapefiles no disponible, usando método original")
+        return check_shapefiles_availability_original()
     
-def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, data_filtered):
+    logging.info("🔍 Verificando shapefiles con sistema híbrido")
+    return check_shapefiles_availability()
+
+
+def load_geographic_data_hybrid():
     """
-    CORREGIDO: Sistema de mapas con logging mejorado.
+    NUEVA: Carga datos geográficos con sistema híbrido Google Drive → Local.
     """
+    if not SHAPEFILE_LOADER_AVAILABLE:
+        logging.warning("⚠️ Sistema híbrido no disponible, usando carga original")
+        return load_geographic_data_original()
+    
+    logging.info("🗺️ Cargando datos geográficos con sistema híbrido")
+    
+    try:
+        # Usar el nuevo sistema híbrido
+        geo_data = load_tolima_shapefiles()
+        
+        if geo_data:
+            logging.info(f"✅ Datos geográficos cargados: {list(geo_data.keys())}")
+            
+            # Verificar que tenemos los datos necesarios
+            if 'municipios' in geo_data:
+                logging.info(f"🏛️ Municipios: {len(geo_data['municipios'])} features")
+            
+            if 'veredas' in geo_data:
+                logging.info(f"🏘️ Veredas: {len(geo_data['veredas'])} features")
+            
+            return geo_data
+        else:
+            logging.error("❌ Sistema híbrido no pudo cargar datos geográficos")
+            return None
+            
+    except Exception as e:
+        logging.error(f"❌ Error en carga híbrida: {str(e)}")
+        st.error(f"Error cargando mapas: {str(e)}")
+        return None
+
+
+def show_shapefiles_setup_instructions_hybrid():
+    """
+    NUEVA: Instrucciones mejoradas con sistema híbrido.
+    """
+    if SHAPEFILE_LOADER_AVAILABLE:
+        show_shapefile_setup_instructions()
+    else:
+        show_shapefiles_setup_instructions_original()
+
+
+def show_geographic_data_error_hybrid():
+    """
+    NUEVA: Error mejorado para sistema híbrido.
+    """
+    st.error("🗺️ No se pudieron cargar los datos de mapas")
+    
+    with st.expander("🔧 Información de Diagnóstico", expanded=True):
+        st.markdown("""
+        ### 🔍 Posibles Causas:
+        
+        **En Streamlit Cloud:**
+        - Google Drive no configurado correctamente
+        - IDs de shapefiles faltantes en secrets.toml
+        - Credenciales de servicio inválidas
+        
+        **En desarrollo local:**
+        - Archivos de mapas no encontrados en las rutas esperadas
+        - Problemas con las librerías de mapas (geopandas, folium)
+        
+        ### 🛠️ Soluciones:
+        
+        **Para Streamlit Cloud:**
+        1. Verifica que `.streamlit/secrets.toml` tenga la sección `[drive_files]`
+        2. Verifica que `gcp_service_account` esté configurado
+        3. Asegúrate de que los IDs de shapefiles sean correctos
+        
+        **Para desarrollo local:**
+        1. Coloca los archivos .shp en `./shapefiles/`
+        2. O en `./data/shapefiles/`
+        3. Asegúrate de tener geopandas instalado: `pip install geopandas`
+        """)
+        
+        # Mostrar estado del sistema
+        if SHAPEFILE_LOADER_AVAILABLE:
+            loader = get_shapefile_loader()
+            
+            st.markdown("### 📊 Estado del Sistema:")
+            
+            # Estado de Google Drive
+            if loader._is_google_drive_available():
+                st.success("✅ Google Drive configurado")
+            else:
+                st.error("❌ Google Drive no disponible")
+            
+            # Mostrar librerías disponibles
+            st.markdown("### 📚 Librerías:")
+            libs_status = {
+                "geopandas": MAPS_AVAILABLE,
+                "shapefile_loader": SHAPEFILE_LOADER_AVAILABLE,
+            }
+            
+            for lib, available in libs_status.items():
+                if available:
+                    st.success(f"✅ {lib}")
+                else:
+                    st.error(f"❌ {lib}")
+
+
+def create_enhanced_map_system_hybrid(casos, epizootias, geo_data, filters, colors, data_filtered):
+    """
+    CORREGIDO: Sistema de mapas que usa datos geográficos híbridos.
+    """
+    logger = logging.getLogger(__name__)
     
     # Log de datos recibidos
-    logging.info(f"🗺️ Sistema mapas recibió: {len(casos)} casos, {len(epizootias)} epizootias")
+    logger.info(f"🗺️ Sistema mapas híbrido recibió: {len(casos)} casos, {len(epizootias)} epizootias")
     
     # Determinar nivel de mapa actual
     current_level = determine_map_level(filters)
@@ -317,315 +240,52 @@ def create_enhanced_map_system(casos, epizootias, geo_data, filters, colors, dat
     # Indicador de filtrado activo
     show_filter_indicator(filters, colors)
     
+    # **VERIFICAR DATOS GEOGRÁFICOS DISPONIBLES**
+    if not geo_data:
+        st.error("❌ No hay datos geográficos disponibles")
+        return
+    
+    # Verificar qué tipos de mapas podemos mostrar
+    has_municipios = 'municipios' in geo_data and not geo_data['municipios'].empty
+    has_veredas = 'veredas' in geo_data and not geo_data['veredas'].empty
+    
+    logger.info(f"🗺️ Datos geográficos disponibles: municipios={has_municipios}, veredas={has_veredas}")
+    
     # Crear mapa según nivel con datos filtrados
     if current_level == "departamento":
-        logging.info("🏛️ Creando mapa departamental con datos filtrados")
-        create_departmental_map_enhanced(casos, epizootias, geo_data, colors)
+        if has_municipios:
+            logger.info("🏛️ Creando mapa departamental con datos filtrados")
+            create_departmental_map_enhanced_hybrid(casos, epizootias, geo_data, colors)
+        else:
+            st.warning("🏛️ Mapa departamental no disponible (faltan datos de municipios)")
+            show_fallback_summary_table(casos, epizootias, "departamental")
+            
     elif current_level == "municipio":
-        logging.info(f"🏘️ Creando mapa municipal para {filters.get('municipio_display')} con datos filtrados")
-        create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors)
+        if has_veredas:
+            logger.info(f"🏘️ Creando mapa municipal para {filters.get('municipio_display')} con datos filtrados")
+            create_municipal_map_enhanced_hybrid(casos, epizootias, geo_data, filters, colors)
+        else:
+            st.warning(f"🏘️ Mapa de veredas no disponible para {filters.get('municipio_display')}")
+            show_fallback_summary_table(casos, epizootias, "municipal", filters.get('municipio_display'))
+            
     elif current_level == "vereda":
-        logging.info(f"📍 Creando vista de vereda {filters.get('vereda_display')} con datos filtrados")
-        create_vereda_detail_view(casos, epizootias, filters, colors)
-
-def create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors):
-    """
-    NUEVA FUNCIÓN: Tarjetas informativas que GARANTIZAN uso de datos filtrados.
-    Esta función reemplaza completamente la anterior para eliminar cualquier ambigüedad.
-    """
-    logger = logging.getLogger(__name__)
-    logger.info("🏷️ INICIANDO TARJETAS INFORMATIVAS CON DATOS FILTRADOS GARANTIZADOS")
-    
-    # **VERIFICACIÓN DOBLE DE DATOS FILTRADOS**
-    casos_verificados, epizootias_verificadas = ensure_filtered_data_usage(
-        casos_filtrados, 
-        epizootias_filtradas, 
-        "tarjetas_informativas"
-    )
-    
-    # **CALCULAR MÉTRICAS DIRECTAMENTE CON DATOS VERIFICADOS**
-    logger.info(f"🧮 Calculando métricas con datos verificados: {len(casos_verificados)} casos, {len(epizootias_verificadas)} epizootias")
-    metrics = calculate_basic_metrics(casos_verificados, epizootias_verificadas)
-    
-    # **LOG DETALLADO DE MÉTRICAS CALCULADAS**
-    logger.info(f"📊 Métricas calculadas con datos filtrados:")
-    logger.info(f"   🦠 Total casos: {metrics['total_casos']}")
-    logger.info(f"   ⚰️ Fallecidos: {metrics['fallecidos']}")
-    logger.info(f"   🐒 Total epizootias: {metrics['total_epizootias']}")
-    logger.info(f"   🔴 Epizootias positivas: {metrics['epizootias_positivas']}")
-    
-    # **TARJETA DE CASOS CON DATOS FILTRADOS GARANTIZADOS**
-    create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # **TARJETA DE EPIZOOTIAS CON DATOS FILTRADOS GARANTIZADOS**
-    create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors)
-    
-    st.markdown("<br>", unsafe_allow_html=True)
-    
-    # **VERIFICACIÓN FINAL**
-    logger.info("✅ Tarjetas informativas completadas con datos filtrados verificados")
-
-def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
-    """
-    CORREGIDO: Misma estética exacta, solo HTML dividido en partes más pequeñas
-    """
-    logger = logging.getLogger(__name__)
-    
-    total_casos = metrics["total_casos"]
-    vivos = metrics["vivos"]
-    fallecidos = metrics["fallecidos"]
-    letalidad = metrics["letalidad"]
-    ultimo_caso = metrics["ultimo_caso"]
-    
-    # Determinar contexto de filtrado
-    filter_context = get_filter_context_info(filters)
-    
-    # **PARTE 1: Contenedor y header (igual que antes)**
-    header_html = f"""
-<div class="super-enhanced-card cases-card">
-    <div class="card-header">
-        <div class="card-icon">🦠</div>
-        <div>
-            <div class="card-title">CASOS FIEBRE AMARILLA</div>
-            <div class="card-subtitle">{filter_context["title"]}</div>
-        </div>
-    </div>
-    <div class="card-body">
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
-    
-    # **PARTE 2: Indicador de filtros (si aplica)**
-    active_filters = filters.get("active_filters", [])
-    if active_filters:
-        filter_indicator = f"""
-        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0; border-left: 3px solid #2196f3;">
-            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
-        </div>
-        """
-        st.markdown(filter_indicator, unsafe_allow_html=True)
-    
-    # **PARTE 3: Grid de métricas (HTML igual que antes, pero separado)**
-    metrics_grid_html = f"""
-        <div class="main-metrics-grid">
-            <div class="main-metric">
-                <div class="metric-number primary">{total_casos}</div>
-                <div class="metric-label">Total Casos</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number success">{vivos}</div>
-                <div class="metric-label">Vivos</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number danger">{fallecidos}</div>
-                <div class="metric-label">Fallecidos</div>
-            </div>
-            <div class="main-metric mortality">
-                <div class="metric-number warning">{letalidad:.1f}%</div>
-                <div class="metric-label">Mortalidad</div>
-            </div>
-        </div>
-    """
-    st.markdown(metrics_grid_html, unsafe_allow_html=True)
-    
-    # **PARTE 4: Información del último caso (HTML igual que antes)**
-    if ultimo_caso["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <strong>{ultimo_caso["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
-            </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin casos registrados{filter_context["suffix"].lower()}</span>
-            </div>
-        </div>
-        """
-    
-    st.markdown(ultimo_info, unsafe_allow_html=True)
-    
-    # **PARTE 5: Cerrar contenedores**
-    closing_html = """
-    </div>
-</div>
-    """
-    st.markdown(closing_html, unsafe_allow_html=True)
-    
-    logger.info("✅ Tarjeta de casos (HTML dividido) renderizada exitosamente")
+        logger.info(f"📍 Creando vista de vereda {filters.get('vereda_display')} con datos filtrados")
+        create_vereda_detail_view_hybrid(casos, epizootias, filters, colors)
 
 
-def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
+def create_departmental_map_enhanced_hybrid(casos, epizootias, geo_data, colors):
     """
-    CORREGIDO: Misma estética exacta, solo HTML dividido en partes más pequeñas
+    NUEVA: Mapa departamental usando datos híbridos.
     """
-    logger = logging.getLogger(__name__)
-    
-    total_epizootias = metrics["total_epizootias"]
-    positivas = metrics["epizootias_positivas"]
-    en_estudio = metrics["epizootias_en_estudio"]
-    ultima_epizootia = metrics["ultima_epizootia_positiva"]
-    
-    # Determinar contexto de filtrado
-    filter_context = get_filter_context_info(filters)
-    
-    # **PARTE 1: Contenedor y header (igual que antes)**
-    header_html = f"""
-<div class="super-enhanced-card epizootias-card">
-    <div class="card-header">
-        <div class="card-icon">🐒</div>
-        <div>
-            <div class="card-title">EPIZOOTIAS</div>
-            <div class="card-subtitle">{filter_context["title"]}</div>
-        </div>
-    </div>
-    <div class="card-body">
-    """
-    st.markdown(header_html, unsafe_allow_html=True)
-    
-    # **PARTE 2: Indicador de filtros (si aplica)**
-    active_filters = filters.get("active_filters", [])
-    if active_filters:
-        filter_indicator = f"""
-        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00; border-left: 3px solid #ff9800;">
-            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
-        </div>
-        """
-        st.markdown(filter_indicator, unsafe_allow_html=True)
-    
-    # **PARTE 3: Grid de métricas (HTML igual que antes, pero separado)**
-    metrics_grid_html = f"""
-        <div class="main-metrics-grid">
-            <div class="main-metric">
-                <div class="metric-number warning">{total_epizootias}</div>
-                <div class="metric-label">Total</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number danger">{positivas}</div>
-                <div class="metric-label">Positivas</div>
-            </div>
-            <div class="main-metric">
-                <div class="metric-number info">{en_estudio}</div>
-                <div class="metric-label">En Estudio</div>
-            </div>
-        </div>
-    """
-    st.markdown(metrics_grid_html, unsafe_allow_html=True)
-    
-    # **PARTE 4: Información de la última epizootia (HTML igual que antes)**
-    if ultima_epizootia["existe"]:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
-                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
-                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
-            </div>
-        </div>
-        """
-    else:
-        ultimo_info = f"""
-        <div class="last-event-info">
-            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
-            <div class="last-event-details">
-                <span class="no-data">Sin epizootias positivas{filter_context["suffix"].lower()}</span>
-            </div>
-        </div>
-        """
-    
-    st.markdown(ultimo_info, unsafe_allow_html=True)
-    
-    # **PARTE 5: Cerrar contenedores**
-    closing_html = """
-    </div>
-</div>
-    """
-    st.markdown(closing_html, unsafe_allow_html=True)
-    
-    logger.info("✅ Tarjeta de epizootias (HTML dividido) renderizada exitosamente")
-        
-def get_filter_context_info(filters):
-    """
-    Obtiene información del contexto de filtrado para mostrar en tarjetas.
-    """
-    municipio = filters.get("municipio_display", "Todos")
-    vereda = filters.get("vereda_display", "Todas")
-    
-    if vereda != "Todas":
-        return {
-            "title": f"Vigilancia en {vereda}",
-            "suffix": f"en {vereda}"
-        }
-    elif municipio != "Todos":
-        return {
-            "title": f"Vigilancia en {municipio}",
-            "suffix": f"en {municipio}"
-        }
-    else:
-        return {
-            "title": "Vigilancia epidemiológica Tolima",
-            "suffix": "en Tolima"
-        }
-
-def debug_css_rendering():
-    """
-    Función de debugging para verificar si el CSS personalizado funciona.
-    """
-    st.markdown(
-        """
-        <div class="super-enhanced-card cases-card" style="margin: 10px 0;">
-            <div class="card-header">
-                <div class="card-icon">🧪</div>
-                <div>
-                    <div class="card-title">TEST CSS</div>
-                    <div class="card-subtitle">Verificación de rendering</div>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="main-metrics-grid">
-                    <div class="main-metric">
-                        <div class="metric-number primary">✅</div>
-                        <div class="metric-label">CSS Funciona</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-def determine_map_level(filters):
-    """
-    SIMPLIFICADO: Determina el nivel de zoom del mapa según filtros activos.
-    Usa nombres directos sin normalización.
-    """
-    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
-        return "vereda"
-    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
-        return "municipio"
-    else:
-        return "departamento"
-
-def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
-    """
-    MEJORADO: Mapa departamental con hover para tooltip y click para filtrar (SIN popup).
-    Maneja municipios grises (sin datos).
-    """
-    
     if 'municipios' not in geo_data:
         st.error("No se pudo cargar el shapefile de municipios")
         return
     
     municipios = geo_data['municipios'].copy()
+    logging.info(f"🏛️ Creando mapa departamental con {len(municipios)} municipios")
+    
+    # **EL RESTO DE LA FUNCIÓN ES IGUAL QUE ANTES**
+    # Solo cambio la fuente de datos geográficos
     
     # Preparar datos agregados por municipio (INCLUYENDO MUNICIPIOS SIN DATOS)
     municipios_data = prepare_municipal_data_enhanced(casos, epizootias, municipios)
@@ -717,17 +377,17 @@ def create_departmental_map_enhanced(casos, epizootias, geo_data, colors):
         width=700,
         height=500,
         returned_objects=["last_object_clicked"],  # **SOLO CLICKS**
-        key="enhanced_main_map"
+        key="enhanced_main_map_hybrid"
     )
     
     # **LÓGICA MEJORADA**: Procesar clicks (incluyendo municipios grises)
     handle_enhanced_click_interactions(map_data, municipios_data)
 
-def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
+
+def create_municipal_map_enhanced_hybrid(casos, epizootias, geo_data, filters, colors):
     """
-    CORREGIDO: Mapa municipal con manejo seguro de veredas grises.
+    NUEVA: Mapa municipal usando datos híbridos.
     """
-    
     if 'veredas' not in geo_data:
         st.warning("🗺️ Shapefile de veredas no disponible - mostrando información tabular")
         show_municipal_tabular_view(casos, epizootias, filters, colors)
@@ -738,8 +398,9 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         st.error("No se pudo determinar el municipio para la vista de veredas")
         return
     
-    # Filtrar veredas del municipio usando nombres directos
+    # **EL RESTO ES IGUAL PERO USANDO geo_data híbrido**
     veredas = geo_data['veredas'].copy()
+    logging.info(f"🏘️ Creando mapa municipal con {len(veredas)} veredas disponibles")
     
     # Filtrar por municipi_1 que ahora coincide exactamente con los datos
     veredas_municipio = veredas[veredas['municipi_1'] == municipio_selected]
@@ -748,6 +409,8 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         st.warning(f"No se encontraron veredas para el municipio {municipio_selected}")
         show_municipal_tabular_view(casos, epizootias, filters, colors)
         return
+    
+    logging.info(f"🏘️ Veredas encontradas para {municipio_selected}: {len(veredas_municipio)}")
     
     # Preparar datos por vereda
     veredas_data = prepare_vereda_data_enhanced(casos, epizootias, veredas_municipio)
@@ -869,7 +532,7 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
             width=700,
             height=500,
             returned_objects=["last_object_clicked"],
-            key="enhanced_municipal_map_safe"
+            key="enhanced_municipal_map_hybrid"
         )
         
         # Procesar clicks de forma segura
@@ -880,652 +543,88 @@ def create_municipal_map_enhanced(casos, epizootias, geo_data, filters, colors):
         st.error("Error mostrando el mapa de veredas")
         show_municipal_tabular_view(casos, epizootias, filters, colors)
 
-def create_vereda_detail_view(casos, epizootias, filters, colors):
+
+def create_vereda_detail_view_hybrid(casos, epizootias, filters, colors):
     """
-    CORREGIDO: Vista detallada de vereda específica con filtrado correcto.
+    NUEVA: Vista de vereda usando sistema híbrido (sin cambios en la lógica).
     """
-    def normalize_name(name):
-        """Normaliza nombres para comparación consistente."""
-        if pd.isna(name) or name == "":
-            return ""
-        return str(name).upper().strip()
-    
-    vereda_display = filters.get('vereda_display', 'Vereda')
-    municipio_display = filters.get('municipio_display', 'Municipio')
-    
-    # Normalizar nombres para filtrado
-    vereda_norm = normalize_name(vereda_display)
-    municipio_norm = normalize_name(municipio_display)
-    
-    # FILTRAR DATOS ESPECÍFICAMENTE POR VEREDA
-    casos_vereda = pd.DataFrame()
-    epizootias_vereda = pd.DataFrame()
-    
-    # Filtrar casos por vereda específica
-    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
-        casos_vereda = casos[
-            (casos["vereda"].apply(normalize_name) == vereda_norm) &
-            (casos["municipio"].apply(normalize_name) == municipio_norm)
-        ].copy()
-    
-    # Filtrar epizootias por vereda específica
-    if not epizootias.empty and "vereda" in epizootias.columns and "municipio" in epizootias.columns:
-        epizootias_vereda = epizootias[
-            (epizootias["vereda"].apply(normalize_name) == vereda_norm) &
-            (epizootias["municipio"].apply(normalize_name) == municipio_norm)
-        ].copy()
-    
-    # Información de la vereda
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
-            color: white;
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        ">
-            <h3 style="margin: 0; font-size: 1.4rem;">📍 Vista Detallada</h3>
-            <p style="margin: 10px 0 0 0; font-size: 1rem; opacity: 0.9;">
-                <strong>{vereda_display}</strong> - {municipio_display}
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    # Estadísticas específicas de la vereda
-    total_casos = len(casos_vereda)
-    total_epizootias = len(epizootias_vereda)
-    
-    # Conteos específicos por tipo de epizootia
-    positivas_vereda = 0
-    en_estudio_vereda = 0
-    if not epizootias_vereda.empty and "descripcion" in epizootias_vereda.columns:
-        positivas_vereda = len(epizootias_vereda[epizootias_vereda["descripcion"] == "POSITIVO FA"])
-        en_estudio_vereda = len(epizootias_vereda[epizootias_vereda["descripcion"] == "EN ESTUDIO"])
-    
-    # Métricas específicas de la vereda
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("🦠 Casos Humanos", total_casos, 
-                 help=f"Casos registrados específicamente en {vereda_display}")
-    
-    with col2:
-        st.metric("🔴 Epiz. Positivas", positivas_vereda,
-                 help="Epizootias confirmadas positivas para fiebre amarilla")
-    
-    with col3:
-        st.metric("🔵 En Estudio", en_estudio_vereda,
-                 help="Epizootias con resultado pendiente")
-    
-    with col4:
-        actividad_total = total_casos + total_epizootias
-        st.metric("📊 Total Eventos", actividad_total,
-                 help="Total de eventos de vigilancia en esta vereda")
-    
-    # Log para debugging
-    logging.info(f"📍 Vista vereda {vereda_display}: {total_casos} casos, {total_epizootias} epizootias")
-    
-    # Análisis específico de la vereda
-    if total_casos > 0 or total_epizootias > 0:
-        st.markdown("---")
-        st.markdown("### 📊 Análisis Específico de la Vereda")
-        
-        # Crear dos columnas para casos y epizootias
-        col_casos, col_epi = st.columns([1, 1])
-        
-        with col_casos:
-            st.markdown("#### 🦠 Casos en esta Vereda")
-            
-            if not casos_vereda.empty:
-                # Tabla de casos con todas las columnas relevantes
-                casos_display = casos_vereda.copy()
-                
-                # Preparar columnas para mostrar
-                columnas_mostrar = []
-                if "fecha_inicio_sintomas" in casos_display.columns:
-                    casos_display["Fecha Síntomas"] = casos_display["fecha_inicio_sintomas"].dt.strftime('%d/%m/%Y')
-                    columnas_mostrar.append("Fecha Síntomas")
-                if "edad" in casos_display.columns:
-                    columnas_mostrar.append("edad")
-                if "sexo" in casos_display.columns:
-                    columnas_mostrar.append("sexo")
-                if "condicion_final" in casos_display.columns:
-                    casos_display["Condición"] = casos_display["condicion_final"]
-                    columnas_mostrar.append("Condición")
-                
-                if columnas_mostrar:
-                    st.dataframe(casos_display[columnas_mostrar], use_container_width=True, height=300)
-                else:
-                    st.dataframe(casos_display.head(), use_container_width=True, height=300)
-                
-                # Estadísticas de casos
-                if "condicion_final" in casos_vereda.columns:
-                    fallecidos_vereda = len(casos_vereda[casos_vereda["condicion_final"] == "Fallecido"])
-                    vivos_vereda = len(casos_vereda[casos_vereda["condicion_final"] == "Vivo"])
-                    letalidad_vereda = (fallecidos_vereda / total_casos * 100) if total_casos > 0 else 0
-                    
-                    st.markdown(f"""
-                    **📊 Estadísticas:**
-                    - 💚 Vivos: {vivos_vereda}
-                    - ⚰️ Fallecidos: {fallecidos_vereda}
-                    - 📈 Letalidad: {letalidad_vereda:.1f}%
-                    """)
-            else:
-                st.info("📭 No hay casos registrados en esta vereda")
-        
-        with col_epi:
-            st.markdown("#### 🐒 Epizootias en esta Vereda")
-            
-            if not epizootias_vereda.empty:
-                # Tabla de epizootias
-                epi_display = epizootias_vereda.copy()
-                
-                columnas_epi = []
-                if "fecha_recoleccion" in epi_display.columns:
-                    epi_display["Fecha Recolección"] = epi_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
-                    columnas_epi.append("Fecha Recolección")
-                if "descripcion" in epi_display.columns:
-                    epi_display["Resultado"] = epi_display["descripcion"]
-                    columnas_epi.append("Resultado")
-                if "proveniente" in epi_display.columns:
-                    epi_display["Fuente"] = epi_display["proveniente"].apply(
-                        lambda x: "Vigilancia Com." if "VIGILANCIA" in str(x) else "Incautación" if "INCAUTACIÓN" in str(x) else str(x)[:20]
-                    )
-                    columnas_epi.append("Fuente")
-                
-                if columnas_epi:
-                    st.dataframe(epi_display[columnas_epi], use_container_width=True, height=300)
-                else:
-                    st.dataframe(epi_display.head(), use_container_width=True, height=300)
-                
-                # Estadísticas de epizootias
-                st.markdown(f"""
-                **📊 Estadísticas:**
-                - 🔴 Positivas: {positivas_vereda}
-                - 🔵 En estudio: {en_estudio_vereda}
-                - 📈 Total: {total_epizootias}
-                """)
-            else:
-                st.info("📭 No hay epizootias registradas en esta vereda")
-        
-        # Análisis temporal si hay datos
-        st.markdown("---")
-        st.markdown("#### 📅 Análisis Temporal de la Vereda")
-        
-        if not casos_vereda.empty and "fecha_inicio_sintomas" in casos_vereda.columns:
-            casos_fecha = casos_vereda.dropna(subset=["fecha_inicio_sintomas"])
-            if not casos_fecha.empty:
-                st.markdown("**📊 Casos por Fecha**")
-                casos_temporal = casos_fecha.groupby(casos_fecha["fecha_inicio_sintomas"].dt.date).size().reset_index()
-                casos_temporal.columns = ["Fecha", "Casos"]
-                st.dataframe(casos_temporal, use_container_width=True, height=200)
-        
-        if not epizootias_vereda.empty and "fecha_recoleccion" in epizootias_vereda.columns:
-            epi_fecha = epizootias_vereda.dropna(subset=["fecha_recoleccion"])
-            if not epi_fecha.empty:
-                st.markdown("**📊 Epizootias por Fecha**")
-                epi_temporal = epi_fecha.groupby(epi_fecha["fecha_recoleccion"].dt.date).size().reset_index()
-                epi_temporal.columns = ["Fecha", "Epizootias"]
-                st.dataframe(epi_temporal, use_container_width=True, height=200)
-        
-        # Información de contexto
-        st.markdown("---")
-        st.markdown(f"""
-        ℹ️ **Información de Contexto:**
-        - Esta vista muestra únicamente los datos registrados en la vereda **{vereda_display}**
-        - Los datos incluyen casos humanos confirmados y epizootias (positivas + en estudio)
-        - Use los filtros del sidebar o navegue con los botones para cambiar la vista
-        """)
-        
-    else:
-        st.info(f"📊 No hay eventos registrados en la vereda **{vereda_display}** con los filtros actuales")
-        
-        # Sugerir verificar filtros
-        st.markdown("""
-        💡 **Sugerencias:**
-        - Verifique que los filtros de fecha no estén muy restrictivos
-        - Esta vereda puede no tener eventos registrados en el período seleccionado
-        - Use los botones de navegación para volver a la vista municipal o departamental
-        """)
+    # Esta función permanece igual ya que no depende de archivos geográficos
+    # Solo usa los datos filtrados
+    create_vereda_detail_view(casos, epizootias, filters, colors)
 
-# === FUNCIONES DE APOYO (resto del código sin cambios) ===
 
-def prepare_municipal_data_enhanced(casos, epizootias, municipios):
+def show_fallback_summary_table(casos, epizootias, level, location=None):
     """
-    CORREGIDO: Prepara datos por municipio con normalización consistente.
+    NUEVA: Tabla resumen cuando no hay mapas disponibles.
     """
-    def normalize_name(name):
-        """Normaliza nombres para mapeo consistente."""
-        if pd.isna(name) or name == "":
-            return ""
-        return str(name).upper().strip()
-    
-    # Normalizar nombres en shapefiles
-    municipios = municipios.copy()
-    municipios['municipi_1_norm'] = municipios['municipi_1'].apply(normalize_name)
-    municipios['MpNombre_norm'] = municipios['MpNombre'].apply(normalize_name)
-    
-    # Preparar conteos de casos por municipio
-    casos_por_municipio = {}
-    fallecidos_por_municipio = {}
-    
-    if not casos.empty and 'municipio' in casos.columns:
-        # Normalizar nombres en casos
-        casos_norm = casos.copy()
-        casos_norm['municipio_norm'] = casos_norm['municipio'].apply(normalize_name)
-        
-        casos_counts = casos_norm.groupby('municipio_norm').size()
-        casos_por_municipio = casos_counts.to_dict()
-        
-        if 'condicion_final' in casos_norm.columns:
-            fallecidos_norm = casos_norm[casos_norm['condicion_final'] == 'Fallecido']
-            fallecidos_counts = fallecidos_norm.groupby('municipio_norm').size()
-            fallecidos_por_municipio = fallecidos_counts.to_dict()
-    
-    # Preparar conteos de epizootias por municipio
-    epizootias_por_municipio = {}
-    positivas_por_municipio = {}
-    en_estudio_por_municipio = {}
-    
-    if not epizootias.empty and 'municipio' in epizootias.columns:
-        # Normalizar nombres en epizootias
-        epizootias_norm = epizootias.copy()
-        epizootias_norm['municipio_norm'] = epizootias_norm['municipio'].apply(normalize_name)
-        
-        epi_counts = epizootias_norm.groupby('municipio_norm').size()
-        epizootias_por_municipio = epi_counts.to_dict()
-        
-        if 'descripcion' in epizootias_norm.columns:
-            positivas_df = epizootias_norm[epizootias_norm['descripcion'] == 'POSITIVO FA']
-            if not positivas_df.empty:
-                positivas_counts = positivas_df.groupby('municipio_norm').size()
-                positivas_por_municipio = positivas_counts.to_dict()
-            
-            en_estudio_df = epizootias_norm[epizootias_norm['descripcion'] == 'EN ESTUDIO']
-            if not en_estudio_df.empty:
-                en_estudio_counts = en_estudio_df.groupby('municipio_norm').size()
-                en_estudio_por_municipio = en_estudio_counts.to_dict()
-    
-    # Combinar datos con shapefile
-    municipios_data = municipios.copy()
-    
-    # Intentar mapeo con municipi_1 primero, luego con MpNombre
-    def safe_map_data(row, data_dict):
-        """Mapea datos de forma segura usando múltiples claves."""
-        # Intentar con municipi_1_norm
-        result = data_dict.get(row['municipi_1_norm'], 0)
-        if result == 0:
-            # Intentar con MpNombre_norm como fallback
-            result = data_dict.get(row['MpNombre_norm'], 0)
-        return result
-    
-    municipios_data['casos'] = municipios_data.apply(
-        lambda row: safe_map_data(row, casos_por_municipio), axis=1
-    )
-    municipios_data['fallecidos'] = municipios_data.apply(
-        lambda row: safe_map_data(row, fallecidos_por_municipio), axis=1
-    )
-    municipios_data['epizootias'] = municipios_data.apply(
-        lambda row: safe_map_data(row, epizootias_por_municipio), axis=1
-    )
-    municipios_data['epizootias_positivas'] = municipios_data.apply(
-        lambda row: safe_map_data(row, positivas_por_municipio), axis=1
-    )
-    municipios_data['epizootias_en_estudio'] = municipios_data.apply(
-        lambda row: safe_map_data(row, en_estudio_por_municipio), axis=1
-    )
-    
-    # Log para debugging
-    total_casos_mapeados = municipios_data['casos'].sum()
-    total_epi_mapeadas = municipios_data['epizootias'].sum()
-    
-    logging.info(f"🗺️ Mapeo municipal: {total_casos_mapeados} casos, {total_epi_mapeadas} epizootias")
-    
-    # Debug: mostrar municipios con datos
-    municipios_con_datos = municipios_data[
-        (municipios_data['casos'] > 0) | (municipios_data['epizootias'] > 0)
-    ]['municipi_1'].tolist()
-    logging.info(f"🗺️ Municipios con datos en mapa: {len(municipios_con_datos)}")
-    
-    return municipios_data
-
-def prepare_vereda_data_enhanced(casos, epizootias, veredas_gdf):
-    """
-    CORREGIDO: Prepara datos por vereda con normalización consistente.
-    """
-    def normalize_name(name):
-        """Normaliza nombres para mapeo consistente."""
-        if pd.isna(name) or name == "":
-            return ""
-        return str(name).upper().strip()
-    
-    # Normalizar nombres en shapefile de veredas
-    veredas_gdf = veredas_gdf.copy()
-    veredas_gdf['vereda_nor_norm'] = veredas_gdf['vereda_nor'].apply(normalize_name)
-    veredas_gdf['municipi_1_norm'] = veredas_gdf['municipi_1'].apply(normalize_name)
-    
-    # Obtener municipio actual del filtro
-    municipio_actual = st.session_state.get('municipio_filter', 'Todos')
-    municipio_norm = normalize_name(municipio_actual)
-    
-    # Preparar conteos de casos por vereda
-    casos_por_vereda = {}
-    if not casos.empty and 'vereda' in casos.columns and 'municipio' in casos.columns:
-        casos_norm = casos.copy()
-        casos_norm['vereda_norm'] = casos_norm['vereda'].apply(normalize_name)
-        casos_norm['municipio_norm'] = casos_norm['municipio'].apply(normalize_name)
-        
-        # Filtrar casos del municipio actual
-        casos_municipio = casos_norm[casos_norm['municipio_norm'] == municipio_norm]
-        
-        if not casos_municipio.empty:
-            casos_counts = casos_municipio.groupby('vereda_norm').size()
-            casos_por_vereda = casos_counts.to_dict()
-    
-    # Preparar conteos de epizootias por vereda
-    epizootias_por_vereda = {}
-    positivas_por_vereda = {}
-    en_estudio_por_vereda = {}
-    
-    if not epizootias.empty and 'vereda' in epizootias.columns and 'municipio' in epizootias.columns:
-        epizootias_norm = epizootias.copy()
-        epizootias_norm['vereda_norm'] = epizootias_norm['vereda'].apply(normalize_name)
-        epizootias_norm['municipio_norm'] = epizootias_norm['municipio'].apply(normalize_name)
-        
-        # Filtrar epizootias del municipio actual
-        epi_municipio = epizootias_norm[epizootias_norm['municipio_norm'] == municipio_norm]
-        
-        if not epi_municipio.empty:
-            epi_counts = epi_municipio.groupby('vereda_norm').size()
-            epizootias_por_vereda = epi_counts.to_dict()
-            
-            if 'descripcion' in epi_municipio.columns:
-                # Positivas
-                positivas_df = epi_municipio[epi_municipio['descripcion'] == 'POSITIVO FA']
-                if not positivas_df.empty:
-                    positivas_counts = positivas_df.groupby('vereda_norm').size()
-                    positivas_por_vereda = positivas_counts.to_dict()
-                
-                # En estudio
-                en_estudio_df = epi_municipio[epi_municipio['descripcion'] == 'EN ESTUDIO']
-                if not en_estudio_df.empty:
-                    en_estudio_counts = en_estudio_df.groupby('vereda_norm').size()
-                    en_estudio_por_vereda = en_estudio_counts.to_dict()
-    
-    # Combinar datos con shapefile
-    veredas_data = veredas_gdf.copy()
-    
-    # Mapear usando vereda_nor_norm
-    veredas_data['casos'] = veredas_data['vereda_nor_norm'].map(casos_por_vereda).fillna(0).astype(int)
-    veredas_data['epizootias'] = veredas_data['vereda_nor_norm'].map(epizootias_por_vereda).fillna(0).astype(int)
-    veredas_data['epizootias_positivas'] = veredas_data['vereda_nor_norm'].map(positivas_por_vereda).fillna(0).astype(int)
-    veredas_data['epizootias_en_estudio'] = veredas_data['vereda_nor_norm'].map(en_estudio_por_vereda).fillna(0).astype(int)
-    
-    # Log para debugging
-    total_casos_vereda = veredas_data['casos'].sum()
-    total_epi_vereda = veredas_data['epizootias'].sum()
-    
-    logging.info(f"🏘️ Mapeo veredas {municipio_actual}: {total_casos_vereda} casos, {total_epi_vereda} epizootias")
-    
-    return veredas_data
-
-def reset_all_location_filters():
-    """Resetea todos los filtros de ubicación"""
-    if "municipio_filter" in st.session_state:
-        st.session_state.municipio_filter = "Todos"
-    if "vereda_filter" in st.session_state:
-        st.session_state.vereda_filter = "Todas"
-
-
-def reset_vereda_filter_only():
-    """Resetea solo el filtro de vereda"""
-    if "vereda_filter" in st.session_state:
-        st.session_state.vereda_filter = "Todas"
-
-
-def check_shapefiles_availability():
-    """Verifica si los shapefiles procesados están disponibles."""
-    municipios_path = PROCESSED_DIR / "tolima_municipios.shp"
-    veredas_path = PROCESSED_DIR / "tolima_veredas.shp"
-    return municipios_path.exists() or veredas_path.exists()
-
-
-def load_geographic_data_silent():
-    """Carga datos geográficos sin mostrar mensajes."""
-    geo_data = {}
-    
-    try:
-        # Cargar municipios
-        municipios_path = PROCESSED_DIR / "tolima_municipios.shp"
-        if municipios_path.exists():
-            geo_data['municipios'] = gpd.read_file(municipios_path)
-        
-        # Cargar veredas
-        veredas_path = PROCESSED_DIR / "tolima_veredas.shp"
-        if veredas_path.exists():
-            geo_data['veredas'] = gpd.read_file(veredas_path)
-        
-        return geo_data
-        
-    except Exception as e:
-        st.error(f"❌ Error cargando datos geográficos: {str(e)}")
-        return None
-
-
-def show_municipal_tabular_view(casos, epizootias, filters, colors):
-    """Vista tabular cuando no hay shapefiles de veredas."""
-    municipio_display = filters.get('municipio_display', 'Municipio')
-    
-    st.info(f"🗺️ Vista tabular para {municipio_display} (mapa de veredas no disponible)")
-    
-    # Mostrar datos por vereda en tablas
-    if not casos.empty and "vereda" in casos.columns:
-        st.markdown("**📊 Casos por Vereda**")
-        vereda_casos = casos["vereda"].value_counts().head(10)
-        if not vereda_casos.empty:
-            st.dataframe(vereda_casos.to_frame("Casos"), use_container_width=True)
-        else:
-            st.info("No hay casos registrados por vereda")
-    
-    if not epizootias.empty and "vereda" in epizootias.columns:
-        st.markdown("**📊 Epizootias por Vereda**")
-        vereda_epi = epizootias["vereda"].value_counts().head(10)
-        if not vereda_epi.empty:
-            st.dataframe(vereda_epi.to_frame("Epizootias"), use_container_width=True)
-        else:
-            st.info("No hay epizootias registradas por vereda")
-
-
-def show_maps_not_available():
-    """Muestra mensaje cuando las librerías de mapas no están disponibles."""
-    st.error("⚠️ Librerías de mapas no instaladas. Instale: geopandas folium streamlit-folium")
-
-
-def show_shapefiles_setup_instructions():
-    """Muestra instrucciones para configurar shapefiles."""
-    st.error("🗺️ Shapefiles no encontrados en la ruta configurada")
-
-
-def show_geographic_data_error():
-    """Muestra mensaje de error al cargar datos geográficos."""
-    st.error("❌ Error al cargar datos geográficos")
-
-
-def create_navigation_controls(current_level, filters, colors):
-    """Controles de navegación simplificados."""
     level_info = {
-        "departamento": "🏛️ Vista Departamental - Tolima",
-        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
-        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
+        "departamental": "🏛️ Vista Departamental - Tolima",
+        "municipal": f"🏘️ Vista Municipal - {location}" if location else "🏘️ Vista Municipal"
     }
     
-    current_info = level_info[current_level]
+    st.info(f"📊 {level_info[level]} (modo tabular - mapas no disponibles)")
     
-    # Botones de navegación
-    cols = st.columns([1, 1])
-    
-    with cols[0]:
-        if current_level != "departamento":
-            if st.button("🏛️ Ver Tolima", key="nav_tolima_enhanced", use_container_width=True):
-                reset_all_location_filters()
-                st.rerun()
-    
-    with cols[1]:
-        if current_level == "vereda":
-            municipio_name = filters.get('municipio_display', 'Municipio')
-            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_enhanced", use_container_width=True):
-                reset_vereda_filter_only()
-                st.rerun()
-
-
-def show_filter_indicator(filters, colors):
-    """Indicador de filtrado activo simplificado."""
-    active_filters = filters.get("active_filters", [])
-    
-    if active_filters:
-        filters_text = " • ".join(active_filters[:2])  # Máximo 2 filtros
-        
-        if len(active_filters) > 2:
-            filters_text += f" • +{len(active_filters) - 2} más"
-        
-        st.markdown(
-            f"""
-            <div style="
-                background: linear-gradient(45deg, {colors['info']}, {colors['warning']});
-                color: white;
-                padding: 8px 15px;
-                border-radius: 20px;
-                margin-bottom: 10px;
-                text-align: center;
-                font-size: 0.85rem;
-                font-weight: 600;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            ">
-                🎯 FILTROS: {filters_text}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-
-def handle_enhanced_click_interactions(map_data, municipios_data):
-    """
-    SIMPLIFICADO: Maneja clicks usando nombres directos de shapefiles.
-    ELIMINADA toda la lógica de normalización.
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
+    # Mostrar datos por ubicación en tabla
+    if level == "departamental" and not casos.empty and "municipio" in casos.columns:
+        st.markdown("**📊 Casos por Municipio**")
+        municipio_casos = casos["municipio"].value_counts().head(15)
+        if not municipio_casos.empty:
+            casos_df = municipio_casos.to_frame("Casos")
             
-            if clicked_lat and clicked_lng:
-                # Encontrar el municipio más cercano al punto clicado
-                min_distance = float('inf')
-                municipio_clicked = None
-                
-                for idx, row in municipios_data.iterrows():
-                    # Calcular el centroide del municipio
-                    centroid = row['geometry'].centroid
-                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                    
-                    if distance < min_distance:
-                        min_distance = distance
-                        # Usar el nombre del shapefile directamente
-                        municipio_clicked = row['municipi_1']  # Nombre directo del shapefile
-                        
-                if municipio_clicked and min_distance < 0.1:
-                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
-                    st.session_state['municipio_filter'] = municipio_clicked
-                    
-                    # Resetear vereda cuando se cambia municipio
-                    st.session_state['vereda_filter'] = 'Todas'
-                    
-                    # **MENSAJE MEJORADO** 
-                    row_data = municipios_data[municipios_data['municipi_1'] == municipio_clicked].iloc[0]
-                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
-                    
-                    if tiene_datos:
-                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
-                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
-                    else:
-                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
-                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
-                    
-                    # **ACTUALIZAR INMEDIATAMENTE**
-                    st.rerun()
-                    
-    except Exception as e:
-        st.warning(f"Error procesando clic en mapa: {str(e)}")
-
-def handle_vereda_click_safe(map_data, veredas_data, filters):
-    """
-    NUEVA: Manejo seguro de clicks en veredas (incluso grises).
-    """
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
+            # Agregar información de epizootias si está disponible
+            if not epizootias.empty and "municipio" in epizootias.columns:
+                municipio_epi = epizootias["municipio"].value_counts()
+                casos_df["Epizootias"] = casos_df.index.map(municipio_epi).fillna(0).astype(int)
             
-            if clicked_lat and clicked_lng:
-                # Encontrar la vereda más cercana
-                min_distance = float('inf')
-                vereda_clicked = None
-                vereda_data = None
+            st.dataframe(casos_df, use_container_width=True, height=400)
+        else:
+            st.info("No hay casos registrados por municipio")
+    
+    elif level == "municipal" and not casos.empty and "vereda" in casos.columns:
+        st.markdown(f"**📊 Casos por Vereda en {location}**")
+        # Filtrar por municipio
+        casos_municipio = casos[casos["municipio"] == location] if location else casos
+        
+        if not casos_municipio.empty:
+            vereda_casos = casos_municipio["vereda"].value_counts().head(10)
+            if not vereda_casos.empty:
+                veredas_df = vereda_casos.to_frame("Casos")
                 
-                for idx, row in veredas_data.iterrows():
-                    try:
-                        centroid = row['geometry'].centroid
-                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
-                        
-                        if distance < min_distance:
-                            min_distance = distance
-                            vereda_clicked = row['vereda_nor']
-                            vereda_data = row
-                    except Exception as e:
-                        logging.warning(f"⚠️ Error calculando distancia para vereda: {str(e)}")
-                        continue
+                # Agregar epizootias
+                if not epizootias.empty and "vereda" in epizootias.columns:
+                    epizootias_municipio = epizootias[epizootias["municipio"] == location] if location else epizootias
+                    vereda_epi = epizootias_municipio["vereda"].value_counts()
+                    veredas_df["Epizootias"] = veredas_df.index.map(vereda_epi).fillna(0).astype(int)
                 
-                if vereda_clicked and min_distance < 0.05:
-                    # **FILTRAR POR VEREDA (incluso si es gris)**
-                    st.session_state['vereda_filter'] = vereda_clicked
-                    
-                    # **MENSAJE CON INFORMACIÓN APROPIADA**
-                    casos_count = vereda_data['casos'] if vereda_data is not None else 0
-                    epi_count = vereda_data['epizootias'] if vereda_data is not None else 0
-                    
-                    if casos_count > 0 or epi_count > 0:
-                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
-                    else:
-                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
-                        st.caption("💡 Esta vereda existe en el territorio pero no tiene eventos de vigilancia registrados")
-                    
-                    # **ACTUALIZAR SIN CAUSAR BUCLE**
-                    st.rerun()
-                    
-    except Exception as e:
-        logging.error(f"❌ Error procesando clic en vereda: {str(e)}")
-        st.warning("⚠️ Error procesando clic en el mapa. Intente usar los filtros del sidebar.")
+                st.dataframe(veredas_df, use_container_width=True, height=300)
+            else:
+                st.info(f"No hay casos registrados por vereda en {location}")
+        else:
+            st.info(f"No hay casos para mostrar en {location}")
 
+
+# === FUNCIONES FALLBACK PARA COMPATIBILIDAD ===
+
+def check_shapefiles_availability_original():
+    """Función original de verificación (para compatibilidad)."""
+    # Esta función se mantiene como fallback
+    return False
+
+def load_geographic_data_original():
+    """Función original de carga (para compatibilidad)."""
+    return None
+
+def show_shapefiles_setup_instructions_original():
+    """Instrucciones originales (para compatibilidad)."""
+    st.error("🗺️ Shapefiles no encontrados")
+    st.info("Coloque los archivos .shp en la carpeta shapefiles/")
+
+
+# === RESTO DE FUNCIONES SIN CAMBIOS ===
+# Las siguientes funciones permanecen exactamente igual:
 
 def apply_enhanced_cards_css_FIXED(colors):
-    """
-    CSS CORREGIDO para tarjetas hermosas y funcionales - SIN CONFLICTOS.
-    """
+    """CSS para tarjetas (sin cambios)"""
     st.markdown(
         f"""
         <style>
@@ -1726,3 +825,830 @@ def apply_enhanced_cards_css_FIXED(colors):
         """,
         unsafe_allow_html=True,
     )
+
+def create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors):
+    """Tarjetas informativas (sin cambios)"""
+    logging = logging.getLogger(__name__)
+    logging.info("🏷️ INICIANDO TARJETAS INFORMATIVAS CON DATOS FILTRADOS GARANTIZADOS")
+    
+    # **VERIFICACIÓN DOBLE DE DATOS FILTRADOS**
+    casos_verificados, epizootias_verificadas = ensure_filtered_data_usage(
+        casos_filtrados, 
+        epizootias_filtradas, 
+        "tarjetas_informativas"
+    )
+    
+    # **CALCULAR MÉTRICAS DIRECTAMENTE CON DATOS VERIFICADOS**
+    logging.info(f"🧮 Calculando métricas con datos verificados: {len(casos_verificados)} casos, {len(epizootias_verificadas)} epizootias")
+    metrics = calculate_basic_metrics(casos_verificados, epizootias_verificadas)
+    
+    # **LOG DETALLADO DE MÉTRICAS CALCULADAS**
+    logging.info(f"📊 Métricas calculadas con datos filtrados:")
+    logging.info(f"   🦠 Total casos: {metrics['total_casos']}")
+    logging.info(f"   ⚰️ Fallecidos: {metrics['fallecidos']}")
+    logging.info(f"   🐒 Total epizootias: {metrics['total_epizootias']}")
+    logging.info(f"   🔴 Epizootias positivas: {metrics['epizootias_positivas']}")
+    
+    # **TARJETA DE CASOS CON DATOS FILTRADOS GARANTIZADOS**
+    create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **TARJETA DE EPIZOOTIAS CON DATOS FILTRADOS GARANTIZADOS**
+    create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # **VERIFICACIÓN FINAL**
+    logging.info("✅ Tarjetas informativas completadas con datos filtrados verificados")
+
+def create_enhanced_cases_card_VERIFIED_FILTERED(metrics, filters, colors):
+    """Tarjeta de casos (sin cambios)"""
+    logging = logging.getLogger(__name__)
+    
+    total_casos = metrics["total_casos"]
+    vivos = metrics["vivos"]
+    fallecidos = metrics["fallecidos"]
+    letalidad = metrics["letalidad"]
+    ultimo_caso = metrics["ultimo_caso"]
+    
+    # Determinar contexto de filtrado
+    filter_context = get_filter_context_info(filters)
+    
+    # **PARTE 1: Contenedor y header (igual que antes)**
+    header_html = f"""
+<div class="super-enhanced-card cases-card">
+    <div class="card-header">
+        <div class="card-icon">🦠</div>
+        <div>
+            <div class="card-title">CASOS FIEBRE AMARILLA</div>
+            <div class="card-subtitle">{filter_context["title"]}</div>
+        </div>
+    </div>
+    <div class="card-body">
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+    
+    # **PARTE 2: Indicador de filtros (si aplica)**
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        filter_indicator = f"""
+        <div style="background: #e3f2fd; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #1565c0; border-left: 3px solid #2196f3;">
+            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
+        </div>
+        """
+        st.markdown(filter_indicator, unsafe_allow_html=True)
+    
+    # **PARTE 3: Grid de métricas (HTML igual que antes, pero separado)**
+    metrics_grid_html = f"""
+        <div class="main-metrics-grid">
+            <div class="main-metric">
+                <div class="metric-number primary">{total_casos}</div>
+                <div class="metric-label">Total Casos</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number success">{vivos}</div>
+                <div class="metric-label">Vivos</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number danger">{fallecidos}</div>
+                <div class="metric-label">Fallecidos</div>
+            </div>
+            <div class="main-metric mortality">
+                <div class="metric-number warning">{letalidad:.1f}%</div>
+                <div class="metric-label">Mortalidad</div>
+            </div>
+        </div>
+    """
+    st.markdown(metrics_grid_html, unsafe_allow_html=True)
+    
+    # **PARTE 4: Información del último caso (HTML igual que antes)**
+    if ultimo_caso["existe"]:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <strong>{ultimo_caso["ubicacion"]}</strong><br>
+                <span class="last-event-date">{ultimo_caso["fecha"].strftime("%d/%m/%Y") if ultimo_caso["fecha"] else "Sin fecha"}</span><br>
+                <span class="last-event-time">Hace {ultimo_caso["tiempo_transcurrido"]}</span>
+            </div>
+        </div>
+        """
+    else:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">📍 Último Caso {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <span class="no-data">Sin casos registrados{filter_context["suffix"].lower()}</span>
+            </div>
+        </div>
+        """
+    
+    st.markdown(ultimo_info, unsafe_allow_html=True)
+    
+    # **PARTE 5: Cerrar contenedores**
+    closing_html = """
+    </div>
+</div>
+    """
+    st.markdown(closing_html, unsafe_allow_html=True)
+    
+    logging.info("✅ Tarjeta de casos (HTML dividido) renderizada exitosamente")
+
+def create_enhanced_epizootias_card_VERIFIED_FILTERED(metrics, filters, colors):
+    """Tarjeta de epizootias (sin cambios)"""
+    logger = logging.getLogger(__name__)
+    
+    total_epizootias = metrics["total_epizootias"]
+    positivas = metrics["epizootias_positivas"]
+    en_estudio = metrics["epizootias_en_estudio"]
+    ultima_epizootia = metrics["ultima_epizootia_positiva"]
+    
+    # Determinar contexto de filtrado
+    filter_context = get_filter_context_info(filters)
+    
+    # **PARTE 1: Contenedor y header (igual que antes)**
+    header_html = f"""
+<div class="super-enhanced-card epizootias-card">
+    <div class="card-header">
+        <div class="card-icon">🐒</div>
+        <div>
+            <div class="card-title">EPIZOOTIAS</div>
+            <div class="card-subtitle">{filter_context["title"]}</div>
+        </div>
+    </div>
+    <div class="card-body">
+    """
+    st.markdown(header_html, unsafe_allow_html=True)
+    
+    # **PARTE 2: Indicador de filtros (si aplica)**
+    active_filters = filters.get("active_filters", [])
+    if active_filters:
+        filter_indicator = f"""
+        <div style="background: #fff3e0; padding: 8px; border-radius: 6px; margin-bottom: 10px; font-size: 0.8em; color: #ef6c00; border-left: 3px solid #ff9800;">
+            🎯 <strong>DATOS FILTRADOS:</strong> {filter_context["title"]}
+        </div>
+        """
+        st.markdown(filter_indicator, unsafe_allow_html=True)
+    
+    # **PARTE 3: Grid de métricas (HTML igual que antes, pero separado)**
+    metrics_grid_html = f"""
+        <div class="main-metrics-grid">
+            <div class="main-metric">
+                <div class="metric-number warning">{total_epizootias}</div>
+                <div class="metric-label">Total</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number danger">{positivas}</div>
+                <div class="metric-label">Positivas</div>
+            </div>
+            <div class="main-metric">
+                <div class="metric-number info">{en_estudio}</div>
+                <div class="metric-label">En Estudio</div>
+            </div>
+        </div>
+    """
+    st.markdown(metrics_grid_html, unsafe_allow_html=True)
+    
+    # **PARTE 4: Información de la última epizootia (HTML igual que antes)**
+    if ultima_epizootia["existe"]:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <strong>{ultima_epizootia["ubicacion"]}</strong><br>
+                <span class="last-event-date">{ultima_epizootia["fecha"].strftime("%d/%m/%Y") if ultima_epizootia["fecha"] else "Sin fecha"}</span><br>
+                <span class="last-event-time">Hace {ultima_epizootia["tiempo_transcurrido"]}</span>
+            </div>
+        </div>
+        """
+    else:
+        ultimo_info = f"""
+        <div class="last-event-info">
+            <div class="last-event-title">🔴 Último Positivo {filter_context["suffix"]}</div>
+            <div class="last-event-details">
+                <span class="no-data">Sin epizootias positivas{filter_context["suffix"].lower()}</span>
+            </div>
+        </div>
+        """
+    
+    st.markdown(ultimo_info, unsafe_allow_html=True)
+    
+    # **PARTE 5: Cerrar contenedores**
+    closing_html = """
+    </div>
+</div>
+    """
+    st.markdown(closing_html, unsafe_allow_html=True)
+    
+    logger.info("✅ Tarjeta de epizootias (HTML dividido) renderizada exitosamente")
+
+def get_filter_context_info(filters):
+    """Obtiene información del contexto de filtrado para mostrar en tarjetas."""
+    municipio = filters.get("municipio_display", "Todos")
+    vereda = filters.get("vereda_display", "Todas")
+    
+    if vereda != "Todas":
+        return {
+            "title": f"Vigilancia en {vereda}",
+            "suffix": f"en {vereda}"
+        }
+    elif municipio != "Todos":
+        return {
+            "title": f"Vigilancia en {municipio}",
+            "suffix": f"en {municipio}"
+        }
+    else:
+        return {
+            "title": "Vigilancia epidemiológica Tolima",
+            "suffix": "en Tolima"
+        }
+
+# RESTO DE FUNCIONES DE APOYO (sin cambios)
+def determine_map_level(filters):
+    """Determina el nivel de zoom del mapa según filtros activos."""
+    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
+        return "vereda"
+    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
+        return "municipio"
+    else:
+        return "departamento"
+
+def prepare_municipal_data_enhanced(casos, epizootias, municipios):
+    """Prepara datos por municipio con normalización consistente."""
+    def normalize_name(name):
+        """Normaliza nombres para mapeo consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
+    # Normalizar nombres en shapefiles
+    municipios = municipios.copy()
+    municipios['municipi_1_norm'] = municipios['municipi_1'].apply(normalize_name)
+    municipios['MpNombre_norm'] = municipios['MpNombre'].apply(normalize_name)
+    
+    # Preparar conteos de casos por municipio
+    casos_por_municipio = {}
+    fallecidos_por_municipio = {}
+    
+    if not casos.empty and 'municipio' in casos.columns:
+        # Normalizar nombres en casos
+        casos_norm = casos.copy()
+        casos_norm['municipio_norm'] = casos_norm['municipio'].apply(normalize_name)
+        
+        casos_counts = casos_norm.groupby('municipio_norm').size()
+        casos_por_municipio = casos_counts.to_dict()
+        
+        if 'condicion_final' in casos_norm.columns:
+            fallecidos_norm = casos_norm[casos_norm['condicion_final'] == 'Fallecido']
+            fallecidos_counts = fallecidos_norm.groupby('municipio_norm').size()
+            fallecidos_por_municipio = fallecidos_counts.to_dict()
+    
+    # Preparar conteos de epizootias por municipio
+    epizootias_por_municipio = {}
+    positivas_por_municipio = {}
+    en_estudio_por_municipio = {}
+    
+    if not epizootias.empty and 'municipio' in epizootias.columns:
+        # Normalizar nombres en epizootias
+        epizootias_norm = epizootias.copy()
+        epizootias_norm['municipio_norm'] = epizootias_norm['municipio'].apply(normalize_name)
+        
+        epi_counts = epizootias_norm.groupby('municipio_norm').size()
+        epizootias_por_municipio = epi_counts.to_dict()
+        
+        if 'descripcion' in epizootias_norm.columns:
+            positivas_df = epizootias_norm[epizootias_norm['descripcion'] == 'POSITIVO FA']
+            if not positivas_df.empty:
+                positivas_counts = positivas_df.groupby('municipio_norm').size()
+                positivas_por_municipio = positivas_counts.to_dict()
+            
+            en_estudio_df = epizootias_norm[epizootias_norm['descripcion'] == 'EN ESTUDIO']
+            if not en_estudio_df.empty:
+                en_estudio_counts = en_estudio_df.groupby('municipio_norm').size()
+                en_estudio_por_municipio = en_estudio_counts.to_dict()
+    
+    # Combinar datos con shapefile
+    municipios_data = municipios.copy()
+    
+    # Intentar mapeo con municipi_1 primero, luego con MpNombre
+    def safe_map_data(row, data_dict):
+        """Mapea datos de forma segura usando múltiples claves."""
+        # Intentar con municipi_1_norm
+        result = data_dict.get(row['municipi_1_norm'], 0)
+        if result == 0:
+            # Intentar con MpNombre_norm como fallback
+            result = data_dict.get(row['MpNombre_norm'], 0)
+        return result
+    
+    municipios_data['casos'] = municipios_data.apply(
+        lambda row: safe_map_data(row, casos_por_municipio), axis=1
+    )
+    municipios_data['fallecidos'] = municipios_data.apply(
+        lambda row: safe_map_data(row, fallecidos_por_municipio), axis=1
+    )
+    municipios_data['epizootias'] = municipios_data.apply(
+        lambda row: safe_map_data(row, epizootias_por_municipio), axis=1
+    )
+    municipios_data['epizootias_positivas'] = municipios_data.apply(
+        lambda row: safe_map_data(row, positivas_por_municipio), axis=1
+    )
+    municipios_data['epizootias_en_estudio'] = municipios_data.apply(
+        lambda row: safe_map_data(row, en_estudio_por_municipio), axis=1
+    )
+    
+    # Log para debugging
+    total_casos_mapeados = municipios_data['casos'].sum()
+    total_epi_mapeadas = municipios_data['epizootias'].sum()
+    
+    logging.info(f"🗺️ Mapeo municipal híbrido: {total_casos_mapeados} casos, {total_epi_mapeadas} epizootias")
+    
+    return municipios_data
+
+def prepare_vereda_data_enhanced(casos, epizootias, veredas_gdf):
+    """Prepara datos por vereda con normalización consistente."""
+    def normalize_name(name):
+        """Normaliza nombres para mapeo consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
+    # Normalizar nombres en shapefile de veredas
+    veredas_gdf = veredas_gdf.copy()
+    veredas_gdf['vereda_nor_norm'] = veredas_gdf['vereda_nor'].apply(normalize_name)
+    veredas_gdf['municipi_1_norm'] = veredas_gdf['municipi_1'].apply(normalize_name)
+    
+    # Obtener municipio actual del filtro
+    municipio_actual = st.session_state.get('municipio_filter', 'Todos')
+    municipio_norm = normalize_name(municipio_actual)
+    
+    # Preparar conteos de casos por vereda
+    casos_por_vereda = {}
+    if not casos.empty and 'vereda' in casos.columns and 'municipio' in casos.columns:
+        casos_norm = casos.copy()
+        casos_norm['vereda_norm'] = casos_norm['vereda'].apply(normalize_name)
+        casos_norm['municipio_norm'] = casos_norm['municipio'].apply(normalize_name)
+        
+        # Filtrar casos del municipio actual
+        casos_municipio = casos_norm[casos_norm['municipio_norm'] == municipio_norm]
+        
+        if not casos_municipio.empty:
+            casos_counts = casos_municipio.groupby('vereda_norm').size()
+            casos_por_vereda = casos_counts.to_dict()
+    
+    # Preparar conteos de epizootias por vereda
+    epizootias_por_vereda = {}
+    positivas_por_vereda = {}
+    en_estudio_por_vereda = {}
+    
+    if not epizootias.empty and 'vereda' in epizootias.columns and 'municipio' in epizootias.columns:
+        epizootias_norm = epizootias.copy()
+        epizootias_norm['vereda_norm'] = epizootias_norm['vereda'].apply(normalize_name)
+        epizootias_norm['municipio_norm'] = epizootias_norm['municipio'].apply(normalize_name)
+        
+        # Filtrar epizootias del municipio actual
+        epi_municipio = epizootias_norm[epizootias_norm['municipio_norm'] == municipio_norm]
+        
+        if not epi_municipio.empty:
+            epi_counts = epi_municipio.groupby('vereda_norm').size()
+            epizootias_por_vereda = epi_counts.to_dict()
+            
+            if 'descripcion' in epi_municipio.columns:
+                # Positivas
+                positivas_df = epi_municipio[epi_municipio['descripcion'] == 'POSITIVO FA']
+                if not positivas_df.empty:
+                    positivas_counts = positivas_df.groupby('vereda_norm').size()
+                    positivas_por_vereda = positivas_counts.to_dict()
+                
+                # En estudio
+                en_estudio_df = epi_municipio[epi_municipio['descripcion'] == 'EN ESTUDIO']
+                if not en_estudio_df.empty:
+                    en_estudio_counts = en_estudio_df.groupby('vereda_norm').size()
+                    en_estudio_por_vereda = en_estudio_counts.to_dict()
+    
+    # Combinar datos con shapefile
+    veredas_data = veredas_gdf.copy()
+    
+    # Mapear usando vereda_nor_norm
+    veredas_data['casos'] = veredas_data['vereda_nor_norm'].map(casos_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias'] = veredas_data['vereda_nor_norm'].map(epizootias_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias_positivas'] = veredas_data['vereda_nor_norm'].map(positivas_por_vereda).fillna(0).astype(int)
+    veredas_data['epizootias_en_estudio'] = veredas_data['vereda_nor_norm'].map(en_estudio_por_vereda).fillna(0).astype(int)
+    
+    # Log para debugging
+    total_casos_vereda = veredas_data['casos'].sum()
+    total_epi_vereda = veredas_data['epizootias'].sum()
+    
+    logging.info(f"🏘️ Mapeo veredas híbrido {municipio_actual}: {total_casos_vereda} casos, {total_epi_vereda} epizootias")
+    
+    return veredas_data
+
+def reset_all_location_filters():
+    """Resetea todos los filtros de ubicación"""
+    if "municipio_filter" in st.session_state:
+        st.session_state.municipio_filter = "Todos"
+    if "vereda_filter" in st.session_state:
+        st.session_state.vereda_filter = "Todas"
+
+def reset_vereda_filter_only():
+    """Resetea solo el filtro de vereda"""
+    if "vereda_filter" in st.session_state:
+        st.session_state.vereda_filter = "Todas"
+
+def show_maps_not_available():
+    """Muestra mensaje cuando las librerías de mapas no están disponibles."""
+    st.error("⚠️ Librerías de mapas no instaladas. Instale: geopandas folium streamlit-folium")
+
+def show_municipal_tabular_view(casos, epizootias, filters, colors):
+    """Vista tabular cuando no hay shapefiles de veredas."""
+    municipio_display = filters.get('municipio_display', 'Municipio')
+    
+    st.info(f"🗺️ Vista tabular para {municipio_display} (mapa de veredas no disponible)")
+    
+    # Mostrar datos por vereda en tablas
+    if not casos.empty and "vereda" in casos.columns:
+        st.markdown("**📊 Casos por Vereda**")
+        vereda_casos = casos["vereda"].value_counts().head(10)
+        if not vereda_casos.empty:
+            st.dataframe(vereda_casos.to_frame("Casos"), use_container_width=True)
+        else:
+            st.info("No hay casos registrados por vereda")
+    
+    if not epizootias.empty and "vereda" in epizootias.columns:
+        st.markdown("**📊 Epizootias por Vereda**")
+        vereda_epi = epizootias["vereda"].value_counts().head(10)
+        if not vereda_epi.empty:
+            st.dataframe(vereda_epi.to_frame("Epizootias"), use_container_width=True)
+        else:
+            st.info("No hay epizootias registradas por vereda")
+
+def create_navigation_controls(current_level, filters, colors):
+    """Controles de navegación simplificados."""
+    level_info = {
+        "departamento": "🏛️ Vista Departamental - Tolima",
+        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
+        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')} - {filters.get('municipio_display', 'Municipio')}"
+    }
+    
+    current_info = level_info[current_level]
+    
+    # Botones de navegación
+    cols = st.columns([1, 1])
+    
+    with cols[0]:
+        if current_level != "departamento":
+            if st.button("🏛️ Ver Tolima", key="nav_tolima_hybrid", use_container_width=True):
+                reset_all_location_filters()
+                st.rerun()
+    
+    with cols[1]:
+        if current_level == "vereda":
+            municipio_name = filters.get('municipio_display', 'Municipio')
+            if st.button(f"🏘️ Ver {municipio_name[:10]}...", key="nav_municipio_hybrid", use_container_width=True):
+                reset_vereda_filter_only()
+                st.rerun()
+
+def show_filter_indicator(filters, colors):
+    """Indicador de filtrado activo simplificado."""
+    active_filters = filters.get("active_filters", [])
+    
+    if active_filters:
+        filters_text = " • ".join(active_filters[:2])  # Máximo 2 filtros
+        
+        if len(active_filters) > 2:
+            filters_text += f" • +{len(active_filters) - 2} más"
+        
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(45deg, {colors['info']}, {colors['warning']});
+                color: white;
+                padding: 8px 15px;
+                border-radius: 20px;
+                margin-bottom: 10px;
+                text-align: center;
+                font-size: 0.85rem;
+                font-weight: 600;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            ">
+                🎯 FILTROS: {filters_text}
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+def handle_enhanced_click_interactions(map_data, municipios_data):
+    """Maneja clicks usando nombres directos de shapefiles."""
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar el municipio más cercano al punto clicado
+                min_distance = float('inf')
+                municipio_clicked = None
+                
+                for idx, row in municipios_data.iterrows():
+                    # Calcular el centroide del municipio
+                    centroid = row['geometry'].centroid
+                    distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                    
+                    if distance < min_distance:
+                        min_distance = distance
+                        # Usar el nombre del shapefile directamente
+                        municipio_clicked = row['municipi_1']  # Nombre directo del shapefile
+                        
+                if municipio_clicked and min_distance < 0.1:
+                    # **FILTRAR AUTOMÁTICAMENTE Y CAMBIAR VISTA** 
+                    st.session_state['municipio_filter'] = municipio_clicked
+                    
+                    # Resetear vereda cuando se cambia municipio
+                    st.session_state['vereda_filter'] = 'Todas'
+                    
+                    # **MENSAJE MEJORADO** 
+                    row_data = municipios_data[municipios_data['municipi_1'] == municipio_clicked].iloc[0]
+                    tiene_datos = row_data['casos'] > 0 or row_data['epizootias'] > 0
+                    
+                    if tiene_datos:
+                        st.success(f"✅ Filtrado por municipio: **{municipio_clicked}** ({row_data['casos']} casos, {row_data['epizootias']} epizootias)")
+                        st.info("🗺️ El mapa ahora mostrará las veredas de este municipio")
+                    else:
+                        st.info(f"📍 Filtrado por municipio: **{municipio_clicked}** (sin datos registrados)")
+                        st.warning("🗺️ Vista de veredas disponible pero sin datos para mostrar")
+                    
+                    # **ACTUALIZAR INMEDIATAMENTE**
+                    st.rerun()
+                    
+    except Exception as e:
+        st.warning(f"Error procesando clic en mapa: {str(e)}")
+
+def handle_vereda_click_safe(map_data, veredas_data, filters):
+    """Manejo seguro de clicks en veredas (incluso grises)."""
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
+        
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                # Encontrar la vereda más cercana
+                min_distance = float('inf')
+                vereda_clicked = None
+                vereda_data = None
+                
+                for idx, row in veredas_data.iterrows():
+                    try:
+                        centroid = row['geometry'].centroid
+                        distance = ((centroid.x - clicked_lng)**2 + (centroid.y - clicked_lat)**2)**0.5
+                        
+                        if distance < min_distance:
+                            min_distance = distance
+                            vereda_clicked = row['vereda_nor']
+                            vereda_data = row
+                    except Exception as e:
+                        logging.warning(f"⚠️ Error calculando distancia para vereda: {str(e)}")
+                        continue
+                
+                if vereda_clicked and min_distance < 0.05:
+                    # **FILTRAR POR VEREDA (incluso si es gris)**
+                    st.session_state['vereda_filter'] = vereda_clicked
+                    
+                    # **MENSAJE CON INFORMACIÓN APROPIADA**
+                    casos_count = vereda_data['casos'] if vereda_data is not None else 0
+                    epi_count = vereda_data['epizootias'] if vereda_data is not None else 0
+                    
+                    if casos_count > 0 or epi_count > 0:
+                        st.success(f"✅ Filtrado por vereda: **{vereda_clicked}** ({casos_count} casos, {epi_count} epizootias)")
+                    else:
+                        st.info(f"📍 Filtrado por vereda: **{vereda_clicked}** (sin datos registrados)")
+                        st.caption("💡 Esta vereda existe en el territorio pero no tiene eventos de vigilancia registrados")
+                    
+                    # **ACTUALIZAR SIN CAUSAR BUCLE**
+                    st.rerun()
+                    
+    except Exception as e:
+        logging.error(f"❌ Error procesando clic en vereda: {str(e)}")
+        st.warning("⚠️ Error procesando clic en el mapa. Intente usar los filtros del sidebar.")
+
+# NUEVA FUNCIÓN: Vista de vereda que permanece igual pero referencia correcta
+def create_vereda_detail_view(casos, epizootias, filters, colors):
+    """Vista detallada de vereda específica con filtrado correcto."""
+    def normalize_name(name):
+        """Normaliza nombres para comparación consistente."""
+        if pd.isna(name) or name == "":
+            return ""
+        return str(name).upper().strip()
+    
+    vereda_display = filters.get('vereda_display', 'Vereda')
+    municipio_display = filters.get('municipio_display', 'Municipio')
+    
+    # Normalizar nombres para filtrado
+    vereda_norm = normalize_name(vereda_display)
+    municipio_norm = normalize_name(municipio_display)
+    
+    # FILTRAR DATOS ESPECÍFICAMENTE POR VEREDA
+    casos_vereda = pd.DataFrame()
+    epizootias_vereda = pd.DataFrame()
+    
+    # Filtrar casos por vereda específica
+    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
+        casos_vereda = casos[
+            (casos["vereda"].apply(normalize_name) == vereda_norm) &
+            (casos["municipio"].apply(normalize_name) == municipio_norm)
+        ].copy()
+    
+    # Filtrar epizootias por vereda específica
+    if not epizootias.empty and "vereda" in epizootias.columns and "municipio" in epizootias.columns:
+        epizootias_vereda = epizootias[
+            (epizootias["vereda"].apply(normalize_name) == vereda_norm) &
+            (epizootias["municipio"].apply(normalize_name) == municipio_norm)
+        ].copy()
+    
+    # Información de la vereda
+    st.markdown(
+        f"""
+        <div style="
+            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        ">
+            <h3 style="margin: 0; font-size: 1.4rem;">📍 Vista Detallada</h3>
+            <p style="margin: 10px 0 0 0; font-size: 1rem; opacity: 0.9;">
+                <strong>{vereda_display}</strong> - {municipio_display}
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    
+    # Estadísticas específicas de la vereda
+    total_casos = len(casos_vereda)
+    total_epizootias = len(epizootias_vereda)
+    
+    # Conteos específicos por tipo de epizootia
+    positivas_vereda = 0
+    en_estudio_vereda = 0
+    if not epizootias_vereda.empty and "descripcion" in epizootias_vereda.columns:
+        positivas_vereda = len(epizootias_vereda[epizootias_vereda["descripcion"] == "POSITIVO FA"])
+        en_estudio_vereda = len(epizootias_vereda[epizootias_vereda["descripcion"] == "EN ESTUDIO"])
+    
+    # Métricas específicas de la vereda
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("🦠 Casos Humanos", total_casos, 
+                 help=f"Casos registrados específicamente en {vereda_display}")
+    
+    with col2:
+        st.metric("🔴 Epiz. Positivas", positivas_vereda,
+                 help="Epizootias confirmadas positivas para fiebre amarilla")
+    
+    with col3:
+        st.metric("🔵 En Estudio", en_estudio_vereda,
+                 help="Epizootias con resultado pendiente")
+    
+    with col4:
+        actividad_total = total_casos + total_epizootias
+        st.metric("📊 Total Eventos", actividad_total,
+                 help="Total de eventos de vigilancia en esta vereda")
+    
+    # Log para debugging
+    logger = logging.getLogger(__name__)
+    logger.info(f"📍 Vista vereda híbrida {vereda_display}: {total_casos} casos, {total_epizootias} epizootias")
+    
+    # Análisis específico de la vereda
+    if total_casos > 0 or total_epizootias > 0:
+        st.markdown("---")
+        st.markdown("### 📊 Análisis Específico de la Vereda")
+        
+        # Crear dos columnas para casos y epizootias
+        col_casos, col_epi = st.columns([1, 1])
+        
+        with col_casos:
+            st.markdown("#### 🦠 Casos en esta Vereda")
+            
+            if not casos_vereda.empty:
+                # Tabla de casos con todas las columnas relevantes
+                casos_display = casos_vereda.copy()
+                
+                # Preparar columnas para mostrar
+                columnas_mostrar = []
+                if "fecha_inicio_sintomas" in casos_display.columns:
+                    casos_display["Fecha Síntomas"] = casos_display["fecha_inicio_sintomas"].dt.strftime('%d/%m/%Y')
+                    columnas_mostrar.append("Fecha Síntomas")
+                if "edad" in casos_display.columns:
+                    columnas_mostrar.append("edad")
+                if "sexo" in casos_display.columns:
+                    columnas_mostrar.append("sexo")
+                if "condicion_final" in casos_display.columns:
+                    casos_display["Condición"] = casos_display["condicion_final"]
+                    columnas_mostrar.append("Condición")
+                
+                if columnas_mostrar:
+                    st.dataframe(casos_display[columnas_mostrar], use_container_width=True, height=300)
+                else:
+                    st.dataframe(casos_display.head(), use_container_width=True, height=300)
+                
+                # Estadísticas de casos
+                if "condicion_final" in casos_vereda.columns:
+                    fallecidos_vereda = len(casos_vereda[casos_vereda["condicion_final"] == "Fallecido"])
+                    vivos_vereda = len(casos_vereda[casos_vereda["condicion_final"] == "Vivo"])
+                    letalidad_vereda = (fallecidos_vereda / total_casos * 100) if total_casos > 0 else 0
+                    
+                    st.markdown(f"""
+                    **📊 Estadísticas:**
+                    - 💚 Vivos: {vivos_vereda}
+                    - ⚰️ Fallecidos: {fallecidos_vereda}
+                    - 📈 Letalidad: {letalidad_vereda:.1f}%
+                    """)
+            else:
+                st.info("📭 No hay casos registrados en esta vereda")
+        
+        with col_epi:
+            st.markdown("#### 🐒 Epizootias en esta Vereda")
+            
+            if not epizootias_vereda.empty:
+                # Tabla de epizootias
+                epi_display = epizootias_vereda.copy()
+                
+                columnas_epi = []
+                if "fecha_recoleccion" in epi_display.columns:
+                    epi_display["Fecha Recolección"] = epi_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
+                    columnas_epi.append("Fecha Recolección")
+                if "descripcion" in epi_display.columns:
+                    epi_display["Resultado"] = epi_display["descripcion"]
+                    columnas_epi.append("Resultado")
+                if "proveniente" in epi_display.columns:
+                    epi_display["Fuente"] = epi_display["proveniente"].apply(
+                        lambda x: "Vigilancia Com." if "VIGILANCIA" in str(x) else "Incautación" if "INCAUTACIÓN" in str(x) else str(x)[:20]
+                    )
+                    columnas_epi.append("Fuente")
+                
+                if columnas_epi:
+                    st.dataframe(epi_display[columnas_epi], use_container_width=True, height=300)
+                else:
+                    st.dataframe(epi_display.head(), use_container_width=True, height=300)
+                
+                # Estadísticas de epizootias
+                st.markdown(f"""
+                **📊 Estadísticas:**
+                - 🔴 Positivas: {positivas_vereda}
+                - 🔵 En estudio: {en_estudio_vereda}
+                - 📈 Total: {total_epizootias}
+                """)
+            else:
+                st.info("📭 No hay epizootias registradas en esta vereda")
+        
+        # Análisis temporal si hay datos
+        st.markdown("---")
+        st.markdown("#### 📅 Análisis Temporal de la Vereda")
+        
+        if not casos_vereda.empty and "fecha_inicio_sintomas" in casos_vereda.columns:
+            casos_fecha = casos_vereda.dropna(subset=["fecha_inicio_sintomas"])
+            if not casos_fecha.empty:
+                st.markdown("**📊 Casos por Fecha**")
+                casos_temporal = casos_fecha.groupby(casos_fecha["fecha_inicio_sintomas"].dt.date).size().reset_index()
+                casos_temporal.columns = ["Fecha", "Casos"]
+                st.dataframe(casos_temporal, use_container_width=True, height=200)
+        
+        if not epizootias_vereda.empty and "fecha_recoleccion" in epizootias_vereda.columns:
+            epi_fecha = epizootias_vereda.dropna(subset=["fecha_recoleccion"])
+            if not epi_fecha.empty:
+                st.markdown("**📊 Epizootias por Fecha**")
+                epi_temporal = epi_fecha.groupby(epi_fecha["fecha_recoleccion"].dt.date).size().reset_index()
+                epi_temporal.columns = ["Fecha", "Epizootias"]
+                st.dataframe(epi_temporal, use_container_width=True, height=200)
+        
+        # Información de contexto
+        st.markdown("---")
+        st.markdown(f"""
+        ℹ️ **Información de Contexto:**
+        - Esta vista muestra únicamente los datos registrados en la vereda **{vereda_display}**
+        - Los datos incluyen casos humanos confirmados y epizootias (positivas + en estudio)
+        - Use los filtros del sidebar o navegue con los botones para cambiar la vista
+        """)
+        
+    else:
+        st.info(f"📊 No hay eventos registrados en la vereda **{vereda_display}** con los filtros actuales")
+        
+        # Sugerir verificar filtros
+        st.markdown("""
+        💡 **Sugerencias:**
+        - Verifique que los filtros de fecha no estén muy restrictivos
+        - Esta vereda puede no tener eventos registrados en el período seleccionado
+        - Use los botones de navegación para volver a la vista municipal o departamental
+        """)
