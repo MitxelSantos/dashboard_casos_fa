@@ -699,47 +699,78 @@ def apply_scroll_fix_javascript():
     st.markdown(js_code, unsafe_allow_html=True)
     
 def apply_scroll_fix_maps_specific():
-        """CSS específico para corregir scroll en pestañas de mapas únicamente."""
-        st.markdown("""
-            <style>
-            /* Corrección específica para scroll infinito en mapas */
-            div[data-baseweb="tab-panel"]:has(.maps-view-container) {
-                max-height: none !important;
-                height: auto !important;
-                overflow: visible !important;
-                overflow-y: visible !important;
+    """CSS mejorado para solucionar definitivamente el scroll infinito."""
+    st.markdown("""
+        <style>
+        /* =============== SOLUCIÓN DEFINITIVA SCROLL INFINITO =============== */
+        
+        /* Aplicar a todas las pestañas que contengan mapas */
+        div[data-baseweb="tab-panel"] {
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            overflow-y: visible !important;
+        }
+        
+        /* Contenedor principal sin límites de altura */
+        .main .block-container {
+            max-height: none !important;
+            height: auto !important;
+            overflow-y: visible !important;
+            min-height: 100vh !important;
+        }
+        
+        /* Elementos específicos que pueden causar scroll */
+        .element-container,
+        .stVerticalBlock,
+        .css-1d391kg {
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+        }
+        
+        /* Forzar responsive en todas las columnas */
+        @media (max-width: 768px) {
+            .row-widget.stHorizontal {
+                flex-direction: column !important;
+                align-items: stretch !important;
             }
             
-            .stApp .main .block-container:has(.maps-view-container) {
-                max-height: none !important;
-                height: auto !important;
-                overflow-y: visible !important;
+            .row-widget.stHorizontal > div {
+                width: 100% !important;
+                margin-bottom: 1rem !important;
+                flex: none !important;
             }
             
-            .element-container:has(.maps-view-container) {
-                max-height: none !important;
-                height: auto !important;
-                overflow: visible !important;
+            .css-1r6slb0 {
+                flex: 1 1 100% !important;
+                width: 100% !important;
+                margin-bottom: 1rem !important;
             }
-            
-            @media (max-width: 768px) {
-                .row-widget.stHorizontal {
-                    flex-direction: column !important;
-                }
-                
-                .row-widget.stHorizontal > div {
-                    width: 100% !important;
-                    margin-bottom: 1rem !important;
-                }
-                
-                .css-1r6slb0 {
-                    flex: 1 1 100% !important;
-                    width: 100% !important;
-                    margin-bottom: 1rem !important;
-                }
+        }
+        
+        /* Asegurar que los tabs no tengan scroll interno */
+        .stTabs [data-baseweb="tab-list"] + div {
+            max-height: none !important;
+            overflow: visible !important;
+        }
+        
+        /* =============== ESPECÍFICO PARA MAPAS =============== */
+        
+        /* Solo los iframes de mapas pueden tener scroll interno */
+        iframe {
+            max-height: 500px !important;
+            overflow: hidden !important;
+        }
+        
+        @media (max-width: 768px) {
+            iframe {
+                max-height: 400px !important;
             }
-            </style>
-        """, unsafe_allow_html=True)
+        }
+        
+        </style>
+    """, unsafe_allow_html=True)
     
 def main():
     """

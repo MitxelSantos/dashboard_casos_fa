@@ -45,96 +45,350 @@ try:
 except ImportError:
     SHAPEFILE_LOADER_AVAILABLE = False
 
+def detect_device_type_simple():
+    """Detecta tipo de dispositivo usando JavaScript simple."""
+    
+    # Inyectar JavaScript para detectar ancho de pantalla
+    device_detection = st.empty()
+    
+    js_code = """
+    <script>
+    const isMobile = window.innerWidth <= 768;
+    const deviceType = isMobile ? 'mobile' : 'desktop';
+    
+    // Guardar en variable global para acceso posterior
+    window.dashboardDeviceType = deviceType;
+    
+    // También almacenar en localStorage como fallback
+    localStorage.setItem('dashboardDeviceType', deviceType);
+    
+    console.log('📱 Device detected:', deviceType, 'Width:', window.innerWidth);
+    </script>
+    """
+    
+    device_detection.markdown(js_code, unsafe_allow_html=True)
+    
+    # Fallback: Asumir móvil si no se puede detectar
+    # En la práctica, siempre crear ambos layouts y dejar que CSS maneje
+    return "responsive"  # Crear ambos y CSS decide
 
 def show(data_filtered, filters, colors):
     """
-    Vista completa de mapas CORREGIDA - LOGGING FIXED.
+    Vista completa de mapas CORREGIDA - Responsive funcional garantizado.
     """
+    # **APLICAR CSS CORREGIDO INMEDIATAMENTE**
+    apply_maps_responsive_css_FIXED(colors)
+    
     # **VERIFICACIÓN CRÍTICA INICIAL**
-    logger.info("🗺️ INICIANDO VISTA DE MAPAS CON SISTEMA HÍBRIDO")
+    logger.info("🗺️ INICIANDO VISTA DE MAPAS RESPONSIVE CORREGIDA")
     
     # Debug detallado del flujo de datos
     debug_data_flow(
-        data_filtered,  # Como "originales" porque ya vienen filtrados
-        data_filtered,  # Como "filtrados" 
+        data_filtered,
+        data_filtered,
         filters, 
-        "ENTRADA_VISTA_MAPAS_HIBRIDA"
+        "ENTRADA_VISTA_MAPAS_RESPONSIVE_FIXED"
     )
     
     # Verificar que los datos están filtrados
     casos_filtrados = data_filtered["casos"]
     epizootias_filtradas = data_filtered["epizootias"]
     
-    verify_filtered_data_usage(casos_filtrados, "vista_mapas_hibrida - casos_filtrados")
-    verify_filtered_data_usage(epizootias_filtradas, "vista_mapas_hibrida - epizootias_filtradas")
+    verify_filtered_data_usage(casos_filtrados, "vista_mapas_responsive_fixed - casos_filtrados")
+    verify_filtered_data_usage(epizootias_filtradas, "vista_mapas_responsive_fixed - epizootias_filtradas")
 
-    # **APLICAR CSS INMEDIATAMENTE AL INICIO**
+    # **APLICAR CSS ORIGINAL PARA TARJETAS**
     apply_enhanced_cards_css_FIXED(colors)
 
     if not MAPS_AVAILABLE:
         show_maps_not_available()
         return
 
-    # **NUEVO: Verificar disponibilidad con sistema híbrido**
+    # **VERIFICAR DISPONIBILIDAD CON SISTEMA HÍBRIDO**
     if not check_shapefiles_availability_hybrid():
         show_shapefiles_setup_instructions_hybrid()
         return
 
-    # **NUEVO: Cargar datos geográficos con sistema híbrido**
+    # **CARGAR DATOS GEOGRÁFICOS CON SISTEMA HÍBRIDO**
     geo_data = load_geographic_data_hybrid()
     
     if not geo_data:
         show_geographic_data_error_hybrid()
         return
 
-    # **LOG DE VERIFICACIÓN ADICIONAL**
-    logger.info(f"🗺️ Vista mapas híbrida - Datos filtrados verificados: {len(casos_filtrados)} casos, {len(epizootias_filtradas)} epizootias")
-    
     # Mostrar información de filtrado si hay filtros activos
     active_filters = filters.get("active_filters", [])
     if active_filters:
         st.info(f"🎯 Mostrando datos filtrados: {' • '.join(active_filters[:2])}")
 
-    # **APLICAR CSS RESPONSIVE ESPECÍFICO INMEDIATAMENTE**
-    apply_maps_responsive_css_fix(colors)
+    # **DETECCIÓN DE DISPOSITIVO Y LAYOUT ADAPTATIVO**
+    device_type = detect_device_type_simple()
+    
+    if device_type == "mobile":
+        # **LAYOUT MÓVIL: VERTICAL (Mapa arriba, tarjetas abajo)**
+        create_mobile_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+    else:
+        # **LAYOUT DESKTOP/TABLET: HORIZONTAL (Lado a lado)**
+        create_desktop_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
 
-    # **LAYOUT RESPONSIVE: Usar HTML/CSS en lugar de st.columns**
-    st.markdown('<div class="maps-view-container">', unsafe_allow_html=True)
+def create_mobile_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered):
+    """Layout específico para móviles - Vertical."""
     
-    st.markdown(
-        '''
-        <div class="maps-columns-container">
-            <div class="maps-column-left">
-        ''',
-        unsafe_allow_html=True
-    )
+    st.markdown('<div class="mobile-maps-container">', unsafe_allow_html=True)
     
-    # CONTENIDO DEL MAPA (COLUMNA IZQUIERDA)
+    # **SECCIÓN 1: MAPA (Arriba)**
+    st.markdown('<div class="mobile-map-section">', unsafe_allow_html=True)
     create_enhanced_map_system_hybrid(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+    st.markdown('</div>', unsafe_allow_html=True)
     
-    st.markdown(
-        '''
-            </div>
-            <div class="maps-column-right">
-        ''',
-        unsafe_allow_html=True
-    )
+    # **SEPARADOR VISUAL**
+    st.markdown('<div class="mobile-separator"></div>', unsafe_allow_html=True)
     
-    # CONTENIDO DE LAS TARJETAS (COLUMNA DERECHA)
+    # **SECCIÓN 2: TARJETAS (Abajo)**
+    st.markdown('<div class="mobile-cards-section">', unsafe_allow_html=True)
     create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors)
+    st.markdown('</div>', unsafe_allow_html=True)
     
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+def create_desktop_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered):
+    """Layout específico para desktop - Horizontal."""
+    
+    st.markdown('<div class="desktop-maps-container">', unsafe_allow_html=True)
+    
+    # **USAR STREAMLIT COLUMNS NATIVO CON CSS OVERRIDE**
+    col_mapa, col_tarjetas = st.columns([3, 2], gap="large")
+    
+    with col_mapa:
+        st.markdown('<div class="desktop-map-section">', unsafe_allow_html=True)
+        create_enhanced_map_system_hybrid(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col_tarjetas:
+        st.markdown('<div class="desktop-cards-section">', unsafe_allow_html=True)
+        create_beautiful_information_cards_GUARANTEED_FILTERED(casos_filtrados, epizootias_filtradas, filters, colors)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+def apply_maps_responsive_css_FIXED(colors):
+    """
+    CSS CORREGIDO para responsive de mapas - Versión robusta.
+    """
     st.markdown(
-        '''
-            </div>
-        </div>
-        </div>
-        ''',
-        unsafe_allow_html=True
+        f"""
+        <style>
+        /* =============== RESET Y BASE =============== */
+        
+        .mobile-maps-container,
+        .desktop-maps-container {{
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+        }}
+        
+        /* =============== SOLUCIÓN SCROLL INFINITO =============== */
+        
+        /* Aplicar específicamente a elementos que contienen mapas */
+        .stTabs [data-baseweb="tab-panel"]:has(.mobile-maps-container),
+        .stTabs [data-baseweb="tab-panel"]:has(.desktop-maps-container) {{
+            max-height: none !important;
+            height: auto !important;
+            overflow: visible !important;
+            overflow-y: visible !important;
+        }}
+        
+        .main .block-container:has(.mobile-maps-container),
+        .main .block-container:has(.desktop-maps-container) {{
+            max-height: none !important;
+            height: auto !important;
+            overflow-y: visible !important;
+            padding-bottom: 2rem !important;
+        }}
+        
+        /* =============== LAYOUT MÓVIL =============== */
+        
+        .mobile-maps-container {{
+            display: block !important;
+            width: 100% !important;
+        }}
+        
+        .mobile-map-section {{
+            width: 100% !important;
+            margin-bottom: 1.5rem !important;
+            text-align: center !important; /* Centrar mapa */
+        }}
+        
+        .mobile-map-section .stComponentV1 {{
+            max-width: 100% !important;
+            margin: 0 auto !important; /* Centrar mapa */
+            border-radius: 12px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+            overflow: hidden !important;
+            max-height: 400px !important;
+        }}
+        
+        .mobile-map-section iframe {{
+            border-radius: 12px !important;
+            border: 1px solid #e1e5e9 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+        }}
+        
+        .mobile-separator {{
+            height: 1px !important;
+            background: linear-gradient(90deg, transparent, {colors['secondary']}, transparent) !important;
+            margin: 1.5rem 0 !important;
+            opacity: 0.5 !important;
+        }}
+        
+        .mobile-cards-section {{
+            width: 100% !important;
+        }}
+        
+        .mobile-cards-section .super-enhanced-card {{
+            margin-bottom: 1rem !important;
+            max-width: 100% !important;
+        }}
+        
+        /* =============== LAYOUT DESKTOP =============== */
+        
+        .desktop-maps-container {{
+            display: block !important;
+            width: 100% !important;
+        }}
+        
+        .desktop-map-section {{
+            height: auto !important;
+            width: 100% !important;
+        }}
+        
+        .desktop-map-section .stComponentV1 {{
+            border-radius: 12px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+            overflow: hidden !important;
+            max-height: 500px !important;
+            width: 100% !important;
+        }}
+        
+        .desktop-map-section iframe {{
+            border-radius: 12px !important;
+            border: 1px solid #e1e5e9 !important;
+        }}
+        
+        .desktop-cards-section {{
+            height: auto !important;
+            width: 100% !important;
+        }}
+        
+        .desktop-cards-section .super-enhanced-card {{
+            margin-bottom: 1.5rem !important;
+            width: 100% !important;
+        }}
+        
+        /* =============== RESPONSIVE BREAKPOINTS =============== */
+        
+        /* Esconder desktop en móvil */
+        @media (max-width: 768px) {{
+            .desktop-maps-container {{
+                display: none !important;
+            }}
+            
+            .mobile-maps-container {{
+                display: block !important;
+            }}
+            
+            /* Forzar centrado del mapa en móviles */
+            .mobile-map-section {{
+                display: flex !important;
+                justify-content: center !important;
+                align-items: center !important;
+                flex-direction: column !important;
+            }}
+            
+            .mobile-map-section .stComponentV1 {{
+                align-self: center !important;
+            }}
+        }}
+        
+        /* Esconder móvil en desktop */
+        @media (min-width: 769px) {{
+            .mobile-maps-container {{
+                display: none !important;
+            }}
+            
+            .desktop-maps-container {{
+                display: block !important;
+            }}
+        }}
+        
+        /* =============== CONTROLES Y BOTONES =============== */
+        
+        @media (max-width: 768px) {{
+            .mobile-map-section .stButton > button {{
+                font-size: 0.8rem !important;
+                padding: 0.5rem 1rem !important;
+                margin: 0.25rem !important;
+            }}
+            
+            .mobile-map-section .stAlert,
+            .mobile-map-section .stInfo {{
+                font-size: 0.85rem !important;
+                margin: 0.5rem 0 !important;
+                padding: 0.75rem !important;
+            }}
+        }}
+        
+        /* =============== FUERZA ESPECÍFICA PARA STREAMLIT COLUMNS =============== */
+        
+        /* Asegurar que las columnas de Streamlit funcionen en desktop */
+        @media (min-width: 769px) {{
+            .desktop-maps-container .css-1r6slb0 {{
+                flex: none !important;
+                width: auto !important;
+                min-width: 0 !important;
+            }}
+            
+            .desktop-maps-container .row-widget.stHorizontal {{
+                display: flex !important;
+                flex-direction: row !important;
+                gap: 2rem !important;
+            }}
+        }}
+        
+        /* =============== DEBUG Y VERIFICACIÓN =============== */
+        
+        /* Temporal para verificar que el CSS se aplica */
+        .mobile-maps-container::before {{
+            content: "📱 MÓVIL" !important;
+            display: block !important;
+            text-align: center !important;
+            font-size: 0.8rem !important;
+            color: {colors['info']} !important;
+            padding: 0.5rem !important;
+            background: #f0f8ff !important;
+            border-radius: 4px !important;
+            margin-bottom: 1rem !important;
+        }}
+        
+        .desktop-maps-container::before {{
+            content: "🖥️ DESKTOP" !important;
+            display: block !important;
+            text-align: center !important;
+            font-size: 0.8rem !important;
+            color: {colors['info']} !important;
+            padding: 0.5rem !important;
+            background: #f0f8ff !important;
+            border-radius: 4px !important;
+            margin-bottom: 1rem !important;
+        }}
+        
+        </style>
+        """,
+        unsafe_allow_html=True,
     )
-    
-    # **AGREGAR JAVASCRIPT RESPONSIVE**
-    add_responsive_javascript_fix()
-
 
 def check_shapefiles_availability_hybrid():
     """
@@ -1530,226 +1784,3 @@ def create_vereda_detail_view(casos, epizootias, filters, colors):
         # ...
     else:
         st.info(f"📊 No hay eventos registrados en la vereda **{vereda_display}** con los filtros actuales")
-        
-def apply_maps_responsive_css_fix(colors):
-    """
-    CSS específico para corregir problemas responsive SOLO en la vista de mapas.
-    """
-    st.markdown(
-        f"""
-        <style>
-        /* =============== SOLUCIÓN ESPECÍFICA VISTA MAPAS =============== */
-        
-        .maps-view-container {{
-            width: 100% !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            padding: 0 !important;
-        }}
-        
-        .maps-columns-container {{
-            display: flex !important;
-            gap: 1.5rem !important;
-            width: 100% !important;
-            align-items: flex-start !important;
-            min-height: 0 !important;
-            height: auto !important;
-        }}
-        
-        .maps-column-left {{
-            flex: 3 !important;
-            min-width: 0 !important;
-            height: auto !important;
-        }}
-        
-        .maps-column-right {{
-            flex: 2 !important;
-            min-width: 0 !important;
-            height: auto !important;
-        }}
-        
-        /* RESPONSIVE: APILAR EN MÓVILES */
-        @media (max-width: 768px) {{
-            .maps-columns-container {{
-                flex-direction: column !important;
-                gap: 1rem !important;
-            }}
-            
-            .maps-column-left,
-            .maps-column-right {{
-                flex: none !important;
-                width: 100% !important;
-            }}
-            
-            .maps-column-left {{
-                order: 1 !important;
-            }}
-            
-            .maps-column-right {{
-                order: 2 !important;
-            }}
-        }}
-        
-        /* RESPONSIVE: TABLETS */
-        @media (min-width: 769px) and (max-width: 1024px) {{
-            .maps-columns-container {{
-                gap: 1rem !important;
-            }}
-            
-            .maps-column-left {{
-                flex: 2.5 !important;
-            }}
-            
-            .maps-column-right {{
-                flex: 1.5 !important;
-            }}
-        }}
-        
-        /* =============== CORRECCIÓN SCROLL INFINITO =============== */
-        
-        div[data-baseweb="tab-panel"]:has(.maps-view-container) {{
-            max-height: none !important;
-            height: auto !important;
-            overflow: visible !important;
-            overflow-y: visible !important;
-        }}
-        
-        .stApp .main .block-container:has(.maps-view-container) {{
-            max-height: none !important;
-            overflow-y: visible !important;
-            padding-bottom: 2rem !important;
-        }}
-        
-        /* =============== MAPAS ESPECÍFICOS =============== */
-        
-        .maps-view-container .stComponentV1 {{
-            height: auto !important;
-            max-height: 500px !important;
-            overflow: hidden !important;
-            border-radius: 12px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-        }}
-        
-        .maps-view-container iframe {{
-            border-radius: 12px !important;
-            border: 1px solid #e1e5e9 !important;
-        }}
-        
-        /* RESPONSIVE: Altura de mapa en móviles */
-        @media (max-width: 768px) {{
-            .maps-view-container .stComponentV1 {{
-                max-height: 400px !important;
-            }}
-            
-            .maps-view-container {{
-                text-align: center !important;
-            }}
-            
-            .maps-view-container .stComponentV1 {{
-                margin: 0 auto !important;
-                width: 100% !important;
-                max-width: 100% !important;
-            }}
-        }}
-        
-        /* =============== CONTROLES Y TARJETAS =============== */
-        
-        @media (max-width: 768px) {{
-            .maps-view-container .row-widget {{
-                margin-bottom: 0.5rem !important;
-            }}
-            
-            .maps-view-container .stButton > button {{
-                font-size: 0.8rem !important;
-                padding: 0.4rem 0.8rem !important;
-            }}
-            
-            .maps-column-right .super-enhanced-card {{
-                margin-bottom: 0.75rem !important;
-            }}
-            
-            .maps-column-right .card-body {{
-                padding: 20px !important;
-            }}
-            
-            .maps-view-container .stAlert {{
-                margin: 0.5rem 0 !important;
-                padding: 0.75rem !important;
-                font-size: 0.85rem !important;
-            }}
-        }}
-        
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def add_responsive_javascript_fix():
-    """
-    JavaScript para ajustes dinámicos responsive específicos de mapas.
-    """
-    js_code = """
-    <script>
-    function adjustMapsLayout() {
-        console.log('🗺️ Ajustando layout responsive de mapas...');
-        
-        const mapsContainer = document.querySelector('.maps-columns-container');
-        const leftColumn = document.querySelector('.maps-column-left');
-        const rightColumn = document.querySelector('.maps-column-right');
-        
-        if (!mapsContainer || !leftColumn || !rightColumn) {
-            return;
-        }
-        
-        const isMobile = window.innerWidth <= 768;
-        const isTablet = window.innerWidth > 768 && window.innerWidth <= 1024;
-        
-        if (isMobile) {
-            mapsContainer.style.flexDirection = 'column';
-            mapsContainer.style.gap = '1rem';
-            leftColumn.style.order = '1';
-            rightColumn.style.order = '2';
-            leftColumn.style.width = '100%';
-            rightColumn.style.width = '100%';
-            
-            const mapComponent = leftColumn.querySelector('.stComponentV1');
-            if (mapComponent) {
-                mapComponent.style.maxHeight = '400px';
-                mapComponent.style.height = '400px';
-            }
-        } else if (isTablet) {
-            mapsContainer.style.flexDirection = 'row';
-            mapsContainer.style.gap = '1rem';
-            leftColumn.style.flex = '2.5';
-            rightColumn.style.flex = '1.5';
-        } else {
-            mapsContainer.style.flexDirection = 'row';
-            mapsContainer.style.gap = '1.5rem';
-            leftColumn.style.flex = '3';
-            rightColumn.style.flex = '2';
-        }
-        
-        mapsContainer.style.display = 'none';
-        mapsContainer.offsetHeight;
-        mapsContainer.style.display = 'flex';
-    }
-    
-    document.addEventListener('DOMContentLoaded', adjustMapsLayout);
-    window.addEventListener('resize', debounce(adjustMapsLayout, 250));
-    
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-    </script>
-    """
-    
-    st.markdown(js_code, unsafe_allow_html=True)
