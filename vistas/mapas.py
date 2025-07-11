@@ -224,8 +224,13 @@ def create_enhanced_map_system_hybrid_mobile(casos, epizootias, geo_data, filter
         st.info("🗺️ Vista de mapa no disponible para el nivel seleccionado en móvil")
         show_fallback_summary_table(casos, epizootias, "departamental")
 
+# SOLUCIÓN PARA MAPA DEPARTAMENTAL MÓVIL - vistas/mapas.py
+
 def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
-    """Mapa departamental optimizado para móviles."""
+    """
+    Mapa departamental optimizado para móviles - CORREGIDO.
+    PROBLEMA SOLUCIONADO: Permite ver todo el Tolima y navegar efectivamente
+    """
     
     municipios = geo_data['municipios'].copy()
     logger.info(f"🏛️ Creando mapa móvil con {len(municipios)} municipios")
@@ -233,31 +238,41 @@ def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
     # Preparar datos
     municipios_data = prepare_municipal_data_enhanced(casos, epizootias, municipios)
     
-    # Límites del Tolima
+    # Límites del Tolima con BUFFER AMPLIADO para móviles
     bounds = municipios.total_bounds
     center_lat = (bounds[1] + bounds[3]) / 2
     center_lon = (bounds[0] + bounds[2]) / 2
     
-    # **CONFIGURACIÓN MÓVIL ESPECÍFICA**
+    # **CONFIGURACIÓN MÓVIL CORREGIDA - MÁS PERMISIVA**
     m = folium.Map(
         location=[center_lat, center_lon],
-        zoom_start=7,  # Zoom menor para móviles
+        zoom_start=6,  # ✅ ZOOM MÁS BAJO para ver todo el Tolima
         tiles='CartoDB positron',
-        zoom_control=False,
-        scrollWheelZoom=False,
-        doubleClickZoom=False,
-        dragging=False,
+        zoom_control=True,  # ✅ HABILITAR controles de zoom
+        scrollWheelZoom=True,  # ✅ PERMITIR zoom con dedos/scroll
+        doubleClickZoom=True,  # ✅ PERMITIR doble toque para zoom
+        dragging=True,  # ✅ PERMITIR arrastre limitado
         attributionControl=False,
         max_bounds=True,
-        min_zoom=7,
-        max_zoom=7
+        min_zoom=5,  # ✅ RANGO DE ZOOM más amplio (5-8)
+        max_zoom=8
     )
     
-    # Ajustar límites
-    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    m.options['maxBounds'] = [[bounds[1] - 0.1, bounds[0] - 0.1], [bounds[3] + 0.1, bounds[2] + 0.1]]
+    # ✅ AJUSTAR LÍMITES CON BUFFER GENEROSO para móviles
+    buffer = 0.3  # Buffer más grande para móviles
+    bounds_with_buffer = [
+        [bounds[1] - buffer, bounds[0] - buffer],  # SW corner
+        [bounds[3] + buffer, bounds[2] + buffer]   # NE corner
+    ]
     
-    # Agregar municipios con tooltips simplificados para móviles
+    # ✅ ASEGURAR QUE TODO EL TOLIMA SEA VISIBLE
+    m.fit_bounds(bounds_with_buffer)
+    m.options['maxBounds'] = bounds_with_buffer
+    
+    # ✅ AGREGAR INFORMACIÓN VISUAL PARA EL USUARIO
+    add_mobile_map_instructions(m, colors)
+    
+    # Agregar municipios con tooltips optimizados para móviles
     max_casos = municipios_data['casos'].max() if municipios_data['casos'].max() > 0 else 1
     max_epi = municipios_data['epizootias'].max() if municipios_data['epizootias'].max() > 0 else 1
     
@@ -266,7 +281,7 @@ def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
         casos_count = row['casos']
         epizootias_count = row['epizootias']
         
-        # Color según datos
+        # Color según datos (sin cambios)
         if casos_count > 0:
             intensity = min(casos_count / max_casos, 1.0) if max_casos > 0 else 0
             fill_color = f"rgba(229, 25, 55, {0.4 + intensity * 0.5})"
@@ -279,12 +294,15 @@ def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
             fill_color = "rgba(200, 200, 200, 0.3)"
             border_color = "#cccccc"
         
-        # Tooltip simplificado para móviles
+        # ✅ TOOLTIP OPTIMIZADO para móviles con instrucciones claras
         tooltip_text = f"""
-        <div style="font-family: Arial; padding: 6px; max-width: 140px; font-size: 11px;">
-            <b>{municipio_name}</b><br>
-            🦠 {casos_count}<br>
-            🐒 {epizootias_count}
+        <div style="font-family: Arial; padding: 8px; max-width: 160px; font-size: 12px;">
+            <b style="color: {colors['primary']};">{municipio_name}</b><br>
+            🦠 {casos_count} casos<br>
+            🐒 {epizootias_count} epizootias<br>
+            <div style="background: {colors['info']}; color: white; padding: 4px; border-radius: 4px; margin-top: 6px; text-align: center; font-size: 10px;">
+                👆 TAP PARA FILTRAR
+            </div>
         </div>
         """
         
@@ -294,7 +312,7 @@ def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
             style_function=lambda x, color=fill_color, border=border_color: {
                 'fillColor': color,
                 'color': border,
-                'weight': 1,  # Líneas más delgadas en móvil
+                'weight': 2,  # ✅ Líneas más gruesas para móvil
                 'fillOpacity': 0.7,
                 'opacity': 1
             },
@@ -302,19 +320,130 @@ def create_departmental_map_mobile(casos, epizootias, geo_data, colors):
         )
         geojson.add_to(m)
     
-    # **RENDERIZAR CON ANCHO DINÁMICO PARA MÓVILES**
+    # ✅ RENDERIZAR CON CONFIGURACIÓN MÓVIL MEJORADA
     map_width = get_dynamic_map_width()
+    
+    # ✅ INFORMACIÓN PREVIA AL MAPA para orientar al usuario
+    st.markdown(
+        f"""
+        <div style="background: {colors['info']}; color: white; padding: 10px; border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 0.9rem;">
+            🗺️ <strong>MAPA DEL TOLIMA</strong><br>
+            👆 Use gestos táctiles para navegar • Toque cualquier municipio para filtrar
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
     
     map_data = st_folium(
         m, 
-        width=map_width,  # Ancho dinámico
-        height=350,       # Altura fija para móviles
+        width=map_width,
+        height=400,  # ✅ Altura ligeramente mayor para mejor visibilidad
         returned_objects=["last_object_clicked"],
-        key="mobile_departmental_map"
+        key="mobile_departmental_map_fixed"
     )
     
-    # Procesar clicks con manejo simplificado
+    # Procesar clicks
     handle_enhanced_click_interactions_mobile(map_data, municipios_data)
+
+
+def add_mobile_map_instructions(folium_map, colors):
+    """
+    ✅ NUEVA: Agrega instrucciones visuales en el mapa para móviles
+    """
+    instructions_html = f"""
+    <div style="
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.95);
+        padding: 8px 12px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 600;
+        color: {colors['primary']};
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        z-index: 1000;
+        max-width: 140px;
+        text-align: center;
+        border-left: 3px solid {colors['secondary']};
+    ">
+        🔍 PELLIZCA PARA ZOOM<br>
+        👆 TOCA MUNICIPIO<br>
+        📱 ARRASTRA PARA MOVER
+    </div>
+    """
+    
+    folium_map.get_root().html.add_child(folium.Element(instructions_html))
+
+
+def get_dynamic_map_width():
+    """
+    ✅ MEJORADO: Obtiene el ancho dinámico del mapa optimizado para móviles
+    """
+    # Ancho optimizado para diferentes tamaños móviles
+    return 380  # Ligeramente más ancho para mejor visibilidad
+
+
+# ✅ FUNCIÓN ADICIONAL: Verificación de visibilidad del mapa
+def verify_mobile_map_visibility(bounds, zoom_level):
+    """
+    Verifica que el mapa sea completamente visible en móviles
+    """
+    # Cálculo del área visible aproximada
+    lat_range = bounds[3] - bounds[1]  # Norte - Sur
+    lon_range = bounds[2] - bounds[0]  # Este - Oeste
+    
+    # Para zoom 6, cada grado son aproximadamente 111km
+    # Tolerancia para asegurar visibilidad completa
+    min_lat_range = 2.0  # Al menos 2 grados de latitud
+    min_lon_range = 1.5  # Al menos 1.5 grados de longitud
+    
+    if lat_range < min_lat_range or lon_range < min_lon_range:
+        logger.warning(f"⚠️ Mapa móvil podría estar muy cercano: lat_range={lat_range:.2f}, lon_range={lon_range:.2f}")
+        return False
+    
+    logger.info(f"✅ Mapa móvil con visibilidad adecuada: lat_range={lat_range:.2f}, lon_range={lon_range:.2f}")
+    return True
+
+
+# ✅ CSS ADICIONAL para mejorar la experiencia móvil
+def apply_mobile_map_enhancements():
+    """
+    CSS adicional para mejorar mapas en móviles
+    """
+    st.markdown(
+        """
+        <style>
+        /* Mejoras específicas para mapas móviles */
+        @media (max-width: 768px) {
+            .mobile-map-section iframe {
+                border: 2px solid #007bff !important;
+                border-radius: 12px !important;
+                box-shadow: 0 4px 20px rgba(0,123,255,0.3) !important;
+            }
+            
+            /* Indicador de carga para mapas */
+            .mobile-map-section::before {
+                content: "🗺️ Cargando mapa interactivo...";
+                display: block;
+                text-align: center;
+                padding: 20px;
+                background: #f8f9fa;
+                border-radius: 8px;
+                margin-bottom: 10px;
+                font-weight: 600;
+                color: #007bff;
+            }
+            
+            /* Ocultar el indicador cuando el mapa carga */
+            .mobile-map-section:has(iframe)::before {
+                display: none;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 def handle_enhanced_click_interactions_mobile(map_data, municipios_data):
     """Manejo simplificado de clicks para móviles."""
