@@ -356,35 +356,7 @@ def apply_maps_responsive_css_FIXED(colors):
                 flex-direction: row !important;
                 gap: 2rem !important;
             }}
-        }}
-        
-        /* =============== DEBUG Y VERIFICACIÓN =============== */
-        
-        /* Temporal para verificar que el CSS se aplica */
-        .mobile-maps-container::before {{
-            content: "📱 MÓVIL" !important;
-            display: block !important;
-            text-align: center !important;
-            font-size: 0.8rem !important;
-            color: {colors['info']} !important;
-            padding: 0.5rem !important;
-            background: #f0f8ff !important;
-            border-radius: 4px !important;
-            margin-bottom: 1rem !important;
-        }}
-        
-        .desktop-maps-container::before {{
-            content: "🖥️ DESKTOP" !important;
-            display: block !important;
-            text-align: center !important;
-            font-size: 0.8rem !important;
-            color: {colors['info']} !important;
-            padding: 0.5rem !important;
-            background: #f0f8ff !important;
-            border-radius: 4px !important;
-            margin-bottom: 1rem !important;
-        }}
-        
+        }}        
         </style>
         """,
         unsafe_allow_html=True,
