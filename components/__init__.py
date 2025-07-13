@@ -1,44 +1,38 @@
 """
-Componentes reutilizables del dashboard.
-CORREGIDO: Importaciones actualizadas para funciones con sufijo _enhanced
+Componentes reutilizables
 """
 
-from .sidebar import create_sidebar, init_responsive_sidebar
+# ===== SIDEBAR (OPTIMIZADO) =====
+from .sidebar import create_sidebar, init_responsive_sidebar, add_copyright
 
-# Importar funciones CORREGIDAS de filters.py (con sufijo _enhanced, no _corrected)
+# ===== FILTERS (OPTIMIZADO) =====
 from .filters import (
-    create_complete_filter_system_enhanced as create_complete_filter_system,
-    create_hierarchical_filters_enhanced as create_hierarchical_filters,
-    create_content_filters_enhanced as create_content_filters,
-    create_advanced_filters_enhanced as create_advanced_filters,
-    apply_all_filters_enhanced as apply_all_filters,
-    reset_all_filters_enhanced as reset_all_filters,
-    show_active_filters_sidebar_enhanced as show_active_filters_sidebar,
-    create_complete_filter_system_with_maps
+    create_unified_filter_system,
+    create_hierarchical_filters,
+    create_temporal_filters,
+    create_advanced_filters,
+    apply_all_filters,
+    reset_all_filters,
+    show_active_filters,
 )
 
-# Funciones adicionales que pueden no existir - importación condicional
-try:
-    from .filters import create_filter_export_options
-except ImportError:
-    # Si no existe, crear una función dummy
-    def create_filter_export_options(*args, **kwargs):
-        """Función placeholder para exportación de filtros."""
-        pass
-
+# ===== EXPORTS LIMPIOS =====
 __all__ = [
     # Sidebar
     "create_sidebar",
     "init_responsive_sidebar", 
+    "add_copyright",
     
-    # Filters (con aliases para compatibilidad)
-    "create_complete_filter_system",
+    # Filters (usando nombres correctos después de optimización)
+    "create_unified_filter_system",
     "create_hierarchical_filters",
-    "create_content_filters", 
+    "create_temporal_filters",
     "create_advanced_filters",
     "apply_all_filters",
     "reset_all_filters",
-    "show_active_filters_sidebar",
-    "create_filter_export_options",
-    "create_complete_filter_system_with_maps"
+    "show_active_filters",
 ]
+
+# Alias para compatibilidad con código existente
+create_complete_filter_system = create_unified_filter_system
+create_complete_filter_system_with_maps = create_unified_filter_system

@@ -1,8 +1,43 @@
 """
-Módulo de configuración del dashboard.
+Módulo de configuración del dashboard
 """
 
-from .settings import *
-from .colors import COLORS
+# ===== CONFIGURACIONES PRINCIPALES =====
+from .settings import (
+    DASHBOARD_CONFIG,
+    DATA_FILES,
+    CASOS_COLUMNS_MAP,
+    EPIZOOTIAS_COLUMNS_MAP,
+    GRUPOS_EDAD,
+    CONDICION_FINAL_MAP,
+    DESCRIPCION_EPIZOOTIAS_MAP,
+    FILTROS_CONFIG,
+    TABS_CONFIG,
+    VERSION_INFO,
+)
 
-__all__ = ["COLORS", "DASHBOARD_CONFIG", "FILTER_MAPPINGS"]
+from .colors import (
+    COLORS,
+    COLOR_PALETTES,
+    YELLOW_FEVER_COLORS,
+)
+
+# ===== EXPORTS =====
+__all__ = [
+    # Settings
+    "DASHBOARD_CONFIG",
+    "DATA_FILES", 
+    "CASOS_COLUMNS_MAP",
+    "EPIZOOTIAS_COLUMNS_MAP",
+    "GRUPOS_EDAD",
+    "CONDICION_FINAL_MAP",
+    "DESCRIPCION_EPIZOOTIAS_MAP",
+    "FILTROS_CONFIG",
+    "TABS_CONFIG",
+    "VERSION_INFO",
+    
+    # Colors
+    "COLORS",
+    "COLOR_PALETTES", 
+    "YELLOW_FEVER_COLORS",
+]
