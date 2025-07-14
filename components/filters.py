@@ -281,7 +281,6 @@ def create_multiple_filters_corrected(data):
 
 def create_map_mode_selector(colors):
     """Selector de modo del mapa: epidemiológico vs cobertura."""
-    st.sidebar.markdown("---")
     st.sidebar.markdown("### 🗺️ Modo de Visualización")
     
     modo_mapa = st.sidebar.radio(
@@ -292,7 +291,7 @@ def create_map_mode_selector(colors):
         help="Epidemiológico: casos y epizootias. Cobertura: porcentaje de vacunación."
     )
     
-    # Información del modo seleccionado CORREGIDA
+    # Información del modo seleccionado
     if modo_mapa == "Epidemiológico":
         st.sidebar.markdown(
             f"""
@@ -300,7 +299,6 @@ def create_map_mode_selector(colors):
                 🔴 Rojo: Casos + Epizootias + Fallecidos<br>
                 🟠 Naranja: Solo casos<br>
                 🟡 Amarillo: Solo epizootias<br>
-                ⚪ Gris claro: Sin datos
             </div>
             """,
             unsafe_allow_html=True
@@ -495,7 +493,7 @@ def apply_all_filters_multiple(data, filters_location, filters_temporal, filters
                 ]
     
     else:
-        # Filtrado único (lógica original)
+        # Filtrado único
         if filters_location["municipio_display"] != "Todos":
             municipio_norm = normalize_name(filters_location["municipio_display"])
             
@@ -522,7 +520,7 @@ def apply_all_filters_multiple(data, filters_location, filters_temporal, filters
                     epizootias_filtradas["vereda"].apply(normalize_name) == vereda_norm
                 ]
 
-    # Filtros temporales (sin cambios)
+    # Filtros temporales
     if filters_temporal["fecha_rango"] and len(filters_temporal["fecha_rango"]) == 2:
         fecha_inicio = pd.Timestamp(filters_temporal["fecha_rango"][0])
         fecha_fin = pd.Timestamp(filters_temporal["fecha_rango"][1]) + pd.Timedelta(hours=23, minutes=59)
@@ -539,7 +537,7 @@ def apply_all_filters_multiple(data, filters_location, filters_temporal, filters
                 (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
             ]
 
-    # Filtros avanzados (sin cambios)
+    # Filtros avanzados
     if filters_advanced["condicion_final"] != "Todas" and "condicion_final" in casos_filtrados.columns:
         casos_filtrados = casos_filtrados[
             casos_filtrados["condicion_final"] == filters_advanced["condicion_final"]
