@@ -1,10 +1,8 @@
 """
-app.py - INTEGRADO CON NUEVAS FUNCIONALIDADES
-- Filtros múltiples con agrupación
-- Mapas multi-modales con layout compacto 70/30
-- Sistema drill-down para tablas
-- Manejo completo de municipios/veredas
-- Prevención de bucles infinitos en áreas grises
+app.py - INTEGRADO CON NUEVAS FUNCIONALIDADES CORREGIDAS
+- Mensaje de carga se limpia correctamente
+- Bucles infinitos evitados en áreas grises
+- Filtros múltiples con regiones desde VEREDAS
 """
 
 import os
@@ -43,10 +41,10 @@ try:
     from utils.data_processor import (
         excel_date_to_datetime, 
         calculate_basic_metrics,
-        process_complete_data_structure,  # NUEVA FUNCIÓN INTEGRADA
+        process_complete_data_structure,
         handle_empty_area_filter
     )
-    from components.filters import create_unified_filter_system  # SISTEMA ACTUALIZADO
+    from components.filters import create_unified_filter_system
     logger.info("✅ Configuraciones importadas")
 except ImportError as e:
     logger.error(f"❌ Error importando configuraciones: {str(e)}")
@@ -123,12 +121,9 @@ def configure_page():
     )
 
 def load_data():
-    """
-    Función unificada de carga de datos con fallback Google Drive → Local.
-    ACTUALIZADA para usar estructura completa.
-    """
+    """Función unificada de carga de datos CORREGIDA."""
     try:
-        logger.info("🔄 Iniciando carga de datos INTEGRADA")
+        logger.info("🔄 Iniciando carga de datos CORREGIDA")
         
         # ESTRATEGIA 1: Google Drive (Prioridad)
         if check_google_drive_availability():
@@ -137,7 +132,6 @@ def load_data():
             
             if data_gdrive:
                 logger.info(f"✅ Google Drive exitoso: {len(data_gdrive['casos'])} casos, {len(data_gdrive['epizootias'])} epizootias")
-                # Procesar con estructura completa
                 return process_complete_data_structure(
                     data_gdrive['casos'], 
                     data_gdrive['epizootias'], 
@@ -156,60 +150,75 @@ def load_data():
         return create_empty_data_structure()
 
 def load_local_data():
-    """Carga datos desde archivos locales CON ESTRUCTURA COMPLETA."""
-    with st.container():
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+    """Carga datos desde archivos locales CON UI CORREGIDA."""
+    # UI de progreso CORREGIDA
+    progress_container = st.container()
     
     try:
-        status_text.text("🔄 Cargando desde archivos locales...")
+        with progress_container:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            status_text.text("🔄 Cargando desde archivos locales...")
         
-        # Rutas de archivos
-        casos_filename = "BD_positivos.xlsx"
-        epizootias_filename = "Información_Datos_FA.xlsx"
-        
-        data_casos_path = DATA_DIR / casos_filename
-        data_epizootias_path = DATA_DIR / epizootias_filename
-        root_casos_path = ROOT_DIR / casos_filename
-        root_epizootias_path = ROOT_DIR / epizootias_filename
-        
-        progress_bar.progress(20)
-        
-        # Intentar cargar
-        casos_df = None
-        epizootias_df = None
-        
-        # Desde data/
-        if data_casos_path.exists() and data_epizootias_path.exists():
-            casos_df = pd.read_excel(data_casos_path, sheet_name="ACUMU", engine="openpyxl")
-            epizootias_df = pd.read_excel(data_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
-            logger.info("✅ Datos cargados desde carpeta data/")
-        
-        # Desde raíz
-        elif root_casos_path.exists() and root_epizootias_path.exists():
-            casos_df = pd.read_excel(root_casos_path, sheet_name="ACUMU", engine="openpyxl")
-            epizootias_df = pd.read_excel(root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
-            logger.info("✅ Datos cargados desde directorio raíz")
-        
-        if casos_df is None or epizootias_df is None:
-            show_data_setup_instructions()
-            return create_empty_data_structure()
-        
-        progress_bar.progress(50)
-        status_text.text("🔧 Procesando datos con estructura completa...")
-        
-        # Procesar datos CON ESTRUCTURA COMPLETA
-        processed_data = process_loaded_data_integrated(casos_df, epizootias_df)
-        
-        progress_bar.progress(100)
-        time.sleep(1)
-        progress_bar.empty()
-        status_text.empty()
-        
-        st.success("✅ Datos cargados con estructura completa")
-        return processed_data
+            # Rutas de archivos
+            casos_filename = "BD_positivos.xlsx"
+            epizootias_filename = "Información_Datos_FA.xlsx"
+            
+            data_casos_path = DATA_DIR / casos_filename
+            data_epizootias_path = DATA_DIR / epizootias_filename
+            root_casos_path = ROOT_DIR / casos_filename
+            root_epizootias_path = ROOT_DIR / epizootias_filename
+            
+            progress_bar.progress(20)
+            
+            # Intentar cargar
+            casos_df = None
+            epizootias_df = None
+            
+            # Desde data/
+            if data_casos_path.exists() and data_epizootias_path.exists():
+                casos_df = pd.read_excel(data_casos_path, sheet_name="ACUMU", engine="openpyxl")
+                epizootias_df = pd.read_excel(data_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
+                logger.info("✅ Datos cargados desde carpeta data/")
+            
+            # Desde raíz
+            elif root_casos_path.exists() and root_epizootias_path.exists():
+                casos_df = pd.read_excel(root_casos_path, sheet_name="ACUMU", engine="openpyxl")
+                epizootias_df = pd.read_excel(root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
+                logger.info("✅ Datos cargados desde directorio raíz")
+            
+            if casos_df is None or epizootias_df is None:
+                # CORREGIDO: Limpiar UI antes de mostrar error
+                progress_bar.empty()
+                status_text.empty()
+                progress_container.empty()
+                
+                show_data_setup_instructions()
+                return create_empty_data_structure()
+            
+            progress_bar.progress(50)
+            status_text.text("🔧 Procesando datos con estructura completa...")
+            
+            # Procesar datos CON ESTRUCTURA COMPLETA
+            processed_data = process_loaded_data_integrated(casos_df, epizootias_df)
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Completado!")
+            
+            # CORREGIDO: Limpiar UI de progreso
+            time.sleep(1)
+            progress_bar.empty()
+            status_text.empty()
+            progress_container.empty()
+            
+            st.success("✅ Datos cargados con estructura completa")
+            return processed_data
         
     except Exception as e:
+        # CORREGIDO: Limpiar UI en caso de error
+        if 'progress_container' in locals():
+            progress_container.empty()
+        
         logger.error(f"❌ Error cargando datos locales: {str(e)}")
         show_data_setup_instructions()
         return create_empty_data_structure()
@@ -365,21 +374,10 @@ def show_fallback_summary(data_filtered, filters):
         st.info(f"📭 {ubicacion} no tiene datos registrados actualmente")
 
 def handle_gray_area_click(municipio=None, vereda=None, data_original=None):
-    """
-    Maneja clics en áreas grises (sin datos) para evitar bucles infinitos.
-    
-    Args:
-        municipio: Municipio clicado
-        vereda: Vereda clicada (opcional)
-        data_original: Datos originales completos
-    
-    Returns:
-        dict: Datos filtrados con estructura consistente (ceros)
-    """
+    """Maneja clics en áreas grises CORREGIDO."""
     logger.info(f"🎯 Manejando clic en área gris: {municipio}, {vereda}")
     
     if data_original and "handle_empty_area" in data_original:
-        # Usar función especializada del procesador de datos
         return data_original["handle_empty_area"](
             municipio=municipio,
             vereda=vereda,
@@ -387,7 +385,6 @@ def handle_gray_area_click(municipio=None, vereda=None, data_original=None):
             epizootias_df=data_original.get("epizootias", pd.DataFrame())
         )
     else:
-        # Fallback básico
         return {
             "casos": pd.DataFrame(),
             "epizootias": pd.DataFrame(),
@@ -400,7 +397,7 @@ def handle_gray_area_click(municipio=None, vereda=None, data_original=None):
         }
 
 def main():
-    """Función principal del dashboard INTEGRADA."""
+    """Función principal del dashboard CORREGIDA."""
     # Configurar página
     configure_page()
     
@@ -424,13 +421,13 @@ def main():
     logger.info(f"🏛️ Municipios disponibles: {len(data.get('municipios_normalizados', []))}")
     logger.info(f"🗂️ Regiones disponibles: {len(data.get('regiones', {}))}")
 
-    # Aplicar filtros SISTEMA ACTUALIZADO CON MÚLTIPLES Y MAPAS
+    # Aplicar filtros SISTEMA ACTUALIZADO CORREGIDO
     logger.info("🔄 Aplicando sistema de filtros integrado")
     filter_result = create_unified_filter_system(data)
     filters = filter_result["filters"]
     data_filtered = filter_result["data_filtered"]
 
-    # Verificar si es un área sin datos
+    # Verificar si es un área sin datos CORREGIDO
     municipio_filtrado = filters.get("municipio_display")
     vereda_filtrada = filters.get("vereda_display")
     
@@ -458,7 +455,7 @@ def main():
     # Información del modo de mapa
     modo_mapa = filters.get("modo_mapa", "Epidemiológico")
     if modo_mapa != "Epidemiológico":
-        st.info(f"🎨 Modo de mapa: **{modo_mapa}** (los datos de cobertura son simulados por ahora)")
+        st.info(f"🎨 Modo de mapa: **{modo_mapa}** (los datos de cobertura son editables manualmente)")
 
     # Pestañas principales
     tab1, tab2, tab3 = st.tabs([
@@ -514,8 +511,8 @@ def main():
         st.markdown(
             f"""
             <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0;">
-                Dashboard Fiebre Amarilla v2.0 - Sistema Integrado<br>
-                ✨ Filtros Múltiples • 🗺️ Mapas Multi-Modal • 📊 Drill-Down • 🔍 Áreas Completas<br>
+                Dashboard Fiebre Amarilla v4.0 - Sistema Corregido<br>
+                ✨ Filtros Corregidos • 🗺️ Mapas Mejorados • 📊 Drill-Down • 🔧 Sin Bucles<br>
                 Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
             </div>
             """,

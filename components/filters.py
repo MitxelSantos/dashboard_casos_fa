@@ -1,5 +1,5 @@
 """
-Componente de filtros con soporte para selección múltiple y agrupación.
+Componente de filtros CORREGIDO con soporte para selección múltiple y regiones desde VEREDAS.
 """
 
 import streamlit as st
@@ -7,17 +7,6 @@ import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
-
-# ===== GRUPOS PREDEFINIDOS =====
-
-REGIONES_TOLIMA = {
-    "Norte": ["FALAN", "FRESNO", "HERVEO", "LERIDA", "LIBANO", "MURILLO", "PALOCABILDO", "SANTA ISABEL", "VILLAHERMOSA"],
-    "Centro": ["ALVARADO", "IBAGUE", "CAJAMARCA", "COELLO", "ESPINAL", "FLANDES", "GUAMO", "PIEDRAS", "ROVIRA", "VALLE DE SAN JUAN"],
-    "Sur": ["ALPUJARRA", "ATACO", "CHAPARRAL", "COYAIMA", "DOLORES", "NATAGAIMA", "ORTEGA", "PLANADAS", "RIOBLANCO", "RONCESVALLES", "SAN ANTONIO"],
-    "Oriente": ["CUNDAY", "ICONONZO", "MELGAR", "CARMEN DE APICALA", "VENADILLO", "CASABIANCA"],
-    "Magdalena": ["AMBALEMA", "ARMERO", "HONDA", "MARIQUITA", "SALDAÑA"],
-    "Suarez": ["SUAREZ", "PURIFICACION", "PRADO", "SAN LUIS", "VILLARRICA"]
-}
 
 def apply_filters_css(colors):
     """CSS optimizado para filtros múltiples."""
@@ -96,10 +85,39 @@ def apply_filters_css(colors):
         unsafe_allow_html=True,
     )
 
+def extract_regiones_from_veredas_data(data):
+    """Extrae regiones desde la hoja VEREDAS de BD_positivos.xlsx."""
+    regiones = {}
+    
+    # Intentar obtener desde veredas_completas
+    if "veredas_completas" in data and not data["veredas_completas"].empty:
+        veredas_df = data["veredas_completas"]
+        
+        if "region" in veredas_df.columns and "municipio" in veredas_df.columns:
+            logger.info("🗂️ Cargando regiones desde hoja VEREDAS")
+            
+            for region in veredas_df["region"].dropna().unique():
+                municipios_region = veredas_df[veredas_df["region"] == region]["municipio"].dropna().unique()
+                # Normalizar nombres de municipios
+                municipios_norm = [str(m).upper().strip() for m in municipios_region]
+                regiones[region] = sorted(list(set(municipios_norm)))
+            
+            logger.info(f"✅ Regiones cargadas desde VEREDAS: {list(regiones.keys())}")
+            return regiones
+    
+    # Fallback: regiones predefinidas si no hay datos
+    logger.warning("⚠️ No se pudieron cargar regiones desde VEREDAS, usando fallback")
+    return {
+        "Norte": ["FALAN", "FRESNO", "HERVEO", "LERIDA", "LIBANO", "MURILLO", "PALOCABILDO", "SANTA ISABEL", "VILLAHERMOSA"],
+        "Centro": ["ALVARADO", "IBAGUE", "CAJAMARCA", "COELLO", "ESPINAL", "FLANDES", "GUAMO", "PIEDRAS", "ROVIRA", "VALLE DE SAN JUAN"],
+        "Sur": ["ALPUJARRA", "ATACO", "CHAPARRAL", "COYAIMA", "DOLORES", "NATAGAIMA", "ORTEGA", "PLANADAS", "RIOBLANCO", "RONCESVALLES", "SAN ANTONIO"],
+        "Oriente": ["CUNDAY", "ICONONZO", "MELGAR", "CARMEN DE APICALA", "VENADILLO", "CASABIANCA"],
+        "Magdalena": ["AMBALEMA", "ARMERO", "HONDA", "MARIQUITA", "SALDAÑA"],
+        "Suarez": ["SUAREZ", "PURIFICACION", "PRADO", "SAN LUIS", "VILLARRICA"]
+    }
+
 def create_hierarchical_filters_with_multiselect(data):
-    """
-    Filtros jerárquicos con soporte para selección múltiple.
-    """
+    """Filtros jerárquicos CORREGIDOS con soporte para selección múltiple."""
     
     # Selector de modo de filtrado
     st.sidebar.markdown("### 🎯 Modo de Filtrado")
@@ -115,7 +133,7 @@ def create_hierarchical_filters_with_multiselect(data):
     if filtro_modo == "Único":
         return create_single_filters(data)
     else:
-        return create_multiple_filters(data)
+        return create_multiple_filters_corrected(data)
 
 def create_single_filters(data):
     """Filtros únicos (lógica original)."""
@@ -163,54 +181,60 @@ def create_single_filters(data):
         "veredas_seleccionadas": [vereda_selected] if vereda_selected != "Todas" else [],
     }
 
-def create_multiple_filters(data):
-    """Filtros múltiples con agrupación."""
+def create_multiple_filters_corrected(data):
+    """Filtros múltiples CORREGIDOS con agrupación."""
     
     st.sidebar.markdown('<div class="multiselect-section">', unsafe_allow_html=True)
     st.sidebar.markdown("#### 🗂️ Selección Múltiple")
     
-    # Grupos predefinidos de municipios
+    # Obtener regiones desde datos VEREDAS
+    regiones_tolima = extract_regiones_from_veredas_data(data)
+    
+    # Mostrar grupos predefinidos de municipios
     st.sidebar.markdown("**Grupos por Región:**")
     
-    grupos_html = ""
-    for region, municipios in REGIONES_TOLIMA.items():
-        grupos_html += f'<button class="grupo-btn" onclick="selectGroup(\'{region}\')">{region} ({len(municipios)})</button>'
+    # Crear botones para cada región CORREGIDO
+    cols = st.sidebar.columns(2)
+    region_names = list(regiones_tolima.keys())
     
-    st.sidebar.markdown(grupos_html, unsafe_allow_html=True)
+    for i, region in enumerate(region_names):
+        col_idx = i % 2
+        with cols[col_idx]:
+            if st.button(
+                f"{region} ({len(regiones_tolima[region])})", 
+                key=f"btn_region_{region.lower().replace(' ', '_')}", 
+                use_container_width=True,
+                help=f"Seleccionar todos los municipios de {region}"
+            ):
+                # CORREGIDO: Inicializar si no existe
+                if "municipios_multiselect" not in st.session_state:
+                    st.session_state.municipios_multiselect = []
+                
+                # Agregar municipios de la región sin sobrescribir
+                current_selection = list(st.session_state.municipios_multiselect)
+                for municipio in regiones_tolima[region]:
+                    if municipio not in current_selection:
+                        current_selection.append(municipio)
+                
+                # Actualizar session_state ANTES del widget
+                st.session_state.municipios_multiselect = current_selection
+                st.rerun()
     
-    # JavaScript para manejo de grupos (simplificado)
-    st.sidebar.markdown(
-        """
-        <script>
-        function selectGroup(region) {
-            // Esta funcionalidad se manejará via session_state
-            alert('Grupo ' + region + ' seleccionado. Use los selectores de abajo.');
-        }
-        </script>
-        """,
-        unsafe_allow_html=True
-    )
+    # Inicializar default para multiselect
+    default_municipios = st.session_state.get("municipios_multiselect", [])
     
     # Selector múltiple de municipios
     municipios_options = data["municipios_normalizados"]
     municipios_selected = st.sidebar.multiselect(
         "📍 MUNICIPIOS:",
         municipios_options,
-        default=st.session_state.get("municipios_multiselect", []),
-        key="municipios_multiselect",
+        default=default_municipios,
+        key="municipios_multiselect_widget",
         help="Seleccione uno o más municipios"
     )
     
-    # Botones rápidos para regiones
-    col1, col2 = st.sidebar.columns(2)
-    with col1:
-        if st.button("Norte", key="btn_norte", use_container_width=True):
-            st.session_state.municipios_multiselect = REGIONES_TOLIMA["Norte"]
-            st.rerun()
-    with col2:
-        if st.button("Centro", key="btn_centro", use_container_width=True):
-            st.session_state.municipios_multiselect = REGIONES_TOLIMA["Centro"]
-            st.rerun()
+    # Sincronizar con session_state
+    st.session_state["municipios_multiselect"] = municipios_selected
     
     # Si hay municipios seleccionados, mostrar selector de veredas
     veredas_selected = []
@@ -221,13 +245,26 @@ def create_multiple_filters(data):
             todas_las_veredas.extend(veredas_municipio)
         
         if todas_las_veredas:
+            # Inicializar default para veredas
+            default_veredas = st.session_state.get("veredas_multiselect", [])
+            
             veredas_selected = st.sidebar.multiselect(
                 "🏘️ VEREDAS:",
                 sorted(set(todas_las_veredas)),
-                default=st.session_state.get("veredas_multiselect", []),
-                key="veredas_multiselect",
+                default=default_veredas,
+                key="veredas_multiselect_widget",
                 help="Veredas de los municipios seleccionados"
             )
+            
+            # Sincronizar con session_state
+            st.session_state["veredas_multiselect"] = veredas_selected
+    
+    # Botón para limpiar selección
+    if municipios_selected or veredas_selected:
+        if st.sidebar.button("🗑️ Limpiar Selección", use_container_width=True):
+            st.session_state.municipios_multiselect = []
+            st.session_state.veredas_multiselect = []
+            st.rerun()
     
     st.sidebar.markdown('</div>', unsafe_allow_html=True)
     
@@ -239,6 +276,7 @@ def create_multiple_filters(data):
         "vereda_normalizada": "Multiple",
         "municipios_seleccionados": municipios_selected,
         "veredas_seleccionadas": veredas_selected,
+        "regiones_disponibles": regiones_tolima,
     }
 
 def create_map_mode_selector(colors):
@@ -254,16 +292,14 @@ def create_map_mode_selector(colors):
         help="Epidemiológico: casos y epizootias. Cobertura: porcentaje de vacunación."
     )
     
-    # Información del modo seleccionado
+    # Información del modo seleccionado CORREGIDA
     if modo_mapa == "Epidemiológico":
         st.sidebar.markdown(
             f"""
             <div style="background: {colors['info']}; color: white; padding: 0.5rem; border-radius: 6px; font-size: 0.8rem;">
                 🔴 Rojo: Casos + Epizootias + Fallecidos<br>
-                🟠 Naranja: Solo epizootias positivas<br>
-                🟡 Amarillo: Solo casos (sin fallecidos)<br>
-                ⚫ Gris oscuro: Solo fallecidos<br>
-                🔵 Azul: En estudio<br>
+                🟠 Naranja: Solo casos<br>
+                🟡 Amarillo: Solo epizootias<br>
                 ⚪ Gris claro: Sin datos
             </div>
             """,
@@ -416,9 +452,7 @@ def calculate_multiple_counters(casos, epizootias, municipios_seleccionados):
     }
 
 def apply_all_filters_multiple(data, filters_location, filters_temporal, filters_advanced):
-    """
-    Aplica filtros con soporte para selección múltiple.
-    """
+    """Aplica filtros con soporte para selección múltiple."""
     casos_filtrados = data["casos"].copy()
     epizootias_filtradas = data["epizootias"].copy()
 
@@ -535,9 +569,7 @@ def apply_all_filters_multiple(data, filters_location, filters_temporal, filters
     }
 
 def create_unified_filter_system(data):
-    """
-    Sistema unificado de filtros con soporte múltiple MEJORADO.
-    """
+    """Sistema unificado de filtros CORREGIDO."""
     # Aplicar CSS
     try:
         from config.colors import COLORS

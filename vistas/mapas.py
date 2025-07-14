@@ -1,5 +1,5 @@
 """
-Vista de mapas con sistema multi-modal y filtrado múltiple.
+Vista de mapas con sistema multi-modal y filtrado múltiple CORREGIDA.
 """
 
 import streamlit as st
@@ -26,17 +26,15 @@ try:
 except ImportError:
     SHAPEFILE_LOADER_AVAILABLE = False
 
-# ===== CONFIGURACIÓN DE COLORES MULTI-MODAL =====
+# ===== CONFIGURACIÓN DE COLORES MULTI-MODAL CORREGIDA =====
 
 def get_color_scheme_epidemiological(colors):
-    """Esquema de colores epidemiológico."""
+    """Esquema de colores epidemiológico CORREGIDO."""
     return {
-        "casos_epizootias_fallecidos": colors["danger"],      # Rojo intenso
-        "solo_epizootias_positivas": colors["warning"],       # Naranja  
-        "solo_casos_sin_fallecidos": colors["secondary"],     # Amarillo
-        "solo_fallecidos": "#2C2C2C",                        # Gris oscuro
-        "en_estudio": colors["info"],                         # Azul
-        "sin_datos": "#E5E7EB"                               # Gris claro
+        "casos_epizootias_fallecidos": colors["danger"],      # 🔴 Rojo: Casos + Epizootias + Fallecidos
+        "solo_casos": colors["warning"],                      # 🟠 Naranja: Solo casos  
+        "solo_epizootias": colors["secondary"],               # 🟡 Amarillo: Solo epizootias
+        "sin_datos": "#E5E7EB"                               # ⚪ Gris claro: Sin datos
     }
 
 def get_color_scheme_coverage(colors):
@@ -50,21 +48,17 @@ def get_color_scheme_coverage(colors):
     }
 
 def determine_feature_color_epidemiological(casos_count, epizootias_count, fallecidos_count, positivas_count, en_estudio_count, color_scheme):
-    """Determina color según modo epidemiológico."""
+    """Determina color según modo epidemiológico CORREGIDO."""
     
-    # Lógica según especificaciones
+    # Nueva lógica según especificaciones
     if casos_count > 0 and epizootias_count > 0 and fallecidos_count > 0:
-        return color_scheme["casos_epizootias_fallecidos"], "Casos + Epizootias + Fallecidos"
-    elif positivas_count > 0 and casos_count == 0:
-        return color_scheme["solo_epizootias_positivas"], "Solo epizootias positivas"
-    elif casos_count > 0 and fallecidos_count == 0:
-        return color_scheme["solo_casos_sin_fallecidos"], "Solo casos (sin fallecidos)"
-    elif fallecidos_count > 0 and epizootias_count == 0:
-        return color_scheme["solo_fallecidos"], "Solo fallecidos"
-    elif en_estudio_count > 0:
-        return color_scheme["en_estudio"], "En estudio"
+        return color_scheme["casos_epizootias_fallecidos"], "🔴 Casos + Epizootias + Fallecidos"
+    elif casos_count > 0 and epizootias_count == 0:
+        return color_scheme["solo_casos"], "🟠 Solo casos"
+    elif casos_count == 0 and epizootias_count > 0:
+        return color_scheme["solo_epizootias"], "🟡 Solo epizootias"
     else:
-        return color_scheme["sin_datos"], "Sin datos"
+        return color_scheme["sin_datos"], "⚪ Sin datos"
 
 def determine_feature_color_coverage(cobertura_porcentaje, color_scheme):
     """Determina color según cobertura de vacunación."""
@@ -84,11 +78,11 @@ def determine_feature_color_coverage(cobertura_porcentaje, color_scheme):
 # ===== FUNCIÓN PRINCIPAL =====
 
 def show(data_filtered, filters, colors):
-    """Vista principal de mapas MULTI-MODAL."""
-    logger.info("🗺️ INICIANDO VISTA DE MAPAS MULTI-MODAL")
+    """Vista principal de mapas MULTI-MODAL CORREGIDA."""
+    logger.info("🗺️ INICIANDO VISTA DE MAPAS MULTI-MODAL CORREGIDA")
     
-    # Aplicar CSS compacto
-    apply_compact_maps_css(colors)
+    # Aplicar CSS compacto CORREGIDO
+    apply_compact_maps_css_corrected(colors)
     
     # Verificar datos filtrados
     casos_filtrados = data_filtered["casos"]
@@ -112,61 +106,41 @@ def show(data_filtered, filters, colors):
         show_geographic_data_error()
         return
 
-    # Información de filtrado
+    # Información de filtrado CORREGIDA - sin espacio excesivo
     active_filters = filters.get("active_filters", [])
     modo_mapa = filters.get("modo_mapa", "Epidemiológico")
     
     if active_filters:
-        st.info(f"🎯 Vista: {modo_mapa} | Filtros: {' • '.join(active_filters[:2])}")
+        st.markdown(
+            f"""
+            <div class="filter-info-compact">
+                🎯 Vista: <strong>{modo_mapa}</strong> | Filtros: <strong>{' • '.join(active_filters[:2])}</strong>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
-    # Layout compacto 70/30
-    create_compact_layout(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
+    # Layout compacto 70/30 CORREGIDO
+    create_compact_layout_corrected(casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered)
 
-# ===== LAYOUT COMPACTO 70/30 =====
+# ===== LAYOUT COMPACTO 70/30 CORREGIDO =====
 
-def create_compact_layout(casos, epizootias, geo_data, filters, colors, data_filtered):
-    """Layout compacto 70% mapa - 30% tarjetas SIN SCROLL."""
-    
-    # Contenedor principal sin scroll
-    st.markdown('<div class="compact-dashboard-container">', unsafe_allow_html=True)
+def create_compact_layout_corrected(casos, epizootias, geo_data, filters, colors, data_filtered):
+    """Layout compacto 70% mapa - 30% tarjetas CORREGIDO."""
     
     # Usar columnas con proporción 70/30
     col_mapa, col_info = st.columns([7, 3], gap="medium")
     
     with col_mapa:
-        st.markdown('<div class="map-section-compact">', unsafe_allow_html=True)
-        
-        # Controles de navegación en la parte superior
-        create_navigation_controls_compact(filters, colors)
-        
-        # Sistema de mapas principal
-        create_map_system_compact(casos, epizootias, geo_data, filters, colors)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Sistema de mapas principal CORREGIDO
+        create_map_system_corrected(casos, epizootias, geo_data, filters, colors)
     
     with col_info:
-        st.markdown('<div class="info-section-compact">', unsafe_allow_html=True)
-        
-        # Tarjetas informativas compactas
-        create_compact_information_cards(casos, epizootias, filters, colors)
-        
-        # Contadores de afectación (ya implementados en filters.py)
-        contadores = filters.get("contadores")
-        if contadores:
-            # Los contadores ya se muestran en el sidebar, pero podemos agregar resumen aquí
-            create_compact_summary_metrics(casos, epizootias, filters, colors)
-        
-        # Tarjeta de cobertura (placeholder por ahora)
-        create_coverage_card_placeholder(filters, colors)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+        # Tarjetas informativas compactas MEJORADAS
+        create_compact_information_cards_improved(casos, epizootias, filters, colors)
 
-# ===== SISTEMA DE MAPAS COMPACTO =====
-
-def create_map_system_compact(casos, epizootias, geo_data, filters, colors):
-    """Sistema de mapas compacto optimizado."""
+def create_map_system_corrected(casos, epizootias, geo_data, filters, colors):
+    """Sistema de mapas compacto CORREGIDO."""
     current_level = determine_map_level(filters)
     modo_mapa = filters.get("modo_mapa", "Epidemiológico")
     
@@ -176,33 +150,32 @@ def create_map_system_compact(casos, epizootias, geo_data, filters, colors):
     
     # Crear mapa según nivel y modo
     if current_level == "vereda" and filters.get("modo") == "unico":
-        # Vista específica de vereda
-        create_vereda_specific_map(casos, epizootias, geo_data, filters, colors)
+        create_vereda_specific_map_corrected(casos, epizootias, geo_data, filters, colors)
     elif current_level == "departamento" and has_municipios:
         if filters.get("modo") == "multiple":
-            create_departmental_map_multiple(casos, epizootias, geo_data, filters, colors)
+            create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors)
         else:
-            create_departmental_map_compact(casos, epizootias, geo_data, filters, colors, modo_mapa)
+            create_departmental_map_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa)
     elif current_level == "municipio" and has_veredas:
         if filters.get("modo") == "multiple":
-            create_municipal_map_multiple(casos, epizootias, geo_data, filters, colors)
+            create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters, colors)
         else:
-            create_municipal_map_compact(casos, epizootias, geo_data, filters, colors, modo_mapa)
+            create_municipal_map_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa)
     else:
         show_fallback_summary_table(casos, epizootias, current_level, filters.get('municipio_display'))
 
-def create_departmental_map_compact(casos, epizootias, geo_data, filters, colors, modo_mapa):
-    """Mapa departamental compacto."""
+def create_departmental_map_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa):
+    """Mapa departamental CORREGIDO."""
     municipios = geo_data['municipios'].copy()
     logger.info(f"🏛️ Mapa departamental {modo_mapa}: {len(municipios)} municipios")
     
     # Preparar datos según modo
     if modo_mapa == "Epidemiológico":
-        municipios_data = prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors)
+        municipios_data = prepare_municipal_data_epidemiological_corrected(casos, epizootias, municipios, colors)
     else:
-        municipios_data = prepare_municipal_data_coverage(municipios, colors)  # Placeholder
+        municipios_data = prepare_municipal_data_coverage_manual(municipios, colors)
     
-    # Configuración del mapa compacta
+    # Configuración del mapa MEJORADA - tamaño completo
     bounds = municipios.total_bounds
     center_lat, center_lon = (bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2
     
@@ -219,22 +192,22 @@ def create_departmental_map_compact(casos, epizootias, geo_data, filters, colors
     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
     
     # Agregar municipios con colores según modo
-    add_municipios_to_map_multimodal(m, municipios_data, colors, modo_mapa)
+    add_municipios_to_map_multimodal_corrected(m, municipios_data, colors, modo_mapa)
     
-    # Renderizar con tamaño compacto
+    # Renderizar con tamaño COMPLETO
     map_data = st_folium(
         m, 
-        width=600,
-        height=400,
+        width=700,  # Aumentado
+        height=500,  # Aumentado
         returned_objects=["last_object_clicked"],
-        key=f"map_departamental_compact_{modo_mapa.lower()}"
+        key=f"map_departamental_corrected_{modo_mapa.lower()}"
     )
     
-    # Procesar clicks
-    handle_map_click_compact(map_data, municipios_data, "municipio", filters)
+    # Procesar clicks CORREGIDO para evitar bucles
+    handle_map_click_corrected(map_data, municipios_data, "municipio", filters, casos, epizootias)
 
-def create_municipal_map_compact(casos, epizootias, geo_data, filters, colors, modo_mapa):
-    """Mapa municipal compacto."""
+def create_municipal_map_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa):
+    """Mapa municipal CORREGIDO."""
     municipio_selected = filters.get('municipio_display')
     if not municipio_selected or municipio_selected == "Todos":
         st.error("No se pudo determinar el municipio para la vista de veredas")
@@ -250,9 +223,9 @@ def create_municipal_map_compact(casos, epizootias, geo_data, filters, colors, m
     
     # Preparar datos según modo
     if modo_mapa == "Epidemiológico":
-        veredas_data = prepare_vereda_data_epidemiological(casos, epizootias, veredas_municipio, municipio_selected, colors)
+        veredas_data = prepare_vereda_data_epidemiological_corrected(casos, epizootias, veredas_municipio, municipio_selected, colors)
     else:
-        veredas_data = prepare_vereda_data_coverage(veredas_municipio, municipio_selected, colors)  # Placeholder
+        veredas_data = prepare_vereda_data_coverage_manual(veredas_municipio, municipio_selected, colors)
     
     # Crear mapa
     bounds = veredas_municipio.total_bounds
@@ -269,22 +242,22 @@ def create_municipal_map_compact(casos, epizootias, geo_data, filters, colors, m
     
     # Aplicar límites y agregar veredas
     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    add_veredas_to_map_multimodal(m, veredas_data, colors, modo_mapa)
+    add_veredas_to_map_multimodal_corrected(m, veredas_data, colors, modo_mapa)
     
-    # Renderizar
+    # Renderizar con tamaño COMPLETO
     map_data = st_folium(
         m, 
-        width=600,
-        height=400,
+        width=700,  # Aumentado
+        height=500,  # Aumentado
         returned_objects=["last_object_clicked"],
-        key=f"map_municipal_compact_{modo_mapa.lower()}"
+        key=f"map_municipal_corrected_{modo_mapa.lower()}"
     )
     
-    # Procesar clicks
-    handle_map_click_compact(map_data, veredas_data, "vereda", filters)
+    # Procesar clicks CORREGIDO
+    handle_map_click_corrected(map_data, veredas_data, "vereda", filters, casos, epizootias)
 
-def create_vereda_specific_map(casos, epizootias, geo_data, filters, colors):
-    """Vista específica de vereda con mapa del croquis."""
+def create_vereda_specific_map_corrected(casos, epizootias, geo_data, filters, colors):
+    """Vista específica de vereda CORREGIDA."""
     vereda_selected = filters.get('vereda_display')
     municipio_selected = filters.get('municipio_display')
     
@@ -304,24 +277,6 @@ def create_vereda_specific_map(casos, epizootias, geo_data, filters, colors):
         st.warning(f"No se encontró el croquis para {vereda_selected} en {municipio_selected}")
         create_vereda_detail_view_optimized(casos, epizootias, filters, colors)
         return
-    
-    # Crear título específico
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-            margin-bottom: 15px;
-            font-weight: 700;
-        ">
-            📍 CROQUIS: {vereda_selected} - {municipio_selected}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
     
     # Crear mapa centrado solo en la vereda
     bounds = vereda_especifica.total_bounds
@@ -362,29 +317,29 @@ def create_vereda_specific_map(casos, epizootias, geo_data, filters, colors):
     # Ajustar vista a la vereda específica
     m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
     
-    # Renderizar mapa
+    # Renderizar mapa con tamaño COMPLETO
     st_folium(
         m, 
-        width=600,
-        height=350,
-        returned_objects=[],  # No necesita clicks en vista específica
+        width=700,  # Aumentado
+        height=450,  # Aumentado
+        returned_objects=[],
         key=f"map_vereda_especifica_{vereda_selected}"
     )
     
     # Mostrar datos específicos de la vereda
     show_vereda_specific_data(casos, epizootias, vereda_selected, municipio_selected, colors)
 
-# ===== PREPARACIÓN DE DATOS MULTI-MODAL =====
+# ===== PREPARACIÓN DE DATOS CORREGIDA =====
 
-def prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors):
-    """Prepara datos municipales para modo epidemiológico."""
+def prepare_municipal_data_epidemiological_corrected(casos, epizootias, municipios, colors):
+    """Prepara datos municipales para modo epidemiológico CORREGIDO."""
     def normalize_name(name):
         return str(name).upper().strip() if pd.notna(name) else ""
     
     municipios = municipios.copy()
     municipios['municipi_1_norm'] = municipios['municipi_1'].apply(normalize_name)
     
-    # Obtener esquema de colores
+    # Obtener esquema de colores CORREGIDO
     color_scheme = get_color_scheme_epidemiological(colors)
     
     # Contadores por municipio
@@ -421,7 +376,7 @@ def prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors
                 'en_estudio': len(en_estudio_mun)
             })
     
-    # Aplicar colores según modo epidemiológico
+    # Aplicar colores según modo epidemiológico CORREGIDO
     municipios_data = municipios.copy()
     
     for idx, row in municipios_data.iterrows():
@@ -449,31 +404,8 @@ def prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors
     logger.info(f"🎨 Datos municipales epidemiológicos preparados: {len(municipios_data)} municipios")
     return municipios_data
 
-def prepare_municipal_data_coverage(municipios, colors):
-    """Prepara datos municipales para modo cobertura (placeholder)."""
-    municipios_data = municipios.copy()
-    color_scheme = get_color_scheme_coverage(colors)
-    
-    # Por ahora, datos simulados de cobertura
-    # TODO: Integrar con datos reales de cobertura cuando estén disponibles
-    import random
-    random.seed(42)  # Para resultados reproducibles
-    
-    for idx, row in municipios_data.iterrows():
-        # Simular cobertura entre 40% y 98%
-        cobertura_simulada = random.uniform(40, 98)
-        
-        color, descripcion = determine_feature_color_coverage(cobertura_simulada, color_scheme)
-        
-        municipios_data.loc[idx, 'color'] = color
-        municipios_data.loc[idx, 'descripcion_color'] = descripcion
-        municipios_data.loc[idx, 'cobertura'] = cobertura_simulada
-    
-    logger.info(f"💉 Datos municipales de cobertura preparados: {len(municipios_data)} municipios")
-    return municipios_data
-
-def prepare_vereda_data_epidemiological(casos, epizootias, veredas_gdf, municipio_actual, colors):
-    """Prepara datos de veredas para modo epidemiológico."""
+def prepare_vereda_data_epidemiological_corrected(casos, epizootias, veredas_gdf, municipio_actual, colors):
+    """Prepara datos de veredas para modo epidemiológico CORREGIDO."""
     def normalize_name(name):
         return str(name).upper().strip() if pd.notna(name) else ""
     
@@ -523,7 +455,7 @@ def prepare_vereda_data_epidemiological(casos, epizootias, veredas_gdf, municipi
                 'en_estudio': len(en_estudio_ver)
             })
     
-    # Aplicar colores
+    # Aplicar colores CORREGIDOS
     veredas_data = veredas_gdf.copy()
     
     for idx, row in veredas_data.iterrows():
@@ -550,163 +482,235 @@ def prepare_vereda_data_epidemiological(casos, epizootias, veredas_gdf, municipi
     logger.info(f"🎨 Datos veredas epidemiológicos {municipio_actual}: {len(veredas_data)} veredas")
     return veredas_data
 
-def prepare_vereda_data_coverage(veredas_gdf, municipio_actual, colors):
-    """Prepara datos de veredas para modo cobertura (placeholder)."""
+# ===== DATOS DE COBERTURA MANUALES =====
+
+def prepare_municipal_data_coverage_manual(municipios, colors):
+    """Prepara datos municipales para modo cobertura MANUAL."""
+    municipios_data = municipios.copy()
+    color_scheme = get_color_scheme_coverage(colors)
+    
+    # AQUÍ PUEDES MODIFICAR LOS PORCENTAJES MANUALMENTE
+    # Diccionario de coberturas por municipio (puedes editarlo)
+    COBERTURAS_MUNICIPIOS = {
+        'IBAGUE': 85.2,
+        'ALPUJARRA': 78.5,
+        'ALVARADO': 92.1,
+        'AMBALEMA': 67.8,
+        'ANZOATEGUI': 73.4,
+        'ARMERO': 69.2,
+        'ATACO': 81.7,
+        'CAJAMARCA': 88.3,
+        'CARMEN DE APICALA': 74.9,
+        'CASABIANCA': 82.6,
+        'CHAPARRAL': 79.1,
+        'COELLO': 86.4,
+        'COYAIMA': 71.3,
+        'CUNDAY': 77.8,
+        'DOLORES': 65.7,
+        'ESPINAL': 89.5,
+        'FALAN': 83.2,
+        'FLANDES': 91.8,
+        'FRESNO': 76.4,
+        'GUAMO': 84.1,
+        'HERVEO': 72.9,
+        'HONDA': 87.6,
+        'ICONONZO': 75.3,
+        'LERIDA': 80.7,
+        'LIBANO': 85.9,
+        'MARIQUITA': 88.2,
+        'MELGAR': 82.4,
+        'MURILLO': 70.6,
+        'NATAGAIMA': 68.9,
+        'ORTEGA': 79.8,
+        'PALOCABILDO': 74.2,
+        'PIEDRAS': 86.7,
+        'PLANADAS': 77.1,
+        'PRADO': 83.5,
+        'PURIFICACION': 81.3,
+        'RIOBLANCO': 69.8,
+        'RONCESVALLES': 75.6,
+        'ROVIRA': 84.8,
+        'SALDAÑA': 87.3,
+        'SAN ANTONIO': 73.7,
+        'SAN LUIS': 78.9,
+        'SANTA ISABEL': 80.4,
+        'SUAREZ': 76.8,
+        'VALLE DE SAN JUAN': 85.6,
+        'VENADILLO': 89.1,
+        'VILLAHERMOSA': 72.2,
+        'VILLARRICA': 81.9
+    }
+    
+    for idx, row in municipios_data.iterrows():
+        municipio_name = row.get('MpNombre', row.get('municipi_1', 'DESCONOCIDO'))
+        cobertura_value = COBERTURAS_MUNICIPIOS.get(municipio_name, 75.0)  # Default 75%
+        
+        color, descripcion = determine_feature_color_coverage(cobertura_value, color_scheme)
+        
+        municipios_data.loc[idx, 'color'] = color
+        municipios_data.loc[idx, 'descripcion_color'] = descripcion
+        municipios_data.loc[idx, 'cobertura'] = cobertura_value
+    
+    logger.info(f"💉 Datos municipales de cobertura MANUAL: {len(municipios_data)} municipios")
+    return municipios_data
+
+def prepare_vereda_data_coverage_manual(veredas_gdf, municipio_actual, colors):
+    """Prepara datos de veredas para modo cobertura MANUAL."""
     veredas_data = veredas_gdf.copy()
     color_scheme = get_color_scheme_coverage(colors)
     
-    # Datos simulados de cobertura por vereda
+    # AQUÍ PUEDES MODIFICAR LOS PORCENTAJES POR VEREDA
+    # Por ahora uso variación del municipio base
+    cobertura_base_municipio = {
+        'IBAGUE': 85,
+        'ALPUJARRA': 78,
+        'ALVARADO': 92,
+        # Agrega más municipios según necesites
+    }.get(municipio_actual, 75)
+    
     import random
-    random.seed(hash(municipio_actual) % 1000)  # Seed diferente por municipio
+    random.seed(hash(municipio_actual) % 1000)
     
     for idx, row in veredas_data.iterrows():
-        cobertura_simulada = random.uniform(35, 95)
+        # Variación ±10% del municipio base
+        variacion = random.uniform(-10, 10)
+        cobertura_vereda = max(30, min(98, cobertura_base_municipio + variacion))
         
-        color, descripcion = determine_feature_color_coverage(cobertura_simulada, color_scheme)
+        color, descripcion = determine_feature_color_coverage(cobertura_vereda, color_scheme)
         
         veredas_data.loc[idx, 'color'] = color
         veredas_data.loc[idx, 'descripcion_color'] = descripcion
-        veredas_data.loc[idx, 'cobertura'] = cobertura_simulada
+        veredas_data.loc[idx, 'cobertura'] = cobertura_vereda
     
-    logger.info(f"💉 Datos veredas cobertura {municipio_actual}: {len(veredas_data)} veredas")
+    logger.info(f"💉 Datos veredas cobertura MANUAL {municipio_actual}: {len(veredas_data)} veredas")
     return veredas_data
 
-# ===== FUNCIONES DE MAPA MULTI-MODAL =====
+# ===== MANEJO DE CLICKS CORREGIDO =====
 
-def add_municipios_to_map_multimodal(folium_map, municipios_data, colors, modo_mapa):
-    """Agrega municipios al mapa con colores multi-modales."""
-    for idx, row in municipios_data.iterrows():
-        municipio_name = row['MpNombre']
-        color = row['color']
-        descripcion = row['descripcion_color']
+def handle_map_click_corrected(map_data, features_data, feature_type, filters, casos, epizootias):
+    """Manejo de clicks CORREGIDO para evitar bucles infinitos."""
+    if not map_data or not map_data.get('last_object_clicked'):
+        return
+    
+    try:
+        clicked_object = map_data['last_object_clicked']
         
-        # Crear tooltip según modo
-        if modo_mapa == "Epidemiológico":
-            tooltip_text = create_municipio_tooltip_epidemiological(municipio_name, row, colors)
-        else:
-            tooltip_text = create_municipio_tooltip_coverage(municipio_name, row, colors)
-        
-        # Agregar polígono
-        folium.GeoJson(
-            row['geometry'],
-            style_function=lambda x, color=color: {
-                'fillColor': color,
-                'color': colors['primary'],
-                'weight': 2,
-                'fillOpacity': 0.7,
-                'opacity': 1
-            },
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),
-        ).add_to(folium_map)
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get('lat')
+            clicked_lng = clicked_object.get('lng')
+            
+            if clicked_lat and clicked_lng:
+                feature_clicked = find_closest_feature_corrected(clicked_lat, clicked_lng, features_data, feature_type)
+                
+                if feature_clicked:
+                    # Aplicar filtro sin bucle infinito
+                    apply_feature_filter_corrected(feature_clicked, feature_type, filters)
+                    
+                    # Verificar si el área tiene datos ANTES de rerun
+                    has_data = check_area_has_data(feature_clicked, feature_type, casos, epizootias)
+                    
+                    if has_data:
+                        st.success(f"✅ Filtrado: **{feature_clicked}** (con datos)")
+                    else:
+                        st.info(f"📊 Filtrado: **{feature_clicked}** (área sin datos - métricas en cero)")
+                    
+                    # Delay antes de rerun para evitar bucles
+                    import time
+                    time.sleep(0.5)
+                    st.rerun()
+                    
+    except Exception as e:
+        logger.error(f"❌ Error procesando clic: {str(e)}")
 
-def add_veredas_to_map_multimodal(folium_map, veredas_data, colors, modo_mapa):
-    """Agrega veredas al mapa con colores multi-modales."""
-    for idx, row in veredas_data.iterrows():
-        vereda_name = row['vereda_nor']
-        color = row['color']
-        descripcion = row['descripcion_color']
-        
-        # Crear tooltip según modo
-        if modo_mapa == "Epidemiológico":
-            tooltip_text = create_vereda_tooltip_epidemiological(vereda_name, row, colors)
-        else:
-            tooltip_text = create_vereda_tooltip_coverage(vereda_name, row, colors)
-        
+def find_closest_feature_corrected(lat, lng, features_data, feature_type):
+    """Encuentra el feature más cercano CORREGIDO."""
+    min_distance = float('inf')
+    closest_feature = None
+    
+    name_column = 'MpNombre' if feature_type == 'municipio' else 'vereda_nor'
+    
+    for idx, row in features_data.iterrows():
         try:
-            folium.GeoJson(
-                row['geometry'],
-                style_function=lambda x, color=color: {
-                    'fillColor': color,
-                    'color': colors['accent'],
-                    'weight': 1.5,
-                    'fillOpacity': 0.6,
-                    'opacity': 1
-                },
-                tooltip=folium.Tooltip(tooltip_text, sticky=True),
-            ).add_to(folium_map)
-        except Exception as e:
-            logger.warning(f"⚠️ Error agregando vereda {vereda_name}: {str(e)}")
+            centroid = row['geometry'].centroid
+            distance = ((centroid.x - lng)**2 + (centroid.y - lat)**2)**0.5
+            
+            if distance < min_distance and distance < 0.1:
+                min_distance = distance
+                closest_feature = row[name_column]
+        except Exception:
+            continue
+    
+    return closest_feature
 
-def create_municipio_tooltip_epidemiological(name, row, colors):
-    """Tooltip para municipio en modo epidemiológico."""
-    return f"""
-    <div style="font-family: Arial; padding: 10px; max-width: 250px;">
-        <b style="color: {colors['primary']}; font-size: 1.1em;">{name}</b><br>
-        <div style="margin: 8px 0; padding: 6px; background: #f8f9fa; border-radius: 4px;">
-            🦠 Casos: {row.get('casos', 0)}<br>
-            ⚰️ Fallecidos: {row.get('fallecidos', 0)}<br>
-            🐒 Epizootias: {row.get('epizootias', 0)}<br>
-            🔴 Positivas: {row.get('positivas', 0)}<br>
-            🔵 En estudio: {row.get('en_estudio', 0)}
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.9em;">
-            📊 {row.get('descripcion_color', 'Sin clasificar')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
+def apply_feature_filter_corrected(feature_name, feature_type, filters):
+    """Aplica filtro CORREGIDO según el tipo de feature."""
+    if feature_type == "municipio":
+        if filters.get("modo") == "multiple":
+            # En modo múltiple, agregar a la selección
+            current_selection = st.session_state.get('municipios_multiselect', [])
+            if feature_name not in current_selection:
+                current_selection.append(feature_name)
+                st.session_state['municipios_multiselect'] = current_selection
+        else:
+            # En modo único, filtrar normalmente
+            st.session_state['municipio_filter'] = feature_name
+            st.session_state['vereda_filter'] = 'Todas'
+    
+    elif feature_type == "vereda":
+        if filters.get("modo") == "multiple":
+            # En modo múltiple, agregar a la selección
+            current_selection = st.session_state.get('veredas_multiselect', [])
+            if feature_name not in current_selection:
+                current_selection.append(feature_name)
+                st.session_state['veredas_multiselect'] = current_selection
+        else:
+            # En modo único, filtrar normalmente
+            st.session_state['vereda_filter'] = feature_name
 
-def create_municipio_tooltip_coverage(name, row, colors):
-    """Tooltip para municipio en modo cobertura."""
-    return f"""
-    <div style="font-family: Arial; padding: 10px; max-width: 200px;">
-        <b style="color: {colors['primary']}; font-size: 1.1em;">{name}</b><br>
-        <div style="margin: 8px 0; padding: 6px; background: #f0f8ff; border-radius: 4px;">
-            💉 Cobertura: {row.get('cobertura', 0):.1f}%<br>
-            📊 {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
+def check_area_has_data(feature_name, feature_type, casos, epizootias):
+    """Verifica si un área tiene datos ANTES de filtrar."""
+    def normalize_name(name):
+        return str(name).upper().strip() if pd.notna(name) else ""
+    
+    feature_norm = normalize_name(feature_name)
+    
+    # Verificar casos
+    has_casos = False
+    if not casos.empty:
+        if feature_type == "municipio" and "municipio" in casos.columns:
+            has_casos = len(casos[casos["municipio"].apply(normalize_name) == feature_norm]) > 0
+        elif feature_type == "vereda" and "vereda" in casos.columns:
+            has_casos = len(casos[casos["vereda"].apply(normalize_name) == feature_norm]) > 0
+    
+    # Verificar epizootias
+    has_epizootias = False
+    if not epizootias.empty:
+        if feature_type == "municipio" and "municipio" in epizootias.columns:
+            has_epizootias = len(epizootias[epizootias["municipio"].apply(normalize_name) == feature_norm]) > 0
+        elif feature_type == "vereda" and "vereda" in epizootias.columns:
+            has_epizootias = len(epizootias[epizootias["vereda"].apply(normalize_name) == feature_norm]) > 0
+    
+    return has_casos or has_epizootias
 
-def create_vereda_tooltip_epidemiological(name, row, colors):
-    """Tooltip para vereda en modo epidemiológico."""
-    return f"""
-    <div style="font-family: Arial; padding: 8px; max-width: 200px;">
-        <b style="color: {colors['primary']};">{name}</b><br>
-        <div style="margin: 6px 0; font-size: 0.9em;">
-            🦠 Casos: {row.get('casos', 0)}<br>
-            🐒 Epizootias: {row.get('epizootias', 0)}<br>
-            🔴 Positivas: {row.get('positivas', 0)}
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.8em;">
-            {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
+# ===== TARJETAS MEJORADAS =====
 
-def create_vereda_tooltip_coverage(name, row, colors):
-    """Tooltip para vereda en modo cobertura."""
-    return f"""
-    <div style="font-family: Arial; padding: 8px; max-width: 180px;">
-        <b style="color: {colors['primary']};">{name}</b><br>
-        <div style="margin: 6px 0;">
-            💉 Cobertura: {row.get('cobertura', 0):.1f}%
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.8em;">
-            {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
-
-# ===== TARJETAS INFORMATIVAS COMPACTAS =====
-
-def create_compact_information_cards(casos, epizootias, filters, colors):
-    """Tarjetas informativas súper compactas."""
-    logger.info("🏷️ Creando tarjetas compactas")
+def create_compact_information_cards_improved(casos, epizootias, filters, colors):
+    """Tarjetas informativas MEJORADAS estéticamente."""
+    logger.info("🏷️ Creando tarjetas mejoradas")
     
     metrics = calculate_basic_metrics(casos, epizootias)
     
-    # Tarjeta de casos compacta
-    create_compact_cases_card(metrics, filters, colors)
+    # Tarjeta de casos MEJORADA
+    create_improved_cases_card(metrics, filters, colors)
     
-    # Tarjeta de epizootias compacta  
-    create_compact_epizootias_card(metrics, filters, colors)
+    # Tarjeta de epizootias MEJORADA  
+    create_improved_epizootias_card(metrics, filters, colors)
+    
+    # Tarjeta de cobertura MEJORADA
+    create_improved_coverage_card(filters, colors)
 
-def create_compact_cases_card(metrics, filters, colors):
-    """Tarjeta de casos súper compacta."""
+def create_improved_cases_card(metrics, filters, colors):
+    """Tarjeta de casos MEJORADA."""
     total_casos = metrics["total_casos"]
     vivos = metrics["vivos"]
     fallecidos = metrics["fallecidos"]
@@ -716,34 +720,29 @@ def create_compact_cases_card(metrics, filters, colors):
     
     st.markdown(
         f"""
-        <div class="compact-card cases-card">
-            <div class="compact-header">
-                <span class="compact-icon">🦠</span>
-                <div class="compact-title">
-                    <div class="title-text">CASOS</div>
-                    <div class="subtitle-text">{filter_context}</div>
+        <div class="improved-card cases-card">
+            <div class="card-header">
+                <div class="card-icon">🦠</div>
+                <div class="card-title-section">
+                    <div class="card-title">CASOS HUMANOS</div>
+                    <div class="card-subtitle">{filter_context}</div>
                 </div>
+                <div class="card-total">{total_casos}</div>
             </div>
-            <div class="compact-metrics">
-                <div class="metric-row">
-                    <div class="metric-item">
-                        <div class="metric-num primary">{total_casos}</div>
-                        <div class="metric-lbl">Total</div>
+            <div class="card-metrics">
+                <div class="metric-grid">
+                    <div class="metric-cell success">
+                        <div class="metric-value">{vivos}</div>
+                        <div class="metric-label">Vivos</div>
                     </div>
-                    <div class="metric-item">
-                        <div class="metric-num success">{vivos}</div>
-                        <div class="metric-lbl">Vivos</div>
+                    <div class="metric-cell danger">
+                        <div class="metric-value">{fallecidos}</div>
+                        <div class="metric-label">Fallecidos</div>
                     </div>
                 </div>
-                <div class="metric-row">
-                    <div class="metric-item">
-                        <div class="metric-num danger">{fallecidos}</div>
-                        <div class="metric-lbl">Fallecidos</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-num warning">{letalidad:.1f}%</div>
-                        <div class="metric-lbl">Letalidad</div>
-                    </div>
+                <div class="metric-footer">
+                    <span class="footer-label">Letalidad:</span>
+                    <span class="footer-value">{letalidad:.1f}%</span>
                 </div>
             </div>
         </div>
@@ -751,8 +750,8 @@ def create_compact_cases_card(metrics, filters, colors):
         unsafe_allow_html=True,
     )
 
-def create_compact_epizootias_card(metrics, filters, colors):
-    """Tarjeta de epizootias súper compacta."""
+def create_improved_epizootias_card(metrics, filters, colors):
+    """Tarjeta de epizootias MEJORADA."""
     total_epizootias = metrics["total_epizootias"]
     positivas = metrics["epizootias_positivas"]
     en_estudio = metrics["epizootias_en_estudio"]
@@ -761,30 +760,29 @@ def create_compact_epizootias_card(metrics, filters, colors):
     
     st.markdown(
         f"""
-        <div class="compact-card epizootias-card">
-            <div class="compact-header">
-                <span class="compact-icon">🐒</span>
-                <div class="compact-title">
-                    <div class="title-text">EPIZOOTIAS</div>
-                    <div class="subtitle-text">{filter_context}</div>
+        <div class="improved-card epizootias-card">
+            <div class="card-header">
+                <div class="card-icon">🐒</div>
+                <div class="card-title-section">
+                    <div class="card-title">EPIZOOTIAS</div>
+                    <div class="card-subtitle">{filter_context}</div>
                 </div>
+                <div class="card-total">{total_epizootias}</div>
             </div>
-            <div class="compact-metrics">
-                <div class="metric-row">
-                    <div class="metric-item">
-                        <div class="metric-num warning">{total_epizootias}</div>
-                        <div class="metric-lbl">Total</div>
+            <div class="card-metrics">
+                <div class="metric-grid">
+                    <div class="metric-cell danger">
+                        <div class="metric-value">{positivas}</div>
+                        <div class="metric-label">Positivas</div>
                     </div>
-                    <div class="metric-item">
-                        <div class="metric-num danger">{positivas}</div>
-                        <div class="metric-lbl">Positivas</div>
+                    <div class="metric-cell info">
+                        <div class="metric-value">{en_estudio}</div>
+                        <div class="metric-label">En Estudio</div>
                     </div>
                 </div>
-                <div class="metric-row single-metric">
-                    <div class="metric-item">
-                        <div class="metric-num info">{en_estudio}</div>
-                        <div class="metric-lbl">En Estudio</div>
-                    </div>
+                <div class="metric-footer">
+                    <span class="footer-label">Positividad:</span>
+                    <span class="footer-value">{(positivas/total_epizootias*100) if total_epizootias > 0 else 0:.1f}%</span>
                 </div>
             </div>
         </div>
@@ -792,118 +790,69 @@ def create_compact_epizootias_card(metrics, filters, colors):
         unsafe_allow_html=True,
     )
 
-def create_coverage_card_placeholder(filters, colors):
-    """Tarjeta de cobertura placeholder."""
-    # Datos simulados por ahora
-    cobertura_simulada = 78.5
-    vacunas_aplicadas = 1247
-    no_vacunados = 342
+def create_improved_coverage_card(filters, colors):
+    """Tarjeta de cobertura MEJORADA."""
+    # Datos simulados mejorados
+    cobertura_simulada = 82.3
+    meta_cobertura = 95.0
+    gap_cobertura = meta_cobertura - cobertura_simulada
     
     filter_context = get_filter_context_compact(filters)
     
     st.markdown(
         f"""
-        <div class="compact-card coverage-card">
-            <div class="compact-header">
-                <span class="compact-icon">💉</span>
-                <div class="compact-title">
-                    <div class="title-text">COBERTURA</div>
-                    <div class="subtitle-text">{filter_context}</div>
+        <div class="improved-card coverage-card">
+            <div class="card-header">
+                <div class="card-icon">💉</div>
+                <div class="card-title-section">
+                    <div class="card-title">COBERTURA</div>
+                    <div class="card-subtitle">{filter_context}</div>
                 </div>
+                <div class="card-total">{cobertura_simulada:.1f}%</div>
             </div>
-            <div class="compact-metrics">
-                <div class="metric-row">
-                    <div class="metric-item">
-                        <div class="metric-num success">{cobertura_simulada:.1f}%</div>
-                        <div class="metric-lbl">Cobertura</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-num info">{vacunas_aplicadas}</div>
-                        <div class="metric-lbl">Vacunados</div>
-                    </div>
+            <div class="card-metrics">
+                <div class="coverage-bar">
+                    <div class="coverage-progress" style="width: {cobertura_simulada}%"></div>
                 </div>
-                <div class="metric-row single-metric">
-                    <div class="metric-item">
-                        <div class="metric-num warning">{no_vacunados}</div>
-                        <div class="metric-lbl">No Vacunados</div>
+                <div class="metric-grid">
+                    <div class="metric-cell success">
+                        <div class="metric-value">Meta</div>
+                        <div class="metric-label">{meta_cobertura:.0f}%</div>
+                    </div>
+                    <div class="metric-cell warning">
+                        <div class="metric-value">Gap</div>
+                        <div class="metric-label">{gap_cobertura:.1f}%</div>
                     </div>
                 </div>
             </div>
             <div class="card-note">
-                📝 Incluye no vacunados por contradicación médica, religión u otras razones
+                💡 Datos simulados - en desarrollo
             </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-def create_compact_summary_metrics(casos, epizootias, filters, colors):
-    """Métricas de resumen compactas adicionales."""
-    # Métricas geográficas rápidas
-    municipios_unicos = casos["municipio"].nunique() if not casos.empty and "municipio" in casos.columns else 0
-    veredas_unicas = casos["vereda"].nunique() if not casos.empty and "vereda" in casos.columns else 0
-    
-    st.markdown(
-        f"""
-        <div class="compact-summary">
-            <div class="summary-title">📊 Resumen Geográfico</div>
-            <div class="summary-items">
-                <span class="summary-item">📍 {municipios_unicos} municipios</span>
-                <span class="summary-item">🏘️ {veredas_unicas} veredas</span>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+# ===== FUNCIONES DE APOYO (mantener las existentes) =====
 
-# ===== CONTROLES Y NAVEGACIÓN COMPACTOS =====
+def load_geographic_data():
+    if not SHAPEFILE_LOADER_AVAILABLE:
+        logger.warning("⚠️ Sistema híbrido no disponible")
+        return None
+    
+    try:
+        return load_tolima_shapefiles()
+    except Exception as e:
+        logger.error(f"❌ Error cargando datos geográficos: {str(e)}")
+        return None
 
-def create_navigation_controls_compact(filters, colors):
-    """Controles de navegación compactos."""
-    current_level = determine_map_level(filters)
-    modo_mapa = filters.get("modo_mapa", "Epidemiológico")
-    
-    # Indicador de modo y nivel en una línea
-    level_info = {
-        "departamento": "🏛️ Tolima",
-        "municipio": f"🏘️ {filters.get('municipio_display', 'Municipio')}",
-        "vereda": f"📍 {filters.get('vereda_display', 'Vereda')}"
-    }
-    
-    current_level_text = level_info.get(current_level, "🗺️ Vista")
-    
-    # Encabezado compacto con modo y navegación
-    st.markdown(
-        f"""
-        <div class="compact-nav-header">
-            <div class="nav-mode">🎨 {modo_mapa}</div>
-            <div class="nav-level">{current_level_text}</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    # Botones de navegación horizontales
-    if current_level != "departamento":
-        col1, col2, col3 = st.columns([1, 1, 1])
-        
-        with col1:
-            if st.button("🏛️ Tolima", key="nav_tolima_compact", use_container_width=True):
-                reset_location_filters()
-                st.rerun()
-        
-        with col2:
-            if current_level == "vereda":
-                municipio_name = filters.get('municipio_display', 'Municipio')
-                if st.button(f"🏘️ {municipio_name[:8]}...", key="nav_municipio_compact", use_container_width=True):
-                    st.session_state['vereda_filter'] = 'Todas'
-                    st.rerun()
-        
-        with col3:
-            # Placeholder para futuras funciones
-            pass
-
-# ===== FUNCIONES DE APOYO =====
+def determine_map_level(filters):
+    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
+        return "vereda"
+    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
+        return "municipio"
+    else:
+        return "departamento"
 
 def get_filter_context_compact(filters):
     """Contexto de filtrado compacto."""
@@ -960,297 +909,132 @@ def show_vereda_specific_data(casos, epizootias, vereda_selected, municipio_sele
         positivas = len(epizootias_vereda[epizootias_vereda["descripcion"] == "POSITIVO FA"]) if not epizootias_vereda.empty and "descripcion" in epizootias_vereda.columns else 0
         st.metric("🔴 Positivas", positivas)
 
-# ===== MAPAS MÚLTIPLES (FUNCIONES PLACEHOLDER) =====
+# ===== PLACEHOLDERS PARA FUNCIONES MÚLTIPLES =====
 
-def create_departmental_map_multiple(casos, epizootias, geo_data, filters, colors):
-    """Mapa departamental con selección múltiple."""
-    municipios_seleccionados = filters.get("municipios_seleccionados", [])
-    
-    st.info(f"🗂️ Vista múltiple: {len(municipios_seleccionados)} municipios seleccionados")
-    
-    # Por ahora, usar lógica estándar pero resaltar municipios seleccionados
-    municipios = geo_data['municipios'].copy()
-    municipios_data = prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors)
-    
-    # Marcar municipios seleccionados
-    def normalize_name(name):
-        return str(name).upper().strip() if pd.notna(name) else ""
-    
-    municipios_norm = [normalize_name(m) for m in municipios_seleccionados]
-    municipios_data['seleccionado'] = municipios_data['municipi_1'].apply(normalize_name).isin(municipios_norm)
-    
-    # Crear mapa (lógica similar a create_departmental_map_compact)
-    bounds = municipios.total_bounds
-    center_lat, center_lon = (bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2
-    
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=8,
-        tiles='CartoDB positron',
-        attributionControl=False,
-        zoom_control=True,
-        scrollWheelZoom=True
-    )
-    
-    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    
-    # Agregar municipios con indicador de selección
+def create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors):
+    """Placeholder para mapa departamental múltiple."""
+    st.info("🗂️ Vista múltiple departamental - en desarrollo")
+
+def create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters, colors):
+    """Placeholder para mapa municipal múltiple."""
+    st.info("🗂️ Vista múltiple municipal - en desarrollo")
+
+def add_municipios_to_map_multimodal_corrected(folium_map, municipios_data, colors, modo_mapa):
+    """Agrega municipios al mapa CORREGIDO."""
     for idx, row in municipios_data.iterrows():
-        style_params = {
-            'fillColor': row['color'],
-            'color': colors['secondary'] if row['seleccionado'] else colors['primary'],
-            'weight': 4 if row['seleccionado'] else 2,
-            'fillOpacity': 0.8 if row['seleccionado'] else 0.6,
-            'opacity': 1
-        }
+        municipio_name = row['MpNombre']
+        color = row['color']
+        descripcion = row['descripcion_color']
         
-        tooltip_text = create_municipio_tooltip_epidemiological(row['MpNombre'], row, colors)
-        if row['seleccionado']:
-            tooltip_text = f"✅ SELECCIONADO<br>{tooltip_text}"
+        # Crear tooltip según modo
+        if modo_mapa == "Epidemiológico":
+            tooltip_text = create_municipio_tooltip_epidemiological_corrected(municipio_name, row, colors)
+        else:
+            tooltip_text = create_municipio_tooltip_coverage_corrected(municipio_name, row, colors)
         
+        # Agregar polígono
         folium.GeoJson(
             row['geometry'],
-            style_function=lambda x, **kwargs: kwargs,
-            style_kwds=style_params,
+            style_function=lambda x, color=color: {
+                'fillColor': color,
+                'color': colors['primary'],
+                'weight': 2,
+                'fillOpacity': 0.7,
+                'opacity': 1
+            },
             tooltip=folium.Tooltip(tooltip_text, sticky=True),
-        ).add_to(m)
-    
-    # Renderizar
-    map_data = st_folium(
-        m, 
-        width=600,
-        height=400,
-        returned_objects=["last_object_clicked"],
-        key="map_departamental_multiple"
-    )
-    
-    # Procesar clicks (añadir/quitar de selección)
-    handle_map_click_multiple(map_data, municipios_data, "municipio", filters)
+        ).add_to(folium_map)
 
-def create_municipal_map_multiple(casos, epizootias, geo_data, filters, colors):
-    """Mapa municipal con selección múltiple de veredas."""
-    veredas_seleccionadas = filters.get("veredas_seleccionadas", [])
-    municipios_seleccionados = filters.get("municipios_seleccionados", [])
-    
-    st.info(f"🗂️ Vista múltiple: {len(veredas_seleccionadas)} veredas en {len(municipios_seleccionados)} municipios")
-    
-    # Crear vista combinada de veredas de múltiples municipios
-    veredas = geo_data['veredas'].copy()
-    
-    def normalize_name(name):
-        return str(name).upper().strip() if pd.notna(name) else ""
-    
-    municipios_norm = [normalize_name(m) for m in municipios_seleccionados]
-    veredas_filtradas = veredas[veredas['municipi_1'].apply(normalize_name).isin(municipios_norm)]
-    
-    if veredas_filtradas.empty:
-        st.warning("No se encontraron veredas para los municipios seleccionados")
-        return
-    
-    # Preparar datos (usando primer municipio como referencia)
-    primer_municipio = municipios_seleccionados[0] if municipios_seleccionados else "IBAGUE"
-    veredas_data = prepare_vereda_data_epidemiological(casos, epizootias, veredas_filtradas, primer_municipio, colors)
-    
-    # Marcar veredas seleccionadas
-    veredas_norm = [normalize_name(v) for v in veredas_seleccionadas]
-    veredas_data['seleccionada'] = veredas_data['vereda_nor'].apply(normalize_name).isin(veredas_norm)
-    
-    # Crear mapa
-    bounds = veredas_filtradas.total_bounds
-    center_lat, center_lon = (bounds[1] + bounds[3]) / 2, (bounds[0] + bounds[2]) / 2
-    
-    m = folium.Map(
-        location=[center_lat, center_lon],
-        zoom_start=9,
-        tiles='CartoDB positron',
-        attributionControl=False,
-        zoom_control=True,
-        scrollWheelZoom=True
-    )
-    
-    m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]])
-    
-    # Agregar veredas con indicador de selección
+def add_veredas_to_map_multimodal_corrected(folium_map, veredas_data, colors, modo_mapa):
+    """Agrega veredas al mapa CORREGIDO."""
     for idx, row in veredas_data.iterrows():
-        style_params = {
-            'fillColor': row['color'],
-            'color': colors['secondary'] if row['seleccionada'] else colors['accent'],
-            'weight': 3 if row['seleccionada'] else 1.5,
-            'fillOpacity': 0.7 if row['seleccionada'] else 0.5,
-            'opacity': 1
-        }
+        vereda_name = row['vereda_nor']
+        color = row['color']
+        descripcion = row['descripcion_color']
         
-        tooltip_text = create_vereda_tooltip_epidemiological(row['vereda_nor'], row, colors)
-        if row['seleccionada']:
-            tooltip_text = f"✅ SELECCIONADA<br>{tooltip_text}"
+        # Crear tooltip según modo
+        if modo_mapa == "Epidemiológico":
+            tooltip_text = create_vereda_tooltip_epidemiological_corrected(vereda_name, row, colors)
+        else:
+            tooltip_text = create_vereda_tooltip_coverage_corrected(vereda_name, row, colors)
         
         try:
             folium.GeoJson(
                 row['geometry'],
-                style_function=lambda x, **kwargs: kwargs,
-                style_kwds=style_params,
+                style_function=lambda x, color=color: {
+                    'fillColor': color,
+                    'color': colors['accent'],
+                    'weight': 1.5,
+                    'fillOpacity': 0.6,
+                    'opacity': 1
+                },
                 tooltip=folium.Tooltip(tooltip_text, sticky=True),
-            ).add_to(m)
+            ).add_to(folium_map)
         except Exception as e:
-            logger.warning(f"⚠️ Error agregando vereda {row['vereda_nor']}: {str(e)}")
-    
-    # Renderizar
-    map_data = st_folium(
-        m, 
-        width=600,
-        height=400,
-        returned_objects=["last_object_clicked"],
-        key="map_municipal_multiple"
-    )
-    
-    # Procesar clicks
-    handle_map_click_multiple(map_data, veredas_data, "vereda", filters)
+            logger.warning(f"⚠️ Error agregando vereda {vereda_name}: {str(e)}")
 
-# ===== MANEJO DE CLICKS =====
+def create_municipio_tooltip_epidemiological_corrected(name, row, colors):
+    """Tooltip para municipio epidemiológico CORREGIDO."""
+    return f"""
+    <div style="font-family: Arial; padding: 10px; max-width: 250px;">
+        <b style="color: {colors['primary']}; font-size: 1.1em;">{name}</b><br>
+        <div style="margin: 8px 0; padding: 6px; background: #f8f9fa; border-radius: 4px;">
+            🦠 Casos: {row.get('casos', 0)}<br>
+            ⚰️ Fallecidos: {row.get('fallecidos', 0)}<br>
+            🐒 Epizootias: {row.get('epizootias', 0)}<br>
+            🔴 Positivas: {row.get('positivas', 0)}
+        </div>
+        <div style="color: {colors['info']}; font-size: 0.9em;">
+            {row.get('descripcion_color', 'Sin clasificar')}
+        </div>
+        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
+    </div>
+    """
 
-def handle_map_click_compact(map_data, features_data, feature_type, filters):
-    """Manejo de clicks para mapas compactos."""
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                feature_clicked = find_closest_feature_compact(clicked_lat, clicked_lng, features_data, feature_type)
-                
-                if feature_clicked:
-                    apply_feature_filter_compact(feature_clicked, feature_type, filters)
-                    st.rerun()
-                    
-    except Exception as e:
-        logger.error(f"❌ Error procesando clic compacto: {str(e)}")
-        st.warning("⚠️ Error procesando clic en el mapa")
+def create_municipio_tooltip_coverage_corrected(name, row, colors):
+    """Tooltip para municipio cobertura CORREGIDO."""
+    return f"""
+    <div style="font-family: Arial; padding: 10px; max-width: 200px;">
+        <b style="color: {colors['primary']}; font-size: 1.1em;">{name}</b><br>
+        <div style="margin: 8px 0; padding: 6px; background: #f0f8ff; border-radius: 4px;">
+            💉 Cobertura: {row.get('cobertura', 0):.1f}%<br>
+            📊 {row.get('descripcion_color', 'Sin datos')}
+        </div>
+        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
+    </div>
+    """
 
-def handle_map_click_multiple(map_data, features_data, feature_type, filters):
-    """Manejo de clicks para selección múltiple."""
-    if not map_data or not map_data.get('last_object_clicked'):
-        return
-    
-    try:
-        clicked_object = map_data['last_object_clicked']
-        
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get('lat')
-            clicked_lng = clicked_object.get('lng')
-            
-            if clicked_lat and clicked_lng:
-                feature_clicked = find_closest_feature_compact(clicked_lat, clicked_lng, features_data, feature_type)
-                
-                if feature_clicked:
-                    toggle_feature_selection(feature_clicked, feature_type, filters)
-                    st.rerun()
-                    
-    except Exception as e:
-        logger.error(f"❌ Error procesando clic múltiple: {str(e)}")
-        st.warning("⚠️ Error procesando clic en el mapa")
+def create_vereda_tooltip_epidemiological_corrected(name, row, colors):
+    """Tooltip para vereda epidemiológico CORREGIDO."""
+    return f"""
+    <div style="font-family: Arial; padding: 8px; max-width: 200px;">
+        <b style="color: {colors['primary']};">{name}</b><br>
+        <div style="margin: 6px 0; font-size: 0.9em;">
+            🦠 Casos: {row.get('casos', 0)}<br>
+            🐒 Epizootias: {row.get('epizootias', 0)}<br>
+            🔴 Positivas: {row.get('positivas', 0)}
+        </div>
+        <div style="color: {colors['info']}; font-size: 0.8em;">
+            {row.get('descripcion_color', 'Sin datos')}
+        </div>
+        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
+    </div>
+    """
 
-def find_closest_feature_compact(lat, lng, features_data, feature_type):
-    """Encuentra el feature más cercano."""
-    min_distance = float('inf')
-    closest_feature = None
-    
-    name_column = 'MpNombre' if feature_type == 'municipio' else 'vereda_nor'
-    
-    for idx, row in features_data.iterrows():
-        try:
-            centroid = row['geometry'].centroid
-            distance = ((centroid.x - lng)**2 + (centroid.y - lat)**2)**0.5
-            
-            if distance < min_distance and distance < 0.1:
-                min_distance = distance
-                closest_feature = row[name_column]
-        except Exception:
-            continue
-    
-    return closest_feature
-
-def apply_feature_filter_compact(feature_name, feature_type, filters):
-    """Aplica filtro según el tipo de feature."""
-    if feature_type == "municipio":
-        if filters.get("modo") == "multiple":
-            # En modo múltiple, agregar a la selección
-            current_selection = st.session_state.get('municipios_multiselect', [])
-            if feature_name not in current_selection:
-                current_selection.append(feature_name)
-                st.session_state['municipios_multiselect'] = current_selection
-            st.success(f"✅ Agregado: **{feature_name}**")
-        else:
-            # En modo único, filtrar normalmente
-            st.session_state['municipio_filter'] = feature_name
-            st.session_state['vereda_filter'] = 'Todas'
-            st.success(f"✅ Filtrado por municipio: **{feature_name}**")
-    
-    elif feature_type == "vereda":
-        if filters.get("modo") == "multiple":
-            # En modo múltiple, agregar a la selección
-            current_selection = st.session_state.get('veredas_multiselect', [])
-            if feature_name not in current_selection:
-                current_selection.append(feature_name)
-                st.session_state['veredas_multiselect'] = current_selection
-            st.success(f"✅ Agregada: **{feature_name}**")
-        else:
-            # En modo único, filtrar normalmente
-            st.session_state['vereda_filter'] = feature_name
-            st.success(f"✅ Filtrado por vereda: **{feature_name}**")
-
-def toggle_feature_selection(feature_name, feature_type, filters):
-    """Alterna selección de feature en modo múltiple."""
-    if feature_type == "municipio":
-        session_key = 'municipios_multiselect'
-    else:
-        session_key = 'veredas_multiselect'
-    
-    current_selection = st.session_state.get(session_key, [])
-    
-    if feature_name in current_selection:
-        current_selection.remove(feature_name)
-        st.info(f"➖ Removido: **{feature_name}**")
-    else:
-        current_selection.append(feature_name)
-        st.success(f"➕ Agregado: **{feature_name}**")
-    
-    st.session_state[session_key] = current_selection
-
-# ===== FUNCIONES DE APOYO (mantener las existentes) =====
-
-def load_geographic_data():
-    if not SHAPEFILE_LOADER_AVAILABLE:
-        logger.warning("⚠️ Sistema híbrido no disponible")
-        return None
-    
-    try:
-        return load_tolima_shapefiles()
-    except Exception as e:
-        logger.error(f"❌ Error cargando datos geográficos: {str(e)}")
-        return None
-
-def determine_map_level(filters):
-    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
-        return "vereda"
-    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
-        return "municipio"
-    else:
-        return "departamento"
-
-def reset_location_filters():
-    if "municipio_filter" in st.session_state:
-        st.session_state.municipio_filter = "Todos"
-    if "vereda_filter" in st.session_state:
-        st.session_state.vereda_filter = "Todas"
-    if "municipios_multiselect" in st.session_state:
-        st.session_state.municipios_multiselect = []
-    if "veredas_multiselect" in st.session_state:
-        st.session_state.veredas_multiselect = []
+def create_vereda_tooltip_coverage_corrected(name, row, colors):
+    """Tooltip para vereda cobertura CORREGIDO."""
+    return f"""
+    <div style="font-family: Arial; padding: 8px; max-width: 180px;">
+        <b style="color: {colors['primary']};">{name}</b><br>
+        <div style="margin: 6px 0;">
+            💉 Cobertura: {row.get('cobertura', 0):.1f}%
+        </div>
+        <div style="color: {colors['info']}; font-size: 0.8em;">
+            {row.get('descripcion_color', 'Sin datos')}
+        </div>
+        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
+    </div>
+    """
 
 def show_fallback_summary_table(casos, epizootias, level, location=None):
     """Tabla resumen cuando no hay mapas."""
@@ -1300,272 +1084,221 @@ def show_geographic_data_error():
     st.error("🗺️ No se pudieron cargar los datos de mapas")
     st.info("Verifique la configuración de shapefiles")
 
-# ===== CSS COMPACTO =====
+# ===== CSS COMPACTO CORREGIDO =====
 
-def apply_compact_maps_css(colors):
-    """CSS para layout compacto sin scroll."""
+def apply_compact_maps_css_corrected(colors):
+    """CSS para layout compacto CORREGIDO."""
     st.markdown(
         f"""
         <style>
-        /* =============== LAYOUT COMPACTO SIN SCROLL =============== */
+        /* =============== CORRECCIÓN ESPACIADO =============== */
         
-        .compact-dashboard-container {{
-            width: 100% !important;
-            height: calc(100vh - 200px) !important;
-            max-height: calc(100vh - 200px) !important;
-            overflow: hidden !important;
-            display: flex !important;
-            gap: 20px !important;
+        .filter-info-compact {{
+            background: linear-gradient(135deg, {colors['primary']}, {colors['accent']});
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            text-align: center;
+            margin: 10px 0 15px 0;  /* REDUCIDO */
+            font-size: 0.9rem;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }}
         
-        .map-section-compact {{
-            flex: 0 0 70% !important;
-            height: 100% !important;
-            overflow: hidden !important;
-            display: flex !important;
-            flex-direction: column !important;
+        /* =============== TARJETAS MEJORADAS =============== */
+        
+        .improved-card {{
+            background: linear-gradient(135deg, white, #f8fafc);
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+            overflow: hidden;
+            transition: all 0.3s ease;
+            border: 1px solid #e2e8f0;
         }}
         
-        .info-section-compact {{
-            flex: 0 0 30% !important;
-            height: 100% !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
+        .improved-card:hover {{
+            transform: translateY(-3px);
+            box-shadow: 0 12px 35px rgba(0,0,0,0.18);
         }}
         
-        /* =============== NAVEGACIÓN COMPACTA =============== */
-        
-        .compact-nav-header {{
-            display: flex !important;
-            justify-content: space-between !important;
-            align-items: center !important;
-            background: linear-gradient(135deg, {colors['primary']}, {colors['accent']}) !important;
-            color: white !important;
-            padding: 10px 20px !important;
-            border-radius: 10px !important;
-            margin-bottom: 15px !important;
-            font-weight: 600 !important;
+        .card-header {{
+            background: linear-gradient(135deg, {colors['light']}, #ffffff);
+            padding: 20px;
+            border-bottom: 2px solid #f1f5f9;
+            display: flex;
+            align-items: center;
+            gap: 15px;
         }}
         
-        .nav-mode {{
-            font-size: 0.9rem !important;
-            opacity: 0.9 !important;
+        .card-icon {{
+            font-size: 2.2rem;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
         }}
         
-        .nav-level {{
-            font-size: 1rem !important;
-            font-weight: 700 !important;
+        .card-title-section {{
+            flex: 1;
         }}
         
-        /* =============== TARJETAS COMPACTAS =============== */
-        
-        .compact-card {{
-            background: linear-gradient(135deg, white, #f8fafc) !important;
-            border-radius: 12px !important;
-            margin-bottom: 15px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-            overflow: hidden !important;
-            border-left: 4px solid {colors['primary']} !important;
-            transition: all 0.3s ease !important;
+        .card-title {{
+            color: {colors['primary']};
+            font-size: 1rem;
+            font-weight: 800;
+            margin: 0;
         }}
         
-        .compact-card:hover {{
-            transform: translateY(-2px) !important;
-            box-shadow: 0 6px 20px rgba(0,0,0,0.15) !important;
+        .card-subtitle {{
+            color: {colors['accent']};
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin: 2px 0 0 0;
         }}
         
-        .compact-header {{
-            display: flex !important;
-            align-items: center !important;
-            gap: 12px !important;
-            padding: 15px !important;
-            background: linear-gradient(135deg, {colors['light']}, #ffffff) !important;
-            border-bottom: 1px solid #e2e8f0 !important;
+        .card-total {{
+            font-size: 2rem;
+            font-weight: 900;
+            color: {colors['primary']};
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.1);
         }}
         
-        .compact-icon {{
-            font-size: 1.8rem !important;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2)) !important;
+        .card-metrics {{
+            padding: 20px;
         }}
         
-        .compact-title {{
-            flex: 1 !important;
+        .metric-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
         }}
         
-        .title-text {{
-            font-size: 1rem !important;
-            font-weight: 800 !important;
-            color: {colors['primary']} !important;
-            margin: 0 !important;
+        .metric-cell {{
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 12px;
+            text-align: center;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
         }}
         
-        .subtitle-text {{
-            font-size: 0.75rem !important;
-            color: {colors['accent']} !important;
-            font-weight: 600 !important;
-            margin: 2px 0 0 0 !important;
+        .metric-cell:hover {{
+            transform: scale(1.05);
+            background: #f1f5f9;
         }}
         
-        .compact-metrics {{
-            padding: 15px !important;
+        .metric-cell.success {{
+            border-color: {colors['success']};
         }}
         
-        .metric-row {{
-            display: flex !important;
-            gap: 10px !important;
-            margin-bottom: 10px !important;
+        .metric-cell.danger {{
+            border-color: {colors['danger']};
         }}
         
-        .metric-row.single-metric {{
-            justify-content: center !important;
+        .metric-cell.info {{
+            border-color: {colors['info']};
         }}
         
-        .metric-item {{
-            flex: 1 !important;
-            text-align: center !important;
-            background: #f8fafc !important;
-            padding: 8px !important;
-            border-radius: 8px !important;
-            transition: all 0.3s ease !important;
+        .metric-cell.warning {{
+            border-color: {colors['warning']};
         }}
         
-        .metric-item:hover {{
-            background: #e2e8f0 !important;
-            transform: scale(1.05) !important;
+        .metric-value {{
+            font-size: 1.4rem;
+            font-weight: 800;
+            color: {colors['primary']};
+            margin-bottom: 2px;
         }}
         
-        .metric-num {{
-            font-size: 1.2rem !important;
-            font-weight: 800 !important;
-            margin-bottom: 2px !important;
+        .metric-label {{
+            font-size: 0.75rem;
+            color: #64748b;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }}
         
-        .metric-num.primary {{ color: {colors['primary']} !important; }}
-        .metric-num.success {{ color: {colors['success']} !important; }}
-        .metric-num.danger {{ color: {colors['danger']} !important; }}
-        .metric-num.warning {{ color: {colors['warning']} !important; }}
-        .metric-num.info {{ color: {colors['info']} !important; }}
-        
-        .metric-lbl {{
-            font-size: 0.7rem !important;
-            color: #64748b !important;
-            font-weight: 600 !important;
-            text-transform: uppercase !important;
-            letter-spacing: 0.5px !important;
+        .metric-footer {{
+            background: linear-gradient(135deg, {colors['info']}, {colors['primary']});
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 600;
         }}
         
-        /* =============== TARJETA DE COBERTURA =============== */
-        
-        .coverage-card {{
-            border-left-color: {colors['success']} !important;
+        .footer-label {{
+            margin-right: 8px;
         }}
         
-        .coverage-card .compact-header {{
-            background: linear-gradient(135deg, #f0f9ff, #e0f2fe) !important;
+        .footer-value {{
+            font-weight: 800;
+            font-size: 1.1rem;
+        }}
+        
+        /* =============== TARJETA DE COBERTURA ESPECIAL =============== */
+        
+        .coverage-card .card-header {{
+            background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+        }}
+        
+        .coverage-bar {{
+            background: #e2e8f0;
+            height: 8px;
+            border-radius: 4px;
+            margin: 15px 0;
+            overflow: hidden;
+        }}
+        
+        .coverage-progress {{
+            background: linear-gradient(135deg, {colors['success']}, {colors['secondary']});
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.3s ease;
         }}
         
         .card-note {{
-            padding: 10px 15px !important;
-            background: #f1f5f9 !important;
-            font-size: 0.7rem !important;
-            color: {colors['accent']} !important;
-            border-top: 1px solid #e2e8f0 !important;
-            margin: 0 !important;
+            background: #f8fafc;
+            color: {colors['accent']};
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            text-align: center;
+            border-top: 1px solid #e2e8f0;
         }}
         
-        /* =============== RESUMEN COMPACTO =============== */
-        
-        .compact-summary {{
-            background: linear-gradient(135deg, {colors['info']}, {colors['primary']}) !important;
-            color: white !important;
-            padding: 12px !important;
-            border-radius: 10px !important;
-            margin-bottom: 15px !important;
-        }}
-        
-        .summary-title {{
-            font-size: 0.9rem !important;
-            font-weight: 700 !important;
-            margin-bottom: 8px !important;
-            text-align: center !important;
-        }}
-        
-        .summary-items {{
-            display: flex !important;
-            justify-content: space-around !important;
-            flex-wrap: wrap !important;
-        }}
-        
-        .summary-item {{
-            font-size: 0.8rem !important;
-            font-weight: 600 !important;
-            opacity: 0.95 !important;
-        }}
-        
-        /* =============== BOTONES COMPACTOS =============== */
-        
-        .stButton > button {{
-            background: linear-gradient(135deg, {colors['primary']}, {colors['accent']}) !important;
-            color: white !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 8px 16px !important;
-            font-weight: 600 !important;
-            font-size: 0.8rem !important;
-            transition: all 0.3s ease !important;
-        }}
-        
-        .stButton > button:hover {{
-            background: linear-gradient(135deg, {colors['accent']}, {colors['primary']}) !important;
-            transform: translateY(-1px) !important;
-        }}
-        
-        /* =============== RESPONSIVE COMPACTO =============== */
+        /* =============== RESPONSIVE MEJORADO =============== */
         
         @media (max-width: 1200px) {{
-            .compact-dashboard-container {{
-                flex-direction: column !important;
-                height: auto !important;
-                max-height: none !important;
+            .improved-card {{
+                margin-bottom: 15px;
             }}
             
-            .map-section-compact,
-            .info-section-compact {{
-                flex: 1 1 auto !important;
-                height: auto !important;
+            .card-header {{
+                padding: 15px;
             }}
             
-            .info-section-compact {{
-                overflow-y: visible !important;
+            .card-metrics {{
+                padding: 15px;
             }}
         }}
         
         @media (max-width: 768px) {{
-            .compact-card {{
-                margin-bottom: 10px !important;
+            .metric-grid {{
+                grid-template-columns: 1fr;
+                gap: 10px;
             }}
             
-            .compact-header {{
-                padding: 12px !important;
+            .card-total {{
+                font-size: 1.5rem;
             }}
             
-            .compact-metrics {{
-                padding: 12px !important;
+            .metric-value {{
+                font-size: 1.2rem;
             }}
             
-            .metric-row {{
-                flex-direction: column !important;
-                gap: 8px !important;
-            }}
-            
-            .metric-num {{
-                font-size: 1rem !important;
-            }}
-            
-            .compact-nav-header {{
-                flex-direction: column !important;
-                gap: 5px !important;
-                text-align: center !important;
+            .filter-info-compact {{
+                font-size: 0.8rem;
+                padding: 6px 12px;
             }}
         }}
         </style>

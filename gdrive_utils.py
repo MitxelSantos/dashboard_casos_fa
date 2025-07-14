@@ -1,8 +1,6 @@
 """
 Utilidades OPTIMIZADAS para Google Drive - Versión Streamlit Cloud
-REDUCCIÓN: 500+ líneas → 200 líneas (60% menos código)
-ELIMINADAS: Debugging excesivo, verificaciones redundantes, clases verbosas
-MANTENIDO: Funcionalidad core de autenticación y descarga
+CORREGIDO: Mensaje de carga se limpia correctamente
 """
 
 import os
@@ -254,67 +252,78 @@ def check_google_drive_availability():
         return False
 
 def load_data_from_google_drive():
-    """Carga datos optimizada con mejor UI."""
+    """Carga datos optimizada con UI CORREGIDA - mensaje se limpia."""
     if not check_google_drive_availability():
         return None
     
     manager = get_gdrive_manager()
     drive_files = st.secrets.drive_files
     
-    # UI de progreso
+    # UI de progreso CORREGIDA
     progress_container = st.container()
-    with progress_container:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
     
     try:        
-        status_text.text("🔐 Autenticando...")
-        if not manager.authenticate():
-            raise Exception("Autenticación fallida")
-        
-        progress_bar.progress(20)
-        status_text.text("📥 Descargando casos...")
-        
-        casos_path = manager.download_file(
-            drive_files["casos_excel"],
-            "BD_positivos.xlsx"
-        )
-        
-        if not casos_path:
-            raise Exception("Error descargando casos")
-        
-        progress_bar.progress(50)
-        status_text.text("📥 Descargando epizootias...")
-        
-        epizootias_path = manager.download_file(
-            drive_files["epizootias_excel"],
-            "Información_Datos_FA.xlsx"
-        )
-        
-        if not epizootias_path:
-            raise Exception("Error descargando epizootias")
-        
-        progress_bar.progress(80)
-        status_text.text("🔧 Procesando datos...")
-        
-        # Cargar DataFrames
-        casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
-        epizootias_df = pd.read_excel(epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
-        
-        # Procesar datos
-        processed_data = process_data_optimized(casos_df, epizootias_df)
-        
-        progress_bar.progress(100)
-        time.sleep(1)
-        progress_container.empty()
-        
-        if processed_data:
-            return processed_data
-        else:
-            raise Exception("Error procesando datos")
+        with progress_container:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
             
+            status_text.text("🔐 Autenticando...")
+            if not manager.authenticate():
+                raise Exception("Autenticación fallida")
+            
+            progress_bar.progress(20)
+            status_text.text("📥 Descargando casos...")
+            
+            casos_path = manager.download_file(
+                drive_files["casos_excel"],
+                "BD_positivos.xlsx"
+            )
+            
+            if not casos_path:
+                raise Exception("Error descargando casos")
+            
+            progress_bar.progress(50)
+            status_text.text("📥 Descargando epizootias...")
+            
+            epizootias_path = manager.download_file(
+                drive_files["epizootias_excel"],
+                "Información_Datos_FA.xlsx"
+            )
+            
+            if not epizootias_path:
+                raise Exception("Error descargando epizootias")
+            
+            progress_bar.progress(80)
+            status_text.text("🔧 Procesando datos...")
+            
+            # Cargar DataFrames
+            casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
+            epizootias_df = pd.read_excel(epizootias_path, sheet_name="Base de Datos", engine="openpyxl")
+            
+            # Procesar datos
+            processed_data = process_data_optimized(casos_df, epizootias_df)
+            
+            progress_bar.progress(100)
+            status_text.text("✅ Completado!")
+            
+            # CORREGIDO: Limpiar UI de progreso después de delay
+            time.sleep(1)
+            progress_bar.empty()
+            status_text.empty()
+            
+            # CORREGIDO: Limpiar el contenedor completo
+            progress_container.empty()
+            
+            if processed_data:
+                return processed_data
+            else:
+                raise Exception("Error procesando datos")
+                
     except Exception as e:
-        progress_container.empty()
+        # CORREGIDO: Limpiar UI en caso de error también
+        if 'progress_container' in locals():
+            progress_container.empty()
+        
         logger.error(f"❌ Error carga: {str(e)}")
         st.error(f"❌ Error: {str(e)}")
         
