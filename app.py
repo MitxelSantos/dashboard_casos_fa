@@ -1,8 +1,10 @@
 """
-app.py - OPTIMIZADO
-REDUCCIÓN: 800+ líneas → 350 líneas (56% menos código)
-ELIMINADAS: CSS inline, funciones duplicadas, debugging excesivo
-MANTENIDO: Toda la funcionalidad core
+app.py - INTEGRADO CON NUEVAS FUNCIONALIDADES
+- Filtros múltiples con agrupación
+- Mapas multi-modales con layout compacto 70/30
+- Sistema drill-down para tablas
+- Manejo completo de municipios/veredas
+- Prevención de bucles infinitos en áreas grises
 """
 
 import os
@@ -38,8 +40,13 @@ ASSETS_DIR.mkdir(exist_ok=True)
 try:
     from config.colors import COLORS
     from config.settings import DASHBOARD_CONFIG
-    from utils.data_processor import excel_date_to_datetime, calculate_basic_metrics
-    from components.filters import create_unified_filter_system
+    from utils.data_processor import (
+        excel_date_to_datetime, 
+        calculate_basic_metrics,
+        process_complete_data_structure,  # NUEVA FUNCIÓN INTEGRADA
+        handle_empty_area_filter
+    )
+    from components.filters import create_unified_filter_system  # SISTEMA ACTUALIZADO
     logger.info("✅ Configuraciones importadas")
 except ImportError as e:
     logger.error(f"❌ Error importando configuraciones: {str(e)}")
@@ -102,6 +109,14 @@ def configure_page():
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.08);
         }}
+        
+        /* Layout sin scroll para dashboard compacto */
+        .main .block-container {{
+            max-height: calc(100vh - 120px) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            padding: 1rem !important;
+        }}
         </style>
         """,
         unsafe_allow_html=True,
@@ -110,9 +125,10 @@ def configure_page():
 def load_data():
     """
     Función unificada de carga de datos con fallback Google Drive → Local.
+    ACTUALIZADA para usar estructura completa.
     """
     try:
-        logger.info("🔄 Iniciando carga de datos")
+        logger.info("🔄 Iniciando carga de datos INTEGRADA")
         
         # ESTRATEGIA 1: Google Drive (Prioridad)
         if check_google_drive_availability():
@@ -121,7 +137,12 @@ def load_data():
             
             if data_gdrive:
                 logger.info(f"✅ Google Drive exitoso: {len(data_gdrive['casos'])} casos, {len(data_gdrive['epizootias'])} epizootias")
-                return data_gdrive
+                # Procesar con estructura completa
+                return process_complete_data_structure(
+                    data_gdrive['casos'], 
+                    data_gdrive['epizootias'], 
+                    data_dir=DATA_DIR
+                )
             else:
                 logger.warning("⚠️ Google Drive falló, intentando local")
         
@@ -135,7 +156,7 @@ def load_data():
         return create_empty_data_structure()
 
 def load_local_data():
-    """Carga datos desde archivos locales."""
+    """Carga datos desde archivos locales CON ESTRUCTURA COMPLETA."""
     with st.container():
         progress_bar = st.progress(0)
         status_text = st.empty()
@@ -175,17 +196,17 @@ def load_local_data():
             return create_empty_data_structure()
         
         progress_bar.progress(50)
-        status_text.text("🔧 Procesando datos...")
+        status_text.text("🔧 Procesando datos con estructura completa...")
         
-        # Procesar datos
-        processed_data = process_loaded_data(casos_df, epizootias_df)
+        # Procesar datos CON ESTRUCTURA COMPLETA
+        processed_data = process_loaded_data_integrated(casos_df, epizootias_df)
         
         progress_bar.progress(100)
         time.sleep(1)
         progress_bar.empty()
         status_text.empty()
         
-        st.success("✅ Datos cargados desde archivos locales")
+        st.success("✅ Datos cargados con estructura completa")
         return processed_data
         
     except Exception as e:
@@ -193,9 +214,9 @@ def load_local_data():
         show_data_setup_instructions()
         return create_empty_data_structure()
 
-def process_loaded_data(casos_df, epizootias_df):
-    """Procesa los datos cargados."""
-    # Limpiar datos
+def process_loaded_data_integrated(casos_df, epizootias_df):
+    """Procesa los datos cargados CON INTEGRACIÓN COMPLETA."""
+    # Limpiar datos básicos
     for df in [casos_df, epizootias_df]:
         df.drop(columns=[col for col in df.columns if 'Unnamed' in col], inplace=True, errors='ignore')
     
@@ -244,38 +265,15 @@ def process_loaded_data(casos_df, epizootias_df):
         ]
         logger.info(f"🔵 Epizootias filtradas: {len(epizootias_df)} de {total_original}")
     
-    # Crear estructura de datos
-    municipios_casos = set(casos_df["municipio"].dropna()) if "municipio" in casos_df.columns else set()
-    municipios_epizootias = set(epizootias_df["municipio"].dropna()) if "municipio" in epizootias_df.columns else set()
-    municipios_con_datos = sorted(municipios_casos.union(municipios_epizootias))
-    
-    # Lista completa de municipios del Tolima
-    municipios_tolima = [
-        "IBAGUE", "ALPUJARRA", "ALVARADO", "AMBALEMA", "ANZOATEGUI",
-        "ARMERO", "ATACO", "CAJAMARCA", "CARMEN DE APICALA", "CASABIANCA",
-        "CHAPARRAL", "COELLO", "COYAIMA", "CUNDAY", "DOLORES",
-        "ESPINAL", "FALAN", "FLANDES", "FRESNO", "GUAMO",
-        "HERVEO", "HONDA", "ICONONZO", "LERIDA", "LIBANO",
-        "MARIQUITA", "MELGAR", "MURILLO", "NATAGAIMA", "ORTEGA",
-        "PALOCABILDO", "PIEDRAS", "PLANADAS", "PRADO", "PURIFICACION",
-        "RIOBLANCO", "RONCESVALLES", "ROVIRA", "SALDAÑA", "SAN ANTONIO",
-        "SAN LUIS", "SANTA ISABEL", "SUAREZ", "VALLE DE SAN JUAN",
-        "VENADILLO", "VILLAHERMOSA", "VILLARRICA"
-    ]
-    
-    todos_municipios = sorted(set(municipios_con_datos + municipios_tolima))
-    
-    return {
-        "casos": casos_df,
-        "epizootias": epizootias_df,
-        "municipios_normalizados": todos_municipios,
-        "municipio_display_map": {municipio: municipio for municipio in todos_municipios},
-        "veredas_por_municipio": {},
-        "vereda_display_map": {},
-    }
+    # USAR FUNCIÓN DE ESTRUCTURA COMPLETA
+    return process_complete_data_structure(
+        casos_df, 
+        epizootias_df, 
+        data_dir=DATA_DIR
+    )
 
 def show_data_setup_instructions():
-    """Muestra instrucciones de configuración."""
+    """Muestra instrucciones de configuración ACTUALIZADAS."""
     st.error("❌ No se pudieron cargar los archivos de datos")
     
     with st.expander("📋 Instrucciones de configuración", expanded=True):
@@ -288,12 +286,27 @@ def show_data_setup_instructions():
         
         ### 📁 Para desarrollo local:
         1. **Coloca los archivos en:**
-           - `📁 data/BD_positivos.xlsx`
+           - `📁 data/BD_positivos.xlsx` (**con hoja "VEREDAS"**)
            - `📁 data/Información_Datos_FA.xlsx`
            
            **O en el directorio raíz:**
-           - `📄 BD_positivos.xlsx`
+           - `📄 BD_positivos.xlsx` (**con hoja "VEREDAS"**)
            - `📄 Información_Datos_FA.xlsx`
+        
+        ### 📊 Estructura de BD_positivos.xlsx:
+        - **Hoja "ACUMU"**: Casos confirmados (como antes)
+        - **Hoja "VEREDAS"**: Lista completa con columnas:
+          - `CODIGO_VER`: Código de vereda
+          - `NOM_DEP`: Nombre departamento
+          - `municipi_1`: Nombre municipio
+          - `vereda_nor`: Nombre vereda
+          - `región`: Región del municipio
+        
+        ### ⚠️ IMPORTANTE:
+        La hoja "VEREDAS" es **CRÍTICA** para:
+        - Filtrado múltiple por regiones
+        - Mostrar todas las veredas (incluso sin datos)
+        - Evitar bucles infinitos en áreas grises
         """)
 
 def create_empty_data_structure():
@@ -302,17 +315,24 @@ def create_empty_data_structure():
         "casos": pd.DataFrame(),
         "epizootias": pd.DataFrame(),
         "municipios_normalizados": [],
-        "municipio_display_map": {},
         "veredas_por_municipio": {},
+        "municipio_display_map": {},
         "vereda_display_map": {},
+        "veredas_completas": pd.DataFrame(),
+        "regiones": {},
+        "data_source": "empty"
     }
 
 def show_fallback_summary(data_filtered, filters):
-    """Resumen usando datos filtrados."""
+    """Resumen usando datos filtrados CON MANEJO DE ÁREAS SIN DATOS."""
     st.markdown("### 📊 Resumen de Datos Filtrados")
     
     casos = data_filtered["casos"]
     epizootias = data_filtered["epizootias"]
+    
+    # Verificar si es área sin datos
+    area_info = data_filtered.get("area_info", {})
+    es_area_sin_datos = area_info.get("tipo") == "sin_datos"
     
     col1, col2, col3, col4 = st.columns(4)
     
@@ -338,9 +358,49 @@ def show_fallback_summary(data_filtered, filters):
             st.caption(f"• {filtro}")
     else:
         st.info("📊 Mostrando datos completos del Tolima")
+    
+    # Mensaje especial para áreas sin datos
+    if es_area_sin_datos:
+        ubicacion = area_info.get("vereda") or area_info.get("municipio") or "Área seleccionada"
+        st.info(f"📭 {ubicacion} no tiene datos registrados actualmente")
+
+def handle_gray_area_click(municipio=None, vereda=None, data_original=None):
+    """
+    Maneja clics en áreas grises (sin datos) para evitar bucles infinitos.
+    
+    Args:
+        municipio: Municipio clicado
+        vereda: Vereda clicada (opcional)
+        data_original: Datos originales completos
+    
+    Returns:
+        dict: Datos filtrados con estructura consistente (ceros)
+    """
+    logger.info(f"🎯 Manejando clic en área gris: {municipio}, {vereda}")
+    
+    if data_original and "handle_empty_area" in data_original:
+        # Usar función especializada del procesador de datos
+        return data_original["handle_empty_area"](
+            municipio=municipio,
+            vereda=vereda,
+            casos_df=data_original.get("casos", pd.DataFrame()),
+            epizootias_df=data_original.get("epizootias", pd.DataFrame())
+        )
+    else:
+        # Fallback básico
+        return {
+            "casos": pd.DataFrame(),
+            "epizootias": pd.DataFrame(),
+            "tiene_datos": False,
+            "area_info": {
+                "municipio": municipio,
+                "vereda": vereda,
+                "tipo": "sin_datos"
+            }
+        }
 
 def main():
-    """Función principal del dashboard."""
+    """Función principal del dashboard INTEGRADA."""
     # Configurar página
     configure_page()
     
@@ -352,8 +412,8 @@ def main():
         with st.sidebar:
             st.title("Dashboard Tolima")
 
-    # Cargar datos
-    logger.info("🔄 Iniciando carga de datos")
+    # Cargar datos CON ESTRUCTURA COMPLETA
+    logger.info("🔄 Iniciando carga de datos integrada")
     data = load_data()
 
     if data["casos"].empty and data["epizootias"].empty:
@@ -361,12 +421,32 @@ def main():
         return
 
     logger.info(f"📊 Datos cargados: {len(data['casos'])} casos, {len(data['epizootias'])} epizootias")
+    logger.info(f"🏛️ Municipios disponibles: {len(data.get('municipios_normalizados', []))}")
+    logger.info(f"🗂️ Regiones disponibles: {len(data.get('regiones', {}))}")
 
-    # Aplicar filtros
-    logger.info("🔄 Aplicando sistema de filtros")
+    # Aplicar filtros SISTEMA ACTUALIZADO CON MÚLTIPLES Y MAPAS
+    logger.info("🔄 Aplicando sistema de filtros integrado")
     filter_result = create_unified_filter_system(data)
     filters = filter_result["filters"]
     data_filtered = filter_result["data_filtered"]
+
+    # Verificar si es un área sin datos
+    municipio_filtrado = filters.get("municipio_display")
+    vereda_filtrada = filters.get("vereda_display")
+    
+    # Si es área sin datos, manejar apropiadamente
+    if (data_filtered["casos"].empty and data_filtered["epizootias"].empty and 
+        (municipio_filtrado != "Todos" or vereda_filtrada != "Todas")):
+        
+        logger.info("🎯 Detectada área sin datos - aplicando manejo especial")
+        data_filtered_with_zeros = handle_gray_area_click(
+            municipio=municipio_filtrado if municipio_filtrado != "Todos" else None,
+            vereda=vereda_filtrada if vereda_filtrada != "Todas" else None,
+            data_original=data
+        )
+        
+        # Integrar información del área sin datos
+        data_filtered.update(data_filtered_with_zeros)
 
     # Verificar filtrado
     casos_reduction = len(data["casos"]) - len(data_filtered["casos"])
@@ -374,6 +454,11 @@ def main():
     
     if casos_reduction > 0 or epi_reduction > 0:
         logger.info(f"📊 Filtrado aplicado: -{casos_reduction} casos, -{epi_reduction} epizootias")
+
+    # Información del modo de mapa
+    modo_mapa = filters.get("modo_mapa", "Epidemiológico")
+    if modo_mapa != "Epidemiológico":
+        st.info(f"🎨 Modo de mapa: **{modo_mapa}** (los datos de cobertura son simulados por ahora)")
 
     # Pestañas principales
     tab1, tab2, tab3 = st.tabs([
@@ -383,7 +468,7 @@ def main():
     ])
 
     with tab1:
-        logger.info("🗺️ Mostrando vista de mapas")
+        logger.info("🗺️ Mostrando vista de mapas integrada")
         if "mapas" in vistas_modules and vistas_modules["mapas"]:
             try:
                 vistas_modules["mapas"].show(data_filtered, filters, COLORS)
@@ -396,7 +481,7 @@ def main():
             show_fallback_summary(data_filtered, filters)
 
     with tab2:
-        logger.info("📊 Mostrando análisis detallado")
+        logger.info("📊 Mostrando análisis detallado con drill-down")
         if "tablas" in vistas_modules and vistas_modules["tablas"]:
             try:
                 vistas_modules["tablas"].show(data_filtered, filters, COLORS)
@@ -421,7 +506,7 @@ def main():
             st.info("🔧 Módulo temporal en desarrollo.")
             show_fallback_summary(data_filtered, filters)
 
-    # Footer
+    # Footer ACTUALIZADO
     st.markdown("---")
     col1, col2 = st.columns([3, 1])
     
@@ -429,7 +514,8 @@ def main():
         st.markdown(
             f"""
             <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0;">
-                Dashboard Fiebre Amarilla v1.0<br>
+                Dashboard Fiebre Amarilla v2.0 - Sistema Integrado<br>
+                ✨ Filtros Múltiples • 🗺️ Mapas Multi-Modal • 📊 Drill-Down • 🔍 Áreas Completas<br>
                 Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
             </div>
             """,
@@ -438,11 +524,21 @@ def main():
     
     with col2:
         active_filters = filters.get("active_filters", [])
-        if active_filters:
+        modo_mapa = filters.get("modo_mapa", "Epidemiológico")
+        
+        if active_filters or modo_mapa != "Epidemiológico":
+            badge_info = []
+            if active_filters:
+                badge_info.append(f"{len(active_filters)} filtros")
+            if modo_mapa != "Epidemiológico":
+                badge_info.append(modo_mapa[:8])
+            
+            badge_text = " • ".join(badge_info)
+            
             st.markdown(
                 f"""
                 <div style="background: {COLORS['info']}; color: white; padding: 0.4rem; border-radius: 6px; text-align: center; font-size: 0.7rem;">
-                    🎯 {len(active_filters)} filtros activos
+                    🎯 {badge_text}
                 </div>
                 """,
                 unsafe_allow_html=True,
