@@ -1,6 +1,5 @@
 """
 Colores institucionales del Tolima y paleta de colores del dashboard.
-OPTIMIZADO: Para profesionales médicos con colores claros y contrastantes.
 """
 
 # Colores principales institucionales del Tolima
