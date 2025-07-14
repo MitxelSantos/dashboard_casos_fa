@@ -511,8 +511,7 @@ def main():
         st.markdown(
             f"""
             <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0;">
-                Dashboard Fiebre Amarilla v4.0 - Sistema Corregido<br>
-                ✨ Filtros Corregidos • 🗺️ Mapas Mejorados • 📊 Drill-Down • 🔧 Sin Bucles<br>
+                Dashboard Fiebre Amarilla v1.0 <br>
                 Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
             </div>
             """,
