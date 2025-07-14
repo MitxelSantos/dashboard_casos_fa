@@ -1,10 +1,14 @@
 """
-Componente de filtros CORREGIDO con soporte para selección múltiple y regiones desde VEREDAS.
+Componente de filtros OPTIMIZADO.
+- Fecha actual como máximo
+- Rangos de edad NO se muestran como filtros aplicados
+- Mantener toda la funcionalidad existente
 """
 
 import streamlit as st
 import pandas as pd
 import logging
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -319,136 +323,6 @@ def create_map_mode_selector(colors):
     
     return modo_mapa
 
-def create_affectation_counters(data_filtered, filters, colors):
-    """Crea contadores de afectación geográfica."""
-    casos = data_filtered["casos"]
-    epizootias = data_filtered["epizootias"]
-    
-    # Determinar nivel actual
-    if filters.get("modo") == "multiple":
-        # Modo múltiple
-        municipios_sel = filters.get("municipios_seleccionados", [])
-        if len(municipios_sel) > 1:
-            nivel = "multiple_municipios"
-            total_ubicaciones = len(municipios_sel)
-        else:
-            nivel = "departamento"
-            total_ubicaciones = 47  # Total municipios Tolima
-    else:
-        # Modo único
-        if filters.get("vereda_display") != "Todas":
-            nivel = "vereda"
-            total_ubicaciones = 1
-        elif filters.get("municipio_display") != "Todos":
-            nivel = "municipio"
-            municipio_actual = filters.get("municipio_display")
-            veredas_municipio = get_veredas_for_municipio(data_filtered, municipio_actual)
-            total_ubicaciones = len(veredas_municipio) if veredas_municipio else 0
-        else:
-            nivel = "departamento"
-            total_ubicaciones = 47
-    
-    # Calcular contadores según nivel
-    if nivel == "departamento":
-        contadores = calculate_departmental_counters(casos, epizootias, total_ubicaciones)
-        titulo = "🏛️ AFECTACIÓN TOLIMA"
-    elif nivel == "municipio":
-        contadores = calculate_municipal_counters(casos, epizootias, filters.get("municipio_display"), data_filtered, total_ubicaciones)
-        titulo = f"🏘️ AFECTACIÓN {filters.get('municipio_display', 'MUNICIPIO')}"
-    elif nivel == "multiple_municipios":
-        contadores = calculate_multiple_counters(casos, epizootias, filters.get("municipios_seleccionados"))
-        titulo = f"🗂️ AFECTACIÓN MÚLTIPLE ({len(filters.get('municipios_seleccionados', []))} MUNICIPIOS)"
-    else:
-        # Nivel vereda - sin contadores
-        return None
-    
-    # Mostrar contadores
-    st.markdown(
-        f"""
-        <div class="contadores-afectacion">
-            <div style="font-weight: 800; font-size: 1rem; margin-bottom: 0.5rem;">{titulo}</div>
-            <div class="contador-item">📍 {contadores['casos']} con casos</div>
-            <div class="contador-item">🐒 {contadores['epizootias']} con epizootias</div>
-            <div class="contador-item">🔄 {contadores['ambos']} con ambos</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-    
-    return contadores
-
-def calculate_departmental_counters(casos, epizootias, total_municipios):
-    """Calcula contadores departamentales."""
-    municipios_con_casos = set()
-    municipios_con_epizootias = set()
-    
-    if not casos.empty and "municipio" in casos.columns:
-        municipios_con_casos = set(casos["municipio"].dropna())
-    
-    if not epizootias.empty and "municipio" in epizootias.columns:
-        municipios_con_epizootias = set(epizootias["municipio"].dropna())
-    
-    municipios_con_ambos = municipios_con_casos.intersection(municipios_con_epizootias)
-    
-    return {
-        "casos": f"{len(municipios_con_casos)}/{total_municipios} municipios",
-        "epizootias": f"{len(municipios_con_epizootias)}/{total_municipios} municipios",
-        "ambos": f"{len(municipios_con_ambos)}/{total_municipios} municipios"
-    }
-
-def calculate_municipal_counters(casos, epizootias, municipio_actual, data_filtered, total_veredas):
-    """Calcula contadores municipales."""
-    veredas_con_casos = set()
-    veredas_con_epizootias = set()
-    
-    def normalize_name(name):
-        return str(name).upper().strip() if pd.notna(name) else ""
-    
-    municipio_norm = normalize_name(municipio_actual)
-    
-    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
-        casos_municipio = casos[casos["municipio"].apply(normalize_name) == municipio_norm]
-        veredas_con_casos = set(casos_municipio["vereda"].dropna())
-    
-    if not epizootias.empty and "vereda" in epizootias.columns and "municipio" in epizootias.columns:
-        epi_municipio = epizootias[epizootias["municipio"].apply(normalize_name) == municipio_norm]
-        veredas_con_epizootias = set(epi_municipio["vereda"].dropna())
-    
-    veredas_con_ambos = veredas_con_casos.intersection(veredas_con_epizootias)
-    
-    return {
-        "casos": f"{len(veredas_con_casos)}/{total_veredas} veredas",
-        "epizootias": f"{len(veredas_con_epizootias)}/{total_veredas} veredas", 
-        "ambos": f"{len(veredas_con_ambos)}/{total_veredas} veredas"
-    }
-
-def calculate_multiple_counters(casos, epizootias, municipios_seleccionados):
-    """Calcula contadores para selección múltiple."""
-    def normalize_name(name):
-        return str(name).upper().strip() if pd.notna(name) else ""
-    
-    municipios_norm = [normalize_name(m) for m in municipios_seleccionados]
-    municipios_con_casos = set()
-    municipios_con_epizootias = set()
-    
-    if not casos.empty and "municipio" in casos.columns:
-        for municipio in municipios_norm:
-            if len(casos[casos["municipio"].apply(normalize_name) == municipio]) > 0:
-                municipios_con_casos.add(municipio)
-    
-    if not epizootias.empty and "municipio" in epizootias.columns:
-        for municipio in municipios_norm:
-            if len(epizootias[epizootias["municipio"].apply(normalize_name) == municipio]) > 0:
-                municipios_con_epizootias.add(municipio)
-    
-    municipios_con_ambos = municipios_con_casos.intersection(municipios_con_epizootias)
-    
-    return {
-        "casos": f"{len(municipios_con_casos)}/{len(municipios_seleccionados)} seleccionados",
-        "epizootias": f"{len(municipios_con_epizootias)}/{len(municipios_seleccionados)} seleccionados",
-        "ambos": f"{len(municipios_con_ambos)}/{len(municipios_seleccionados)} seleccionados"
-    }
-
 def apply_all_filters_multiple(data, filters_location, filters_temporal, filters_advanced):
     """Aplica filtros con soporte para selección múltiple."""
     casos_filtrados = data["casos"].copy()
@@ -567,7 +441,7 @@ def apply_all_filters_multiple(data, filters_location, filters_temporal, filters
     }
 
 def create_unified_filter_system(data):
-    """Sistema unificado de filtros CORREGIDO."""
+    """Sistema unificado de filtros OPTIMIZADO."""
     # Aplicar CSS
     try:
         from config.colors import COLORS
@@ -575,23 +449,21 @@ def create_unified_filter_system(data):
     except ImportError:
         default_colors = {'primary': '#7D0F2B', 'secondary': '#F2A900', 'info': '#4682B4'}
         apply_filters_css(default_colors)
+        COLORS = default_colors
 
     # Selector de modo de mapa
-    modo_mapa = create_map_mode_selector(COLORS if 'COLORS' in locals() else default_colors)
+    modo_mapa = create_map_mode_selector(COLORS)
 
     # Crear filtros según tipo
     filters_location = create_hierarchical_filters_with_multiselect(data)
-    filters_temporal = create_temporal_filters(data)
-    filters_advanced = create_advanced_filters(data)
+    filters_temporal = create_temporal_filters_optimized(data)  # OPTIMIZADO
+    filters_advanced = create_advanced_filters_optimized(data)  # OPTIMIZADO
 
     # Aplicar filtros
     data_filtered = apply_all_filters_multiple(data, filters_location, filters_temporal, filters_advanced)
     
-    # Crear contadores de afectación
-    contadores = create_affectation_counters(data_filtered, filters_location, COLORS if 'COLORS' in locals() else default_colors)
-
-    # Crear resumen de filtros activos
-    active_filters = create_filter_summary_multiple(filters_location, filters_temporal, filters_advanced)
+    # Crear resumen de filtros activos OPTIMIZADO
+    active_filters = create_filter_summary_multiple_optimized(filters_location, filters_temporal, filters_advanced)
     
     # Mostrar filtros activos
     show_active_filters(active_filters)
@@ -644,13 +516,87 @@ def create_unified_filter_system(data):
         **filters_advanced,
         "active_filters": active_filters,
         "modo_mapa": modo_mapa,
-        "contadores": contadores,
     }
 
     return {"filters": all_filters, "data_filtered": data_filtered}
 
-def create_filter_summary_multiple(filters_location, filters_temporal, filters_advanced):
-    """Crea resumen de filtros activos para modo múltiple."""
+def create_temporal_filters_optimized(data):
+    """Filtros temporales OPTIMIZADOS - fecha actual como máximo."""
+    st.sidebar.markdown("---")
+    fechas_disponibles = get_available_dates(data)
+    
+    if not fechas_disponibles:
+        return {"fecha_rango": None, "fecha_min": None, "fecha_max": None}
+    
+    fecha_min = min(fechas_disponibles)
+    # OPTIMIZADO: Fecha máxima siempre es HOY
+    fecha_max_datos = max(fechas_disponibles)
+    fecha_max = datetime.now()  # CORREGIDO: Siempre usar fecha actual como máximo
+    
+    fecha_rango = st.sidebar.date_input(
+        "📅 Rango de Fechas:",
+        value=(fecha_min.date(), fecha_max_datos.date()),  # Default hasta último dato
+        min_value=fecha_min.date(),
+        max_value=fecha_max.date(),  # Máximo siempre hoy
+        key="fecha_filter_widget",
+        help="Seleccione el período temporal de interés. Máximo: fecha actual"
+    )
+    st.session_state["fecha_filter"] = fecha_rango
+
+    if fecha_rango and len(fecha_rango) == 2:
+        dias_seleccionados = (fecha_rango[1] - fecha_rango[0]).days
+        st.sidebar.markdown(
+            f'<div class="filter-help">📊 Período: {dias_seleccionados} días seleccionados</div>',
+            unsafe_allow_html=True
+        )
+
+    return {
+        "fecha_rango": fecha_rango, 
+        "fecha_min": fecha_min, 
+        "fecha_max": fecha_max,  # Devolver fecha actual como máximo
+        "fecha_max_datos": fecha_max_datos  # Mantener referencia al último dato
+    }
+
+def create_advanced_filters_optimized(data):
+    """Filtros avanzados OPTIMIZADOS - edad no cuenta como filtro aplicado."""
+    with st.sidebar.expander("🔧 Filtros Avanzados", expanded=False):
+        condicion_filter = "Todas"
+        if not data["casos"].empty and "condicion_final" in data["casos"].columns:
+            condiciones = ["Todas"] + list(data["casos"]["condicion_final"].dropna().unique())
+            condicion_filter = st.selectbox("⚰️ Condición Final:", condiciones, key="condicion_filter")
+
+        sexo_filter = "Todos"
+        if not data["casos"].empty and "sexo" in data["casos"].columns:
+            sexos = ["Todos"] + list(data["casos"]["sexo"].dropna().unique())
+            sexo_filter = st.selectbox("👤 Sexo:", sexos, key="sexo_filter")
+
+        edad_rango = None
+        edad_es_filtro_real = False  # OPTIMIZADO: Rastrear si edad es filtro real
+        if not data["casos"].empty and "edad" in data["casos"].columns:
+            edad_min = int(data["casos"]["edad"].min()) if not data["casos"]["edad"].isna().all() else 0
+            edad_max = int(data["casos"]["edad"].max()) if not data["casos"]["edad"].isna().all() else 100
+            
+            if edad_min < edad_max:
+                edad_rango = st.slider(
+                    "🎂 Rango de Edad:",
+                    min_value=edad_min,
+                    max_value=edad_max,
+                    value=(edad_min, edad_max),
+                    key="edad_filter"
+                )
+                
+                # OPTIMIZADO: Solo es filtro si NO es el rango completo
+                edad_es_filtro_real = edad_rango != (edad_min, edad_max)
+
+    return {
+        "condicion_final": condicion_filter, 
+        "sexo": sexo_filter, 
+        "edad_rango": edad_rango,
+        "edad_es_filtro_real": edad_es_filtro_real  # NUEVO: Indica si edad es realmente un filtro
+    }
+
+def create_filter_summary_multiple_optimized(filters_location, filters_temporal, filters_advanced):
+    """Crea resumen de filtros activos OPTIMIZADO - sin mostrar edad y fecha por defecto."""
     active_filters = []
     
     # Filtros de ubicación
@@ -677,28 +623,33 @@ def create_filter_summary_multiple(filters_location, filters_temporal, filters_a
         if filters_location["vereda_display"] != "Todas":
             active_filters.append(f"🏘️ {filters_location['vereda_display']}")
 
-    # Filtros temporales (sin cambios)
-    if filters_temporal["fecha_rango"] and len(filters_temporal["fecha_rango"]) == 2:
+    # OPTIMIZADO: Filtros temporales - solo si NO es el rango por defecto
+    if (filters_temporal["fecha_rango"] and len(filters_temporal["fecha_rango"]) == 2 and
+        filters_temporal.get("fecha_min") and filters_temporal.get("fecha_max_datos")):
+        
         fecha_inicio, fecha_fin = filters_temporal["fecha_rango"]
-        if (filters_temporal.get("fecha_min") and filters_temporal.get("fecha_max") and 
-            (fecha_inicio != filters_temporal["fecha_min"].date() or 
-             fecha_fin != filters_temporal["fecha_max"].date())):
+        fecha_min_default = filters_temporal["fecha_min"].date()
+        fecha_max_default = filters_temporal["fecha_max_datos"].date()
+        
+        # Solo agregar si NO es el rango completo por defecto
+        if fecha_inicio != fecha_min_default or fecha_fin != fecha_max_default:
             active_filters.append(f"📅 {fecha_inicio.strftime('%m/%y')}-{fecha_fin.strftime('%m/%y')}")
 
-    # Filtros avanzados (sin cambios)
+    # Filtros avanzados
     if filters_advanced["condicion_final"] != "Todas":
         active_filters.append(f"⚰️ {filters_advanced['condicion_final']}")
 
     if filters_advanced["sexo"] != "Todos":
         active_filters.append(f"👤 {filters_advanced['sexo']}")
 
-    if filters_advanced["edad_rango"]:
+    # OPTIMIZADO: Edad solo si es realmente un filtro (no el rango completo)
+    if filters_advanced.get("edad_es_filtro_real", False):
         edad_min, edad_max = filters_advanced["edad_rango"]
         active_filters.append(f"🎂 {edad_min}-{edad_max}")
 
     return active_filters
 
-# ===== FUNCIONES DE APOYO (mantener las existentes) =====
+# ===== FUNCIONES DE APOYO (mantener las existentes sin cambios) =====
 
 def normalize_name(name):
     if pd.isna(name) or name == "":
@@ -729,63 +680,6 @@ def get_veredas_for_municipio(data, municipio_selected):
         veredas.update(epi_municipio["vereda"].dropna().unique())
     
     return [v for v in veredas if v and str(v).strip()]
-
-def create_temporal_filters(data):
-    st.sidebar.markdown("---")
-    fechas_disponibles = get_available_dates(data)
-    
-    if not fechas_disponibles:
-        return {"fecha_rango": None, "fecha_min": None, "fecha_max": None}
-    
-    fecha_min = min(fechas_disponibles)
-    fecha_max = max(fechas_disponibles)
-    
-    fecha_rango = st.sidebar.date_input(
-        "📅 Rango de Fechas:",
-        value=(fecha_min.date(), fecha_max.date()),
-        min_value=fecha_min.date(),
-        max_value=fecha_max.date(),
-        key="fecha_filter_widget",
-        help="Seleccione el período temporal de interés"
-    )
-    st.session_state["fecha_filter"] = fecha_rango
-
-    if fecha_rango and len(fecha_rango) == 2:
-        dias_seleccionados = (fecha_rango[1] - fecha_rango[0]).days
-        st.sidebar.markdown(
-            f'<div class="filter-help">📊 Período: {dias_seleccionados} días seleccionados</div>',
-            unsafe_allow_html=True
-        )
-
-    return {"fecha_rango": fecha_rango, "fecha_min": fecha_min, "fecha_max": fecha_max}
-
-def create_advanced_filters(data):
-    with st.sidebar.expander("🔧 Filtros Avanzados", expanded=False):
-        condicion_filter = "Todas"
-        if not data["casos"].empty and "condicion_final" in data["casos"].columns:
-            condiciones = ["Todas"] + list(data["casos"]["condicion_final"].dropna().unique())
-            condicion_filter = st.selectbox("⚰️ Condición Final:", condiciones, key="condicion_filter")
-
-        sexo_filter = "Todos"
-        if not data["casos"].empty and "sexo" in data["casos"].columns:
-            sexos = ["Todos"] + list(data["casos"]["sexo"].dropna().unique())
-            sexo_filter = st.selectbox("👤 Sexo:", sexos, key="sexo_filter")
-
-        edad_rango = None
-        if not data["casos"].empty and "edad" in data["casos"].columns:
-            edad_min = int(data["casos"]["edad"].min()) if not data["casos"]["edad"].isna().all() else 0
-            edad_max = int(data["casos"]["edad"].max()) if not data["casos"]["edad"].isna().all() else 100
-            
-            if edad_min < edad_max:
-                edad_rango = st.slider(
-                    "🎂 Rango de Edad:",
-                    min_value=edad_min,
-                    max_value=edad_max,
-                    value=(edad_min, edad_max),
-                    key="edad_filter"
-                )
-
-    return {"condicion_final": condicion_filter, "sexo": sexo_filter, "edad_rango": edad_rango}
 
 def get_available_dates(data):
     fechas = []
