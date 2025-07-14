@@ -1021,9 +1021,9 @@ def add_municipios_to_map_differentiated(folium_map, municipios_data, municipios
         
         # Crear tooltip según modo y selección
         if modo_mapa == "Epidemiológico":
-            tooltip_text = create_municipio_tooltip_multiple_epidemiological(municipio_name, row, colors, es_seleccionado)
+            tooltip_text = create_municipio_tooltip_multiple_epidemiological_fixed(municipio_name, row, colors, es_seleccionado)
         else:
-            tooltip_text = create_municipio_tooltip_multiple_coverage(municipio_name, row, colors, es_seleccionado)
+            tooltip_text = create_municipio_tooltip_multiple_coverage_fixed(municipio_name, row, colors, es_seleccionado)
         
         # Agregar polígono
         folium.GeoJson(
@@ -1149,11 +1149,11 @@ def handle_map_click(map_data, features_data, feature_type, filters, casos, epiz
             clicked_lng = clicked_object.get('lng')
             
             if clicked_lat and clicked_lng:
-                feature_clicked = find_closest_feature(clicked_lat, clicked_lng, features_data, feature_type)
+                feature_clicked = find_closest_feature_optimized(clicked_lat, clicked_lng, features_data, feature_type)
                 
                 if feature_clicked:
                     # Aplicar filtro único
-                    apply_single_filter(feature_clicked, feature_type, filters)
+                    apply_single_filter_optimized(feature_clicked, feature_type, filters)
                     
                     # Mensaje informativo
                     st.success(f"✅ **{feature_clicked}** seleccionado")
@@ -1179,11 +1179,11 @@ def handle_map_click_multiple(map_data, features_data, feature_type, filters, ca
             clicked_lng = clicked_object.get('lng')
             
             if clicked_lat and clicked_lng:
-                feature_clicked = find_closest_feature(clicked_lat, clicked_lng, features_data, feature_type)
+                feature_clicked = find_closest_feature_optimized(clicked_lat, clicked_lng, features_data, feature_type)
                 
                 if feature_clicked:
                     # Agregar/quitar de selección múltiple
-                    toggle_multiple_selection(feature_clicked, feature_type, filters)
+                    toggle_multiple_selection_optimized(feature_clicked, feature_type, filters)
                     
                     # Mensaje informativo
                     current_selection = get_current_multiple_selection(feature_type, filters)

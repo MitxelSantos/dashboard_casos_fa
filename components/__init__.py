@@ -10,7 +10,7 @@ from .filters import (
     create_unified_filter_system,
     create_hierarchical_filters_with_multiselect,
     create_temporal_filters_optimized,
-    create_advanced_filters,
+    create_advanced_filters_optimized,
     apply_all_filters_multiple,
     reset_all_filters,
     show_active_filters,
