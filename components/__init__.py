@@ -8,7 +8,7 @@ from .sidebar import create_sidebar, init_responsive_sidebar, add_copyright
 # ===== FILTERS (OPTIMIZADO) =====
 from .filters import (
     create_unified_filter_system,
-    create_hierarchical_filters_with_multiselect,
+    create_hierarchical_filters_with_multiselect_authoritative,
     create_temporal_filters_optimized,
     create_advanced_filters_optimized,
     apply_all_filters_multiple,

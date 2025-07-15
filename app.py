@@ -41,7 +41,7 @@ try:
     from utils.data_processor import (
         excel_date_to_datetime, 
         calculate_basic_metrics,
-        process_complete_data_structure,
+        process_complete_data_structure_authoritative,
         handle_empty_area_filter
     )
     from components.filters import create_unified_filter_system
@@ -132,7 +132,7 @@ def load_data():
             
             if data_gdrive:
                 logger.info(f"✅ Google Drive exitoso: {len(data_gdrive['casos'])} casos, {len(data_gdrive['epizootias'])} epizootias")
-                return process_complete_data_structure(
+                return process_complete_data_structure_authoritative(
                     data_gdrive['casos'], 
                     data_gdrive['epizootias'], 
                     data_dir=DATA_DIR
@@ -275,7 +275,7 @@ def process_loaded_data_integrated(casos_df, epizootias_df):
         logger.info(f"🔵 Epizootias filtradas: {len(epizootias_df)} de {total_original}")
     
     # USAR FUNCIÓN DE ESTRUCTURA COMPLETA
-    return process_complete_data_structure(
+    return process_complete_data_structure_authoritative(
         casos_df, 
         epizootias_df, 
         data_dir=DATA_DIR

@@ -1,8 +1,5 @@
 """
-Componente de filtros OPTIMIZADO.
-- Fecha actual como máximo
-- Rangos de edad NO se muestran como filtros aplicados
-- Mantener toda la funcionalidad existente
+Componente de filtros.
 """
 
 import streamlit as st
@@ -13,7 +10,7 @@ from datetime import datetime, timedelta
 logger = logging.getLogger(__name__)
 
 def apply_filters_css(colors):
-    """CSS optimizado para filtros múltiples."""
+    """CSS para filtros múltiples."""
     st.markdown(
         f"""
         <style>
@@ -89,42 +86,68 @@ def apply_filters_css(colors):
         unsafe_allow_html=True,
     )
 
-def extract_regiones_from_veredas_data(data):
-    """Extrae regiones desde la hoja VEREDAS de BD_positivos.xlsx."""
+def extract_regiones_from_veredas_data_authoritative(data):
+    """Extrae regiones desde hoja VEREDAS AUTORITATIVA."""
     regiones = {}
     
-    # Intentar obtener desde veredas_completas
+    # Intentar obtener desde veredas_completas (hoja VEREDAS)
     if "veredas_completas" in data and not data["veredas_completas"].empty:
         veredas_df = data["veredas_completas"]
         
-        if "region" in veredas_df.columns and "municipio" in veredas_df.columns:
-            logger.info("🗂️ Cargando regiones desde hoja VEREDAS")
+        if "region" in veredas_df.columns and "municipi_1" in veredas_df.columns:
+            logger.info("🗂️ Cargando regiones desde hoja VEREDAS AUTORITATIVA")
             
             for region in veredas_df["region"].dropna().unique():
-                municipios_region = veredas_df[veredas_df["region"] == region]["municipio"].dropna().unique()
-                # Normalizar nombres de municipios
-                municipios_norm = [str(m).upper().strip() for m in municipios_region]
-                regiones[region] = sorted(list(set(municipios_norm)))
+                municipios_region = veredas_df[veredas_df["region"] == region]["municipi_1"].dropna().unique()
+                # NO normalizar nombres - mantener exactos de hoja VEREDAS
+                regiones[region] = sorted(list(set(municipios_region)))
             
-            logger.info(f"✅ Regiones cargadas desde VEREDAS: {list(regiones.keys())}")
+            logger.info(f"✅ Regiones cargadas desde hoja VEREDAS: {list(regiones.keys())}")
             return regiones
     
-    # Fallback: regiones predefinidas si no hay datos
-    logger.warning("⚠️ No se pudieron cargar regiones desde VEREDAS, usando fallback")
-    return {
-        "Norte": ["FALAN", "FRESNO", "HERVEO", "LERIDA", "LIBANO", "MURILLO", "PALOCABILDO", "SANTA ISABEL", "VILLAHERMOSA"],
-        "Centro": ["ALVARADO", "IBAGUE", "CAJAMARCA", "COELLO", "ESPINAL", "FLANDES", "GUAMO", "PIEDRAS", "ROVIRA", "VALLE DE SAN JUAN"],
-        "Sur": ["ALPUJARRA", "ATACO", "CHAPARRAL", "COYAIMA", "DOLORES", "NATAGAIMA", "ORTEGA", "PLANADAS", "RIOBLANCO", "RONCESVALLES", "SAN ANTONIO"],
-        "Oriente": ["CUNDAY", "ICONONZO", "MELGAR", "CARMEN DE APICALA", "VENADILLO", "CASABIANCA"],
-        "Magdalena": ["AMBALEMA", "ARMERO", "HONDA", "MARIQUITA", "SALDAÑA"],
-        "Suarez": ["SUAREZ", "PURIFICACION", "PRADO", "SAN LUIS", "VILLARRICA"]
-    }
+    # Si hay regiones en data directamente
+    if "regiones" in data and data["regiones"]:
+        logger.info("🗂️ Usando regiones desde data procesada")
+        return data["regiones"]
+    
+    # Fallback: regiones predefinidas como último recurso
+    logger.warning("⚠️ No se pudieron cargar regiones desde hoja VEREDAS, usando fallback")
+    return create_regiones_fallback(data)
 
-def create_hierarchical_filters_with_multiselect(data):
-    """Filtros jerárquicos CORREGIDOS con soporte para selección múltiple."""
+def create_regiones_fallback(data):
+    """Crea regiones fallback usando municipios disponibles."""
+    municipios_disponibles = data.get("municipios_authoritativos", data.get("municipios_normalizados", []))
+    
+    # Mapeo básico de regiones (ajustar según nombres exactos en hoja VEREDAS)
+    regiones_fallback = {
+        "Norte": ["Falan", "Fresno", "Herveo", "Lerida", "Libano", "Murillo", "Palocabildo", "Santa Isabel", "Villahermosa"],
+        "Centro": ["Alvarado", "Ibague", "Cajamarca", "Coello", "Espinal", "Flandes", "Guamo", "Piedras", "Rovira", "Valle de San Juan"],
+        "Sur": ["Alpujarra", "Ataco", "Chaparral", "Coyaima", "Dolores", "Natagaima", "Ortega", "Planadas", "Rioblanco", "Roncesvalles", "San Antonio"],
+        "Oriente": ["Cunday", "Icononzo", "Melgar", "Carmen de Apicala", "Venadillo", "Casabianca"],
+        "Magdalena": ["Ambalema", "Armero", "Honda", "Mariquita", "Saldaña"],
+        "Suarez": ["Suarez", "Purificacion", "Prado", "San Luis", "Villarrica"]
+    }
+    
+    # Filtrar solo municipios que existen en los datos
+    regiones_filtradas = {}
+    for region, municipios in regiones_fallback.items():
+        municipios_existentes = [m for m in municipios if m in municipios_disponibles]
+        if municipios_existentes:
+            regiones_filtradas[region] = municipios_existentes
+    
+    return regiones_filtradas
+
+def create_hierarchical_filters_with_multiselect_authoritative(data):
+    """Filtros jerárquicos usando hoja VEREDAS como fuente AUTORITATIVA."""
     
     # Selector de modo de filtrado
     st.sidebar.markdown("### 🎯 Modo de Filtrado")
+    
+    # Mostrar información sobre fuente de datos
+    if data.get('data_source') == 'hoja_veredas_autoritativa':
+        st.sidebar.markdown("✅ **Fuente:** Hoja VEREDAS", help="Datos tomados de la hoja VEREDAS como fuente autoritativa")
+    else:
+        st.sidebar.markdown("⚠️ **Fuente:** Fallback", help="Hoja VEREDAS no disponible, usando datos alternativos")
     
     filtro_modo = st.sidebar.radio(
         "Seleccione el tipo de filtrado:",
@@ -135,20 +158,28 @@ def create_hierarchical_filters_with_multiselect(data):
     )
     
     if filtro_modo == "Único":
-        return create_single_filters(data)
+        return create_single_filters_authoritative(data)
     else:
-        return create_multiple_filters_corrected(data)
+        return create_multiple_filters_corrected_authoritative(data)
 
-def create_single_filters(data):
-    """Filtros únicos (lógica original)."""
+def create_single_filters_authoritative(data):
+    """Filtros únicos usando hoja VEREDAS como fuente AUTORITATIVA."""
+    
+    # USAR HOJA VEREDAS para opciones de municipios
+    if 'municipios_authoritativos' in data and data['municipios_authoritativos']:
+        logger.info("✅ Usando municipios authoritativos de hoja VEREDAS para filtro único")
+        municipio_options = ["Todos"] + data['municipios_authoritativos']
+    else:
+        logger.warning("⚠️ Hoja VEREDAS no disponible para filtro único, usando fallback")
+        municipio_options = ["Todos"] + data.get("municipios_normalizados", [])
+    
     # Filtro de municipio
-    municipio_options = ["Todos"] + data["municipios_normalizados"]
     municipio_selected = st.sidebar.selectbox(
         "📍 MUNICIPIO:",
         municipio_options,
         index=get_initial_index(municipio_options, "municipio_filter"),
         key="municipio_filter_widget",
-        help="Seleccione un municipio para filtrar los datos"
+        help="Seleccione un municipio (fuente: hoja VEREDAS)"
     )
     st.session_state["municipio_filter"] = municipio_selected
 
@@ -157,7 +188,8 @@ def create_single_filters(data):
     vereda_disabled = municipio_selected == "Todos"
     
     if not vereda_disabled:
-        veredas = get_veredas_for_municipio(data, municipio_selected)
+        # USAR HOJA VEREDAS para obtener veredas del municipio
+        veredas = get_veredas_for_municipio_authoritative(data, municipio_selected)
         vereda_options.extend(sorted(veredas))
 
     vereda_selected = st.sidebar.selectbox(
@@ -166,7 +198,7 @@ def create_single_filters(data):
         index=get_initial_index(vereda_options, "vereda_filter"),
         key="vereda_filter_widget",
         disabled=vereda_disabled,
-        help="Las veredas se actualizan según el municipio"
+        help="Las veredas se actualizan según el municipio (fuente: hoja VEREDAS)"
     )
     
     if not vereda_disabled:
@@ -185,19 +217,26 @@ def create_single_filters(data):
         "veredas_seleccionadas": [vereda_selected] if vereda_selected != "Todas" else [],
     }
 
-def create_multiple_filters_corrected(data):
-    """Filtros múltiples CORREGIDOS con agrupación."""
+def create_multiple_filters_corrected_authoritative(data):
+    """Filtros múltiples usando hoja VEREDAS como fuente AUTORITATIVA."""
     
     st.sidebar.markdown('<div class="multiselect-section">', unsafe_allow_html=True)
     st.sidebar.markdown("#### 🗂️ Selección Múltiple")
     
-    # Obtener regiones desde datos VEREDAS
-    regiones_tolima = extract_regiones_from_veredas_data(data)
+    if 'municipios_authoritativos' in data and data['municipios_authoritativos']:
+        logger.info("✅ Usando municipios authoritativos de hoja VEREDAS")
+        municipios_options = data['municipios_authoritativos']
+    else:
+        logger.warning("⚠️ Usando municipios_normalizados como fallback")
+        municipios_options = data["municipios_normalizados"]
+    
+    # USAR HOJA VEREDAS para regiones
+    regiones_tolima = extract_regiones_from_veredas_data_authoritative(data)
     
     # Mostrar grupos predefinidos de municipios
     st.sidebar.markdown("**Grupos por Región:**")
     
-    # Crear botones para cada región CORREGIDO
+    # Crear botones para cada región
     cols = st.sidebar.columns(2)
     region_names = list(regiones_tolima.keys())
     
@@ -210,7 +249,7 @@ def create_multiple_filters_corrected(data):
                 use_container_width=True,
                 help=f"Seleccionar todos los municipios de {region}"
             ):
-                # CORREGIDO: Inicializar si no existe
+                # Inicializar si no existe
                 if "municipios_multiselect" not in st.session_state:
                     st.session_state.municipios_multiselect = []
                 
@@ -224,17 +263,32 @@ def create_multiple_filters_corrected(data):
                 st.session_state.municipios_multiselect = current_selection
                 st.rerun()
     
-    # Inicializar default para multiselect
-    default_municipios = st.session_state.get("municipios_multiselect", [])
+    # USAR HOJA VEREDAS como fuente autoritativa para opciones
+    if 'municipios_authoritativos' in data and data['municipios_authoritativos']:
+        logger.info("✅ Usando municipios authoritativos de hoja VEREDAS")
+        municipios_options = data.get("municipios_authoritativos", data["municipios_normalizados"])
+    else:
+        logger.warning("⚠️ Hoja VEREDAS no disponible, usando fallback")
+        municipios_options = data.get("municipios_normalizados", [])
+    
+    # Validar valores por defecto para asegurar que estén en opciones AUTORITATIVAS
+    raw_default_municipios = st.session_state.get("municipios_multiselect", [])
+    default_municipios = [m for m in raw_default_municipios if m in municipios_options]
+    
+    # Si hubo valores inválidos, limpiar el session_state y reportar
+    if len(default_municipios) != len(raw_default_municipios):
+        invalid_values = [m for m in raw_default_municipios if m not in municipios_options]
+        st.session_state.municipios_multiselect = default_municipios
+        logger.warning(f"🔧 Valores inválidos removidos: {invalid_values}")
+        logger.info(f"✅ Valores válidos mantenidos: {default_municipios}")
     
     # Selector múltiple de municipios
-    municipios_options = data["municipios_normalizados"]
     municipios_selected = st.sidebar.multiselect(
         "📍 MUNICIPIOS:",
         municipios_options,
         default=default_municipios,
         key="municipios_multiselect_widget",
-        help="Seleccione uno o más municipios"
+        help="Seleccione uno o más municipios (fuente: hoja VEREDAS)"
     )
     
     # Sincronizar con session_state
@@ -243,21 +297,28 @@ def create_multiple_filters_corrected(data):
     # Si hay municipios seleccionados, mostrar selector de veredas
     veredas_selected = []
     if municipios_selected:
-        todas_las_veredas = []
-        for municipio in municipios_selected:
-            veredas_municipio = get_veredas_for_municipio(data, municipio)
-            todas_las_veredas.extend(veredas_municipio)
+        # USAR HOJA VEREDAS para obtener veredas
+        todas_las_veredas = get_veredas_for_municipios_authoritative(municipios_selected, data)
         
         if todas_las_veredas:
-            # Inicializar default para veredas
-            default_veredas = st.session_state.get("veredas_multiselect", [])
+            # Validar valores por defecto para veredas también
+            veredas_options = sorted(set(todas_las_veredas))
+            raw_default_veredas = st.session_state.get("veredas_multiselect", [])
+            default_veredas = [v for v in raw_default_veredas if v in veredas_options]
+            
+            # Si hubo valores inválidos, limpiar el session_state
+            if len(default_veredas) != len(raw_default_veredas):
+                invalid_veredas = [v for v in raw_default_veredas if v not in veredas_options]
+                st.session_state.veredas_multiselect = default_veredas
+                logger.warning(f"🔧 Veredas inválidas removidas: {invalid_veredas}")
+                logger.info(f"✅ Veredas válidas mantenidas: {default_veredas}")
             
             veredas_selected = st.sidebar.multiselect(
                 "🏘️ VEREDAS:",
-                sorted(set(todas_las_veredas)),
+                veredas_options,
                 default=default_veredas,
                 key="veredas_multiselect_widget",
-                help="Veredas de los municipios seleccionados"
+                help="Veredas de los municipios seleccionados (fuente: hoja VEREDAS)"
             )
             
             # Sincronizar con session_state
@@ -282,6 +343,16 @@ def create_multiple_filters_corrected(data):
         "veredas_seleccionadas": veredas_selected,
         "regiones_disponibles": regiones_tolima,
     }
+    
+def get_veredas_for_municipios_authoritative(municipios_selected, data):
+    """Obtiene veredas para múltiples municipios usando hoja VEREDAS AUTORITATIVA."""
+    todas_las_veredas = []
+    
+    for municipio in municipios_selected:
+        veredas_municipio = get_veredas_for_municipio_authoritative(data, municipio)
+        todas_las_veredas.extend(veredas_municipio)
+    
+    return todas_las_veredas
 
 def create_map_mode_selector(colors):
     """Selector de modo del mapa: epidemiológico vs cobertura."""
@@ -455,7 +526,7 @@ def create_unified_filter_system(data):
     modo_mapa = create_map_mode_selector(COLORS)
 
     # Crear filtros según tipo
-    filters_location = create_hierarchical_filters_with_multiselect(data)
+    filters_location = create_hierarchical_filters_with_multiselect_authoritative(data)
     filters_temporal = create_temporal_filters_optimized(data)  # OPTIMIZADO
     filters_advanced = create_advanced_filters_optimized(data)  # OPTIMIZADO
 
@@ -663,23 +734,22 @@ def get_initial_index(options, session_key):
             return options.index(current_value)
     return 0
 
-def get_veredas_for_municipio(data, municipio_selected):
-    municipio_norm = normalize_name(municipio_selected)
-    veredas = set()
+def get_veredas_for_municipio_authoritative(data, municipio_selected):
+    """Obtiene veredas para un municipio usando hoja VEREDAS AUTORITATIVA."""
+    veredas_por_municipio = data.get('veredas_por_municipio', {})
     
-    if not data["casos"].empty and "vereda" in data["casos"].columns and "municipio" in data["casos"].columns:
-        casos_municipio = data["casos"][
-            data["casos"]["municipio"].apply(normalize_name) == municipio_norm
-        ]
-        veredas.update(casos_municipio["vereda"].dropna().unique())
+    # Búsqueda directa
+    if municipio_selected in veredas_por_municipio:
+        return veredas_por_municipio[municipio_selected]
     
-    if not data["epizootias"].empty and "vereda" in data["epizootias"].columns and "municipio" in data["epizootias"].columns:
-        epi_municipio = data["epizootias"][
-            data["epizootias"]["municipio"].apply(normalize_name) == municipio_norm
-        ]
-        veredas.update(epi_municipio["vereda"].dropna().unique())
+    # Búsqueda case-insensitive
+    for municipio, veredas in veredas_por_municipio.items():
+        if municipio_selected.lower() == municipio.lower():
+            logger.info(f"🔗 Mapeo case-insensitive para veredas: '{municipio_selected}' → '{municipio}'")
+            return veredas
     
-    return [v for v in veredas if v and str(v).strip()]
+    logger.warning(f"⚠️ No se encontraron veredas para '{municipio_selected}' en hoja VEREDAS")
+    return []
 
 def get_available_dates(data):
     fechas = []

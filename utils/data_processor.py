@@ -1,6 +1,5 @@
 """
 utils/data_processor.py
-Procesador de datos con manejo completo de municipios y veredas.
 """
 
 import pandas as pd
@@ -120,21 +119,18 @@ def format_time_elapsed(days):
 
 # ===== NUEVAS FUNCIONES: CARGA DE LISTA COMPLETA =====
 
-def load_complete_veredas_list(data_dir=None):
+def load_complete_veredas_list_authoritative(data_dir=None):
     """
-    Carga la lista completa de veredas desde BD_positivos.xlsx hoja "VEREDAS".
+    Carga la lista completa de veredas desde BD_positivos.xlsx hoja "VEREDAS" 
+    como FUENTE AUTORITATIVA.
     
     Args:
         data_dir: Directorio donde buscar el archivo (opcional)
     
     Returns:
-        dict: {
-            'veredas_por_municipio': {municipio: [lista_veredas]},
-            'municipios_completos': [lista_municipios],
-            'veredas_completas': DataFrame con toda la info
-        }
+        dict: Estructura completa con mapeo bidireccional
     """
-    logger.info("🗂️ Cargando lista completa de veredas desde BD_positivos.xlsx")
+    logger.info("🗂️ Cargando hoja VEREDAS como fuente AUTORITATIVA")
     
     # Rutas posibles para el archivo
     possible_paths = []
@@ -163,7 +159,7 @@ def load_complete_veredas_list(data_dir=None):
                 
                 if "VEREDAS" in excel_file.sheet_names:
                     veredas_df = pd.read_excel(path, sheet_name="VEREDAS", engine="openpyxl")
-                    logger.info(f"✅ Lista de veredas cargada desde {path}")
+                    logger.info(f"✅ Hoja VEREDAS cargada desde {path}")
                     break
                 else:
                     logger.warning(f"⚠️ Hoja 'VEREDAS' no encontrada en {path}")
@@ -174,19 +170,19 @@ def load_complete_veredas_list(data_dir=None):
                 continue
     
     if veredas_df is None:
-        logger.warning("⚠️ No se pudo cargar lista completa de veredas")
-        return create_fallback_veredas_structure()
+        logger.error("❌ NO se pudo cargar hoja VEREDAS - CRÍTICO")
+        return create_emergency_fallback()
     
-    # Procesar DataFrame de veredas
-    return process_veredas_dataframe(veredas_df)
+    # Procesar DataFrame de veredas como FUENTE AUTORITATIVA
+    return process_veredas_dataframe_authoritative(veredas_df)
 
-def process_veredas_dataframe(veredas_df):
+def process_veredas_dataframe_authoritative(veredas_df):
     """
-    Procesa el DataFrame de veredas cargado desde Excel.
+    Procesa el DataFrame de veredas como FUENTE AUTORITATIVA.
     
-    Expected columns: CODIGO_VER, NOM_DEP, municipi_1, vereda_nor, región
+    Expected columns: CODIGO_VER, NOM_DEP, municipi_1, vereda_nor, region
     """
-    logger.info(f"🔧 Procesando DataFrame de veredas: {len(veredas_df)} registros")
+    logger.info(f"🔧 Procesando hoja VEREDAS como AUTORITATIVA: {len(veredas_df)} registros")
     
     # Limpiar datos básicos
     veredas_df = veredas_df.dropna(how="all")
@@ -194,92 +190,270 @@ def process_veredas_dataframe(veredas_df):
     # Limpiar nombres de columnas
     veredas_df.columns = veredas_df.columns.str.strip()
     
-    # Normalizar nombres de columnas esperadas
-    column_mapping = {
-        'CODIGO_VER': 'codigo_vereda',
-        'NOM_DEP': 'departamento', 
-        'municipi_1': 'municipio',
-        'vereda_nor': 'vereda',
-        'región': 'region'
-    }
-    
-    # Aplicar mapeo solo a columnas existentes
-    existing_mapping = {k: v for k, v in column_mapping.items() if k in veredas_df.columns}
-    veredas_df = veredas_df.rename(columns=existing_mapping)
-    
-    # Verificar columnas críticas
-    required_columns = ['municipio', 'vereda']
+    # Verificar columnas requeridas
+    required_columns = ['municipi_1', 'vereda_nor']
     missing_columns = [col for col in required_columns if col not in veredas_df.columns]
     
     if missing_columns:
-        logger.error(f"❌ Columnas faltantes: {missing_columns}")
+        logger.error(f"❌ Columnas CRÍTICAS faltantes en hoja VEREDAS: {missing_columns}")
         logger.info(f"📋 Columnas disponibles: {list(veredas_df.columns)}")
-        return create_fallback_veredas_structure()
+        return create_emergency_fallback()
     
-    # Normalizar nombres
-    def normalize_name(name):
-        if pd.isna(name) or name == "":
-            return ""
-        return str(name).upper().strip()
-    
-    veredas_df['municipio_norm'] = veredas_df['municipio'].apply(normalize_name)
-    veredas_df['vereda_norm'] = veredas_df['vereda'].apply(normalize_name)
-    
-    # Filtrar registros válidos
+    # LIMPIAR datos pero NO normalizar (mantener nombres exactos de shapefiles)
     veredas_df = veredas_df[
-        (veredas_df['municipio_norm'] != "") & 
-        (veredas_df['vereda_norm'] != "")
+        (veredas_df['municipi_1'].notna()) & 
+        (veredas_df['vereda_nor'].notna()) &
+        (veredas_df['municipi_1'].str.strip() != '') &
+        (veredas_df['vereda_nor'].str.strip() != '')
     ]
     
-    # Crear estructuras de datos
-    veredas_por_municipio = {}
-    municipios_completos = sorted(veredas_df['municipio_norm'].unique())
+    # Limpiar espacios pero NO cambiar case
+    veredas_df['municipi_1'] = veredas_df['municipi_1'].str.strip()
+    veredas_df['vereda_nor'] = veredas_df['vereda_nor'].str.strip()
     
-    for municipio in municipios_completos:
-        veredas_municipio = veredas_df[veredas_df['municipio_norm'] == municipio]
-        veredas_lista = sorted(veredas_municipio['vereda_norm'].unique())
+    # Crear estructuras de datos USANDO NOMBRES EXACTOS
+    veredas_por_municipio = {}
+    municipios_authoritativos = sorted(veredas_df['municipi_1'].unique())
+    
+    for municipio in municipios_authoritativos:
+        veredas_municipio = veredas_df[veredas_df['municipi_1'] == municipio]
+        veredas_lista = sorted(veredas_municipio['vereda_nor'].unique())
         veredas_por_municipio[municipio] = veredas_lista
     
-    # Crear mapeo display
-    municipio_display_map = {}
+    # Crear mapeo display (nombres exactos = nombres display)
+    municipio_display_map = {municipio: municipio for municipio in municipios_authoritativos}
     vereda_display_map = {}
     
     for _, row in veredas_df.iterrows():
-        municipio_norm = row['municipio_norm']
-        vereda_norm = row['vereda_norm']
-        municipio_original = row['municipio']
-        vereda_original = row['vereda']
-        
-        if municipio_norm not in municipio_display_map:
-            municipio_display_map[municipio_norm] = municipio_original
-        
-        vereda_key = f"{municipio_norm}|{vereda_norm}"
-        if vereda_key not in vereda_display_map:
-            vereda_display_map[vereda_key] = vereda_original
+        municipio = row['municipi_1']
+        vereda = row['vereda_nor']
+        vereda_key = f"{municipio}|{vereda}"
+        vereda_display_map[vereda_key] = vereda
     
-    logger.info(f"✅ Procesado: {len(municipios_completos)} municipios, {len(veredas_df)} veredas")
+    # Extraer regiones si están disponibles
+    regiones = {}
+    if 'region' in veredas_df.columns:
+        regiones = get_regiones_from_dataframe_authoritative(veredas_df)
+    
+    logger.info(f"✅ HOJA VEREDAS procesada: {len(municipios_authoritativos)} municipios, {len(veredas_df)} veredas")
     
     return {
         'veredas_por_municipio': veredas_por_municipio,
-        'municipios_completos': municipios_completos,
+        'municipios_authoritativos': municipios_authoritativos,  # NUEVA KEY
         'veredas_completas': veredas_df,
         'municipio_display_map': municipio_display_map,
         'vereda_display_map': vereda_display_map,
-        'regiones': get_regiones_from_dataframe(veredas_df) if 'region' in veredas_df.columns else {}
+        'regiones': regiones,
+        'source': 'hoja_veredas_autoritativa'
+    }
+    
+def create_emergency_fallback():
+    """Fallback de emergencia si no se puede cargar hoja VEREDAS."""
+    logger.error("🚨 USANDO FALLBACK DE EMERGENCIA - hoja VEREDAS no disponible")
+    
+    # Lista mínima de municipios (nombres como están en shapefiles)
+    municipios_emergency = [
+        "Ibague", "Alpujarra", "Alvarado", "Ambalema", "Anzoategui",
+        "Armero", "Ataco", "Cajamarca", "Carmen de Apicala", "Casabianca", 
+        "Chaparral", "Coello", "Coyaima", "Cunday", "Dolores",
+        "Espinal", "Falan", "Flandes", "Fresno", "Guamo",
+        "Herveo", "Honda", "Icononzo", "Lerida", "Libano",
+        "Mariquita", "Melgar", "Murillo", "Natagaima", "Ortega",
+        "Palocabildo", "Piedras", "Planadas", "Prado", "Purificacion",
+        "Rioblanco", "Roncesvalles", "Rovira", "Saldaña", "San Antonio",
+        "San Luis", "Santa Isabel", "Suarez", "Valle de San Juan",
+        "Venadillo", "Villahermosa", "Villarrica"
+    ]
+    
+    veredas_por_municipio = {}
+    municipio_display_map = {}
+    
+    for municipio in municipios_emergency:
+        veredas_por_municipio[municipio] = [f"{municipio} Centro"]
+        municipio_display_map[municipio] = municipio
+    
+    return {
+        'veredas_por_municipio': veredas_por_municipio,
+        'municipios_authoritativos': municipios_emergency,
+        'veredas_completas': pd.DataFrame(),
+        'municipio_display_map': municipio_display_map,
+        'vereda_display_map': {},
+        'regiones': {},
+        'source': 'emergency_fallback'
     }
 
-def get_regiones_from_dataframe(veredas_df):
-    """Extrae información de regiones del DataFrame."""
+def create_shapefile_to_veredas_mapping(shapefile_data, veredas_data):
+    """
+    Crea mapeo bidireccional entre nombres de shapefiles y hoja VEREDAS.
+    
+    Args:
+        shapefile_data: GeoDataFrame con municipios del shapefile
+        veredas_data: Dict con datos de hoja VEREDAS
+    
+    Returns:
+        dict: Mapeo bidireccional
+    """
+    logger.info("🔗 Creando mapeo shapefile ↔ hoja VEREDAS")
+    
+    shapefile_names = []
+    if 'municipios' in shapefile_data and not shapefile_data['municipios'].empty:
+        municipios_gdf = shapefile_data['municipios']
+        
+        # Obtener nombres de municipios del shapefile
+        if 'municipi_1' in municipios_gdf.columns:
+            shapefile_names = municipios_gdf['municipi_1'].dropna().unique().tolist()
+        elif 'MpNombre' in municipios_gdf.columns:
+            shapefile_names = municipios_gdf['MpNombre'].dropna().unique().tolist()
+    
+    veredas_names = veredas_data.get('municipios_authoritativos', [])
+    
+    # Crear mapeo directo y detectar inconsistencias
+    shapefile_to_veredas = {}
+    veredas_to_shapefile = {}
+    inconsistencias = []
+    
+    for shapefile_name in shapefile_names:
+        shapefile_clean = shapefile_name.strip()
+        
+        # Buscar coincidencia exacta
+        if shapefile_clean in veredas_names:
+            shapefile_to_veredas[shapefile_clean] = shapefile_clean
+            veredas_to_shapefile[shapefile_clean] = shapefile_clean
+        else:
+            # Buscar coincidencia similar (case-insensitive)
+            found_match = False
+            for veredas_name in veredas_names:
+                if shapefile_clean.lower() == veredas_name.lower():
+                    shapefile_to_veredas[shapefile_clean] = veredas_name
+                    veredas_to_shapefile[veredas_name] = shapefile_clean
+                    found_match = True
+                    logger.info(f"🔗 Mapeo automático: '{shapefile_clean}' → '{veredas_name}'")
+                    break
+            
+            if not found_match:
+                inconsistencias.append({
+                    'shapefile': shapefile_clean,
+                    'sugerencia': 'Revisar hoja VEREDAS',
+                    'tipo': 'no_encontrado'
+                })
+    
+    # Reportar inconsistencias
+    if inconsistencias:
+        logger.warning(f"⚠️ {len(inconsistencias)} inconsistencias detectadas:")
+        for inconsistencia in inconsistencias:
+            logger.warning(f"  - Shapefile: '{inconsistencia['shapefile']}' no encontrado en hoja VEREDAS")
+    
+    logger.info(f"✅ Mapeo creado: {len(shapefile_to_veredas)} municipios mapeados")
+    
+    return {
+        'shapefile_to_veredas': shapefile_to_veredas,
+        'veredas_to_shapefile': veredas_to_shapefile,
+        'inconsistencias': inconsistencias,
+        'shapefile_names': shapefile_names,
+        'veredas_names': veredas_names
+    }
+
+def process_complete_data_structure_authoritative(casos_df, epizootias_df, shapefile_data=None, data_dir=None):
+    """
+    Función principal que procesa datos usando hoja VEREDAS como AUTORITATIVA.
+    
+    Args:
+        casos_df: DataFrame de casos
+        epizootias_df: DataFrame de epizootias
+        shapefile_data: Datos de shapefiles (opcional)
+        data_dir: Directorio para buscar archivos adicionales
+    
+    Returns:
+        dict: Estructura completa con hoja VEREDAS como autoritativa
+    """
+    logger.info("🚀 Procesando estructura con hoja VEREDAS como AUTORITATIVA")
+    
+    # Procesar DataFrames básicos
+    casos_processed = process_casos_dataframe(casos_df)
+    epizootias_processed = process_epizootias_dataframe(epizootias_df)
+    
+    # Cargar datos AUTHORITATIVOS de hoja VEREDAS
+    veredas_data = load_complete_veredas_list_authoritative(data_dir)
+    
+    # Crear mapeo con shapefiles si están disponibles
+    shapefile_mapping = {}
+    if shapefile_data:
+        shapefile_mapping = create_shapefile_to_veredas_mapping(shapefile_data, veredas_data)
+    
+    # Obtener ubicaciones de los datos actuales
+    ubicaciones_actuales = get_unique_locations(casos_processed, epizootias_processed)
+    
+    # USAR HOJA VEREDAS como base, complementar con datos actuales
+    municipios_authoritativos = veredas_data['municipios_authoritativos']
+    veredas_por_municipio = veredas_data['veredas_por_municipio'].copy()
+    
+    # Agregar municipios que aparecen en datos pero no en hoja VEREDAS
+    municipios_adicionales = []
+    for municipio in ubicaciones_actuales['municipios']:
+        if municipio not in municipios_authoritativos:
+            municipios_adicionales.append(municipio)
+            if municipio not in veredas_por_municipio:
+                veredas_por_municipio[municipio] = [f"{municipio} Centro"]
+    
+    if municipios_adicionales:
+        logger.warning(f"⚠️ Municipios en datos pero NO en hoja VEREDAS: {municipios_adicionales}")
+    
+    # Agregar veredas que aparecen en datos pero no en hoja VEREDAS
+    for municipio, veredas_data_current in ubicaciones_actuales['veredas_por_municipio'].items():
+        if municipio in veredas_por_municipio:
+            veredas_existentes = set(veredas_por_municipio[municipio])
+            veredas_nuevas = set(veredas_data_current)
+            veredas_adicionales = veredas_nuevas - veredas_existentes
+            
+            if veredas_adicionales:
+                logger.warning(f"⚠️ Veredas en datos pero NO en hoja VEREDAS para {municipio}: {list(veredas_adicionales)}")
+                veredas_por_municipio[municipio].extend(sorted(veredas_adicionales))
+    
+    # Crear lista final de municipios
+    municipios_finales = sorted(set(municipios_authoritativos + municipios_adicionales))
+    
+    # Crear mapeos display
+    municipio_display_map = veredas_data['municipio_display_map'].copy()
+    for municipio in municipios_adicionales:
+        municipio_display_map[municipio] = municipio
+    
+    # Resultado final
+    resultado = {
+        "casos": casos_processed,
+        "epizootias": epizootias_processed,
+        "municipios_normalizados": municipios_finales,  # MANTENER NOMBRE PARA COMPATIBILIDAD
+        "municipios_authoritativos": municipios_authoritativos,  # NUEVA KEY
+        "veredas_por_municipio": veredas_por_municipio,
+        "municipio_display_map": municipio_display_map,
+        "vereda_display_map": veredas_data['vereda_display_map'],
+        "veredas_completas": veredas_data['veredas_completas'],
+        "regiones": veredas_data.get('regiones', {}),
+        "shapefile_mapping": shapefile_mapping,
+        "data_source": "hoja_veredas_autoritativa"
+    }
+    
+    # Agregar función de manejo de áreas sin datos
+    resultado["handle_empty_area"] = handle_empty_area_filter
+    resultado["validate_location"] = lambda municipio, vereda: validate_location_exists(
+        municipio, vereda, resultado
+    )
+    
+    logger.info(f"✅ Estructura AUTORITATIVA completada: {len(municipios_finales)} municipios, {sum(len(v) for v in veredas_por_municipio.values())} veredas")
+    
+    return resultado
+
+def get_regiones_from_dataframe_authoritative(veredas_df):
+    """Extrae información de regiones del DataFrame AUTORITATIVO."""
     if 'region' not in veredas_df.columns:
         return {}
     
     regiones = {}
     
     for region in veredas_df['region'].dropna().unique():
-        municipios_region = veredas_df[veredas_df['region'] == region]['municipio_norm'].unique()
-        regiones[region] = sorted(municipios_region)
+        municipios_region = veredas_df[veredas_df['region'] == region]['municipi_1'].unique()
+        regiones[region] = sorted(municipios_region)  # NO normalizar
     
-    logger.info(f"🗺️ Regiones identificadas: {list(regiones.keys())}")
+    logger.info(f"🗺️ Regiones extraídas: {list(regiones.keys())}")
     return regiones
 
 def create_fallback_veredas_structure():
@@ -645,7 +819,7 @@ def integrate_complete_data_structure(casos_df, epizootias_df, data_dir=None):
     logger.info("🔗 Integrando estructura completa de datos")
     
     # Cargar lista completa de veredas
-    complete_veredas = load_complete_veredas_list(data_dir)
+    complete_veredas = load_complete_veredas_list_authoritative(data_dir)
     
     # Obtener ubicaciones de los datos actuales
     ubicaciones_actuales = get_unique_locations(casos_df, epizootias_df)
@@ -860,42 +1034,3 @@ def verify_filtered_data_usage(data, context=""):
     total_rows = len(data)
     logger.debug(f"✅ {context}: {total_rows} registros")
     return True
-
-# ===== FUNCIÓN PRINCIPAL DE INTEGRACIÓN =====
-
-def process_complete_data_structure(casos_df, epizootias_df, data_dir=None):
-    """
-    Función principal que procesa y crea la estructura completa de datos.
-    
-    Esta función debe ser llamada desde app.py en lugar de las funciones individuales.
-    
-    Args:
-        casos_df: DataFrame de casos
-        epizootias_df: DataFrame de epizootias
-        data_dir: Directorio para buscar archivos adicionales
-    
-    Returns:
-        dict: Estructura completa con manejo de áreas sin datos
-    """
-    logger.info("🚀 Iniciando procesamiento completo de estructura de datos")
-    
-    # Procesar DataFrames básicos
-    casos_processed = process_casos_dataframe(casos_df)
-    epizootias_processed = process_epizootias_dataframe(epizootias_df)
-    
-    # Integrar con estructura completa
-    complete_structure = integrate_complete_data_structure(
-        casos_processed, 
-        epizootias_processed, 
-        data_dir
-    )
-    
-    # Agregar funciones de manejo de áreas sin datos
-    complete_structure["handle_empty_area"] = handle_empty_area_filter
-    complete_structure["validate_location"] = lambda municipio, vereda: validate_location_exists(
-        municipio, vereda, complete_structure
-    )
-    
-    logger.info("✅ Estructura completa de datos procesada correctamente")
-    
-    return complete_structure

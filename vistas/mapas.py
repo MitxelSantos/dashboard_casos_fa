@@ -134,7 +134,7 @@ def create_optimized_layout_50_25_25(casos, epizootias, geo_data, filters, color
     
     with col_tarjetas2:
         create_epizootias_card_optimized(epizootias, filters, colors)
-        create_afectacion_card_corrected(casos, epizootias, filters, colors, data_filtered)
+        create_afectacion_card_authoritative(casos, epizootias, filters, colors, data_filtered)
 
 def create_map_system_corrected(casos, epizootias, geo_data, filters, colors):
     """Sistema de mapas CORREGIDO."""
@@ -179,7 +179,7 @@ def create_departmental_map_single_corrected(casos, epizootias, geo_data, filter
         key=f"map_dept_single_{modo_mapa.lower()}"
     )
     
-    handle_map_click_corrected(map_data, municipios_data, "municipio", filters)
+    handle_map_click_authoritative(map_data, municipios_data, "municipio", filters)
 
 def create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors):
     """Mapa departamental múltiple CORREGIDO - coloración funcionando."""
@@ -205,7 +205,7 @@ def create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filt
         key=f"map_dept_multiple_{modo_mapa.lower()}_{hash(tuple(municipios_seleccionados))}"
     )
     
-    handle_map_click_multiple_corrected(map_data, municipios_data, "municipio", filters)
+    handle_map_click_multiple_authoritative(map_data, municipios_data, "municipio", filters)
 
 # ===== PREPARACIÓN DE DATOS CORREGIDA =====
 
@@ -493,7 +493,7 @@ def create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters
         key=f"map_mun_multiple_{modo_mapa.lower()}_{hash(tuple(veredas_seleccionadas))}"
     )
     
-    handle_map_click_multiple_corrected(map_data, veredas_data, "vereda", filters)
+    handle_map_click_multiple_authoritative(map_data, veredas_data, "vereda", filters)
 
 def prepare_veredas_data_epidemiological_multiple_corrected(casos, epizootias, veredas_gdf, municipios_seleccionados, veredas_seleccionadas, colors):
     """Prepara datos de veredas para modo múltiple epidemiológico CORREGIDO."""
@@ -749,8 +749,8 @@ def create_vereda_tooltip_multiple_coverage_corrected(name, row, colors, es_sele
 
 # ===== MANEJO DE CLICKS CORREGIDO =====
 
-def handle_map_click_corrected(map_data, features_data, feature_type, filters):
-    """Manejo de clicks CORREGIDO - filtrado único funcionando."""
+def handle_map_click_authoritative(map_data, features_data, feature_type, filters, data_original):
+    """Manejo de clicks AUTORITATIVO usando hoja VEREDAS."""
     if not map_data or not map_data.get('last_object_clicked'):
         return
     
@@ -762,30 +762,62 @@ def handle_map_click_corrected(map_data, features_data, feature_type, filters):
             clicked_lng = clicked_object.get('lng')
             
             if clicked_lat and clicked_lng:
-                feature_clicked = find_closest_feature_corrected(clicked_lat, clicked_lng, features_data, feature_type)
+                # Obtener nombre del shapefile
+                shapefile_name = find_closest_feature_corrected(clicked_lat, clicked_lng, features_data, feature_type)
                 
-                if feature_clicked:
-                    logger.info(f"🎯 Click detectado en {feature_type}: {feature_clicked}")
+                if shapefile_name:
+                    logger.info(f"🎯 Click en shapefile: {shapefile_name}")
                     
-                    # CORREGIDO: Aplicar filtro único inmediatamente
+                    # MAPEAR nombre del shapefile a nombre AUTORITATIVO
+                    authoritative_name = map_shapefile_to_authoritative(shapefile_name, data_original, feature_type)
+                    
+                    if not authoritative_name:
+                        logger.error(f"❌ No se pudo mapear '{shapefile_name}' a hoja VEREDAS")
+                        st.error(f"Municipio/Vereda no encontrado en datos: {shapefile_name}")
+                        return
+                    
+                    logger.info(f"🔗 Mapeado: '{shapefile_name}' → '{authoritative_name}'")
+                    
+                    # Verificar si ya está seleccionado para evitar bucle
+                    current_municipio = st.session_state.get('municipio_filter', 'Todos')
+                    current_vereda = st.session_state.get('vereda_filter', 'Todas')
+                    
+                    cambio_realizado = False
+                    
                     if feature_type == "municipio":
-                        st.session_state['municipio_filter'] = feature_clicked
-                        st.session_state['vereda_filter'] = 'Todas'
-                        logger.info(f"✅ Filtro municipio aplicado: {feature_clicked}")
+                        if current_municipio != authoritative_name:
+                            st.session_state['municipio_filter'] = authoritative_name
+                            st.session_state['vereda_filter'] = 'Todas'
+                            cambio_realizado = True
+                            logger.info(f"✅ Filtro municipio aplicado: {authoritative_name}")
+                        else:
+                            logger.info(f"📍 Municipio ya seleccionado: {authoritative_name}")
+                    
                     elif feature_type == "vereda":
-                        st.session_state['vereda_filter'] = feature_clicked
-                        logger.info(f"✅ Filtro vereda aplicado: {feature_clicked}")
+                        if current_vereda != authoritative_name:
+                            st.session_state['vereda_filter'] = authoritative_name
+                            cambio_realizado = True
+                            logger.info(f"✅ Filtro vereda aplicado: {authoritative_name}")
+                        else:
+                            logger.info(f"🏘️ Vereda ya seleccionada: {authoritative_name}")
                     
-                    st.success(f"✅ **{feature_clicked}** seleccionado")
-                    
-                    # CORREGIDO: Rerun inmediato
-                    st.rerun()
-                    
+                    # Solo hacer rerun si hubo cambio
+                    if cambio_realizado:
+                        st.success(f"✅ **{authoritative_name}** seleccionado")
+                        
+                        # Delay para evitar bucle
+                        import time
+                        time.sleep(0.1)
+                        st.rerun()
+                    else:
+                        st.info(f"📍 **{authoritative_name}** ya estaba seleccionado")
+                        
     except Exception as e:
-        logger.error(f"❌ Error procesando clic: {str(e)}")
+        logger.error(f"❌ Error procesando clic autoritativo: {str(e)}")
+        st.error(f"Error procesando clic en mapa: {str(e)}")
 
-def handle_map_click_multiple_corrected(map_data, features_data, feature_type, filters):
-    """Manejo de clicks múltiple CORREGIDO."""
+def handle_map_click_multiple_authoritative(map_data, features_data, feature_type, filters, data_original):
+    """Manejo de clicks múltiple AUTORITATIVO usando hoja VEREDAS."""
     if not map_data or not map_data.get('last_object_clicked'):
         return
     
@@ -797,32 +829,133 @@ def handle_map_click_multiple_corrected(map_data, features_data, feature_type, f
             clicked_lng = clicked_object.get('lng')
             
             if clicked_lat and clicked_lng:
-                feature_clicked = find_closest_feature_corrected(clicked_lat, clicked_lng, features_data, feature_type)
+                # Obtener nombre del shapefile
+                shapefile_name = find_closest_feature_corrected(clicked_lat, clicked_lng, features_data, feature_type)
                 
-                if feature_clicked:
-                    # Toggle selección múltiple
+                if shapefile_name:
+                    logger.info(f"🎯 Click múltiple en shapefile: {shapefile_name}")
+                    
+                    # MAPEAR nombre del shapefile a nombre AUTORITATIVO
+                    authoritative_name = map_shapefile_to_authoritative(shapefile_name, data_original, feature_type)
+                    
+                    if not authoritative_name:
+                        logger.error(f"❌ No se pudo mapear '{shapefile_name}' a hoja VEREDAS")
+                        st.error(f"Municipio/Vereda no encontrado en datos: {shapefile_name}")
+                        return
+                    
+                    logger.info(f"🔗 Mapeado múltiple: '{shapefile_name}' → '{authoritative_name}'")
+                    
+                    # Determinar session_key
                     if feature_type == "municipio":
                         session_key = 'municipios_multiselect'
+                        # Verificar que esté en opciones autorizadas
+                        available_options = data_original.get('municipios_authoritativos', [])
+                        if authoritative_name not in available_options:
+                            logger.warning(f"⚠️ Municipio no autorizado: {authoritative_name}")
+                            st.warning(f"Municipio no reconocido en hoja VEREDAS: {authoritative_name}")
+                            return
                     else:
                         session_key = 'veredas_multiselect'
+                        # Para veredas, verificar que esté en las veredas de los municipios seleccionados
+                        municipios_sel = st.session_state.get('municipios_multiselect', [])
+                        if not municipios_sel:
+                            st.warning("Seleccione municipios primero")
+                            return
+                        
+                        # Verificar que la vereda esté en alguno de los municipios seleccionados
+                        vereda_valida = False
+                        veredas_por_municipio = data_original.get('veredas_por_municipio', {})
+                        for municipio in municipios_sel:
+                            if municipio in veredas_por_municipio:
+                                if authoritative_name in veredas_por_municipio[municipio]:
+                                    vereda_valida = True
+                                    break
+                        
+                        if not vereda_valida:
+                            st.warning(f"Vereda '{authoritative_name}' no pertenece a los municipios seleccionados")
+                            return
                     
+                    # Validar session_state antes de modificar
                     current_selection = st.session_state.get(session_key, [])
+                    if not isinstance(current_selection, list):
+                        current_selection = []
                     
-                    if feature_clicked in current_selection:
-                        current_selection.remove(feature_clicked)
+                    # Toggle selección múltiple
+                    if authoritative_name in current_selection:
+                        current_selection.remove(authoritative_name)
                         action = "quitado de"
                     else:
-                        current_selection.append(feature_clicked)
+                        current_selection.append(authoritative_name)
                         action = "agregado a"
                     
+                    # Actualizar session_state de forma segura
                     st.session_state[session_key] = current_selection
                     
-                    st.success(f"✅ **{feature_clicked}** {action} la selección")
+                    st.success(f"✅ **{authoritative_name}** {action} la selección")
                     
+                    # Rerun seguro con delay
+                    import time
+                    time.sleep(0.1)
                     st.rerun()
                     
     except Exception as e:
-        logger.error(f"❌ Error procesando clic múltiple: {str(e)}")
+        logger.error(f"❌ Error procesando clic múltiple autoritativo: {str(e)}")
+        st.error(f"Error procesando clic múltiple: {str(e)}")
+        
+def map_shapefile_to_authoritative(shapefile_name, data_original, feature_type):
+    """
+    Mapea nombre de shapefile a nombre AUTORITATIVO de hoja VEREDAS.
+    
+    Args:
+        shapefile_name: Nombre del feature en shapefile
+        data_original: Datos originales con mapeo
+        feature_type: "municipio" o "vereda"
+    
+    Returns:
+        str: Nombre autoritativo o None si no se encuentra
+    """
+    if feature_type == "municipio":
+        # Para municipios, usar mapeo directo
+        shapefile_mapping = data_original.get('shapefile_mapping', {})
+        shapefile_to_veredas = shapefile_mapping.get('shapefile_to_veredas', {})
+        
+        if shapefile_name in shapefile_to_veredas:
+            return shapefile_to_veredas[shapefile_name]
+        
+        # Si no hay mapeo, verificar si está directamente en municipios authoritativos
+        municipios_authoritativos = data_original.get('municipios_authoritativos', [])
+        if shapefile_name in municipios_authoritativos:
+            return shapefile_name
+        
+        # Búsqueda case-insensitive
+        for municipio in municipios_authoritativos:
+            if shapefile_name.lower() == municipio.lower():
+                logger.info(f"🔗 Mapeo case-insensitive: '{shapefile_name}' → '{municipio}'")
+                return municipio
+        
+        logger.error(f"❌ Municipio '{shapefile_name}' no encontrado en hoja VEREDAS")
+        return None
+    
+    elif feature_type == "vereda":
+        # Para veredas, buscar en veredas_por_municipio
+        veredas_por_municipio = data_original.get('veredas_por_municipio', {})
+        
+        # Búsqueda directa
+        for municipio, veredas in veredas_por_municipio.items():
+            if shapefile_name in veredas:
+                return shapefile_name
+        
+        # Búsqueda case-insensitive
+        for municipio, veredas in veredas_por_municipio.items():
+            for vereda in veredas:
+                if shapefile_name.lower() == vereda.lower():
+                    logger.info(f"🔗 Mapeo vereda case-insensitive: '{shapefile_name}' → '{vereda}'")
+                    return vereda
+        
+        logger.error(f"❌ Vereda '{shapefile_name}' no encontrada en hoja VEREDAS")
+        return None
+    
+    return None
 
 def find_closest_feature_corrected(lat, lng, features_data, feature_type):
     """Encuentra feature más cercano CORREGIDO."""
@@ -929,12 +1062,12 @@ def create_cobertura_card_corrected(filters, colors, data_filtered):
         unsafe_allow_html=True,
     )
 
-def create_afectacion_card_corrected(casos, epizootias, filters, colors, data_filtered):
-    """Tarjeta de afectación CORREGIDA - usando veredas completas."""
+def create_afectacion_card_authoritative(casos, epizootias, filters, colors, data_original):
+    """Tarjeta de afectación usando hoja VEREDAS AUTORITATIVA."""
     filter_context = get_filter_context_compact(filters)
     
-    # CORREGIDO: Calcular afectación usando datos completos
-    afectacion_info = calculate_afectacion_corrected(casos, epizootias, filters, data_filtered)
+    # USAR FUNCIÓN AUTORITATIVA
+    afectacion_info = calculate_afectacion_authoritative(casos, epizootias, filters, data_original)
     
     st.markdown(
         f"""
@@ -971,30 +1104,30 @@ def create_afectacion_card_corrected(casos, epizootias, filters, colors, data_fi
         unsafe_allow_html=True,
     )
 
-def calculate_afectacion_corrected(casos, epizootias, filters, data_filtered):
-    """Calcula información de afectación CORREGIDA usando hoja VEREDAS."""
+def calculate_afectacion_authoritative(casos, epizootias, filters, data_original):
+    """Calcula información de afectación usando hoja VEREDAS AUTORITATIVA."""
     def normalize_name(name):
         return str(name).upper().strip() if pd.notna(name) else ""
     
-    # CORREGIDO: Usar datos completos de veredas desde BD_positivos.xlsx
-    veredas_completas = data_filtered.get("veredas_completas", pd.DataFrame())
+    # Usar hoja VEREDAS como referencia
+    veredas_completas = data_original.get("veredas_completas", pd.DataFrame())
     
     if filters.get("modo") == "multiple":
         municipios_sel = filters.get("municipios_seleccionados", [])
         if len(municipios_sel) > 1:
-            return calculate_afectacion_multiple_corrected(casos, epizootias, municipios_sel, veredas_completas)
+            return calculate_afectacion_multiple_authoritative(casos, epizootias, municipios_sel, data_original)
         else:
-            return calculate_afectacion_departamental_corrected(casos, epizootias, veredas_completas)
+            return calculate_afectacion_departamental_authoritative(casos, epizootias, data_original)
     else:
         if filters.get("vereda_display") != "Todas":
-            return calculate_afectacion_vereda_corrected(casos, epizootias, filters)
+            return calculate_afectacion_vereda_authoritative(casos, epizootias, filters, data_original)
         elif filters.get("municipio_display") != "Todos":
-            return calculate_afectacion_municipal_corrected(casos, epizootias, filters, veredas_completas)
+            return calculate_afectacion_municipal_authoritative(casos, epizootias, filters, data_original)
         else:
-            return calculate_afectacion_departamental_corrected(casos, epizootias, veredas_completas)
+            return calculate_afectacion_departamental_authoritative(casos, epizootias, data_original)
 
-def calculate_afectacion_departamental_corrected(casos, epizootias, veredas_completas):
-    """Afectación departamental CORREGIDA con datos reales."""
+def calculate_afectacion_departamental_authoritative(casos, epizootias, data_original):
+    """Afectación departamental usando hoja VEREDAS AUTORITATIVA."""
     municipios_con_casos = set()
     municipios_con_epizootias = set()
     
@@ -1006,8 +1139,9 @@ def calculate_afectacion_departamental_corrected(casos, epizootias, veredas_comp
     
     municipios_con_ambos = municipios_con_casos.intersection(municipios_con_epizootias)
     
-    # CORREGIDO: Total municipios real del Tolima
-    total_municipios_real = 47  # Tolima tiene 47 municipios
+    # USAR HOJA VEREDAS para total real
+    municipios_authoritativos = data_original.get('municipios_authoritativos', [])
+    total_municipios_real = len(municipios_authoritativos)
     
     return {
         "total": f"{len(municipios_con_casos | municipios_con_epizootias)}/{total_municipios_real}",
@@ -1017,8 +1151,8 @@ def calculate_afectacion_departamental_corrected(casos, epizootias, veredas_comp
         "descripcion": "municipios afectados"
     }
 
-def calculate_afectacion_municipal_corrected(casos, epizootias, filters, veredas_completas):
-    """Afectación municipal CORREGIDA usando datos reales de veredas."""
+def calculate_afectacion_municipal_authoritative(casos, epizootias, filters, data_original):
+    """Afectación municipal usando hoja VEREDAS AUTORITATIVA."""
     municipio_actual = filters.get("municipio_display")
     
     def normalize_name(name):
@@ -1039,8 +1173,8 @@ def calculate_afectacion_municipal_corrected(casos, epizootias, filters, veredas
     
     veredas_con_ambos = veredas_con_casos.intersection(veredas_con_epizootias)
     
-    # CORREGIDO: Total veredas real desde hoja VEREDAS
-    total_veredas_real = get_total_veredas_municipio_corrected(municipio_actual, veredas_completas)
+    # USAR HOJA VEREDAS para total real
+    total_veredas_real = get_total_veredas_municipio_authoritative(municipio_actual, data_original)
     
     return {
         "total": f"{len(veredas_con_casos | veredas_con_epizootias)}/{total_veredas_real}",
@@ -1050,8 +1184,18 @@ def calculate_afectacion_municipal_corrected(casos, epizootias, filters, veredas
         "descripcion": f"veredas afectadas en {municipio_actual}"
     }
 
-def calculate_afectacion_multiple_corrected(casos, epizootias, municipios_sel, veredas_completas):
-    """Afectación para selección múltiple CORREGIDA."""
+def calculate_afectacion_vereda_authoritative(casos, epizootias, filters, data_original):
+    """Afectación de vereda específica usando hoja VEREDAS AUTORITATIVA."""
+    return {
+        "total": "1/1",
+        "casos_texto": f"{len(casos)} casos registrados",
+        "epizootias_texto": f"{len(epizootias)} epizootias registradas",
+        "ambos_texto": "Vista detallada activa",
+        "descripcion": f"vereda {filters.get('vereda_display', '')}"
+    }
+
+def calculate_afectacion_multiple_authoritative(casos, epizootias, municipios_sel, data_original):
+    """Afectación para selección múltiple usando hoja VEREDAS AUTORITATIVA."""
     def normalize_name(name):
         return str(name).upper().strip() if pd.notna(name) else ""
     
@@ -1079,44 +1223,35 @@ def calculate_afectacion_multiple_corrected(casos, epizootias, municipios_sel, v
         "descripcion": "municipios seleccionados"
     }
 
-def calculate_afectacion_vereda_corrected(casos, epizootias, filters):
-    """Afectación de vereda específica CORREGIDA."""
-    return {
-        "total": "1/1",
-        "casos_texto": f"{len(casos)} casos registrados",
-        "epizootias_texto": f"{len(epizootias)} epizootias registradas",
-        "ambos_texto": "Vista detallada activa",
-        "descripcion": f"vereda {filters.get('vereda_display', '')}"
-    }
-
-def get_total_veredas_municipio_corrected(municipio, veredas_completas):
-    """NUEVA: Obtiene total real de veredas desde hoja VEREDAS."""
-    def normalize_name(name):
-        return str(name).upper().strip() if pd.notna(name) else ""
+def get_total_veredas_municipio_authoritative(municipio, data_original):
+    """
+    Obtiene total REAL de veredas desde hoja VEREDAS AUTORITATIVA.
     
-    municipio_norm = normalize_name(municipio)
+    Args:
+        municipio: Nombre del municipio
+        data_original: Datos originales con hoja VEREDAS
     
-    # CORREGIDO: Usar hoja VEREDAS si está disponible
-    if not veredas_completas.empty and "municipi_1" in veredas_completas.columns:
-        veredas_municipio = veredas_completas[
-            veredas_completas["municipi_1"].apply(normalize_name) == municipio_norm
-        ]
-        if not veredas_municipio.empty:
-            total_real = len(veredas_municipio)
-            logger.info(f"📊 {municipio}: {total_real} veredas desde hoja VEREDAS")
+    Returns:
+        int: Número total de veredas en el municipio
+    """
+    veredas_por_municipio = data_original.get('veredas_por_municipio', {})
+    
+    if municipio in veredas_por_municipio:
+        total_real = len(veredas_por_municipio[municipio])
+        logger.info(f"📊 {municipio}: {total_real} veredas desde hoja VEREDAS AUTORITATIVA")
+        return total_real
+    
+    # Búsqueda case-insensitive
+    for mun_key, veredas in veredas_por_municipio.items():
+        if municipio.lower() == mun_key.lower():
+            total_real = len(veredas)
+            logger.info(f"📊 {municipio}: {total_real} veredas desde hoja VEREDAS (case-insensitive)")
             return total_real
     
-    # Fallback: Estimación conservadora
-    estimaciones_municipios = {
-        "IBAGUE": 45, "CHAPARRAL": 35, "PLANADAS": 30, "ATACO": 25, "RIOBLANCO": 25,
-        "COYAIMA": 20, "ORTEGA": 20, "ESPINAL": 18, "PURIFICACION": 15, "MARIQUITA": 15
-    }
-    
-    total_estimado = estimaciones_municipios.get(municipio, 12)  # Default 12 veredas
-    logger.info(f"📊 {municipio}: {total_estimado} veredas (estimado)")
-    return total_estimado
+    logger.warning(f"⚠️ Municipio '{municipio}' no encontrado en hoja VEREDAS")
+    return 1  # Mínimo 1 para evitar errores
 
-# ===== FUNCIONES DE APOYO EXISTENTES (mantener) =====
+# ===== FUNCIONES DE APOYO =====
 
 def load_geographic_data():
     """Carga datos geográficos."""
@@ -1361,7 +1496,7 @@ def create_municipal_map_single(casos, epizootias, geo_data, filters, colors, mo
         key=f"map_mun_single_{modo_mapa.lower()}"
     )
     
-    handle_map_click_corrected(map_data, veredas_data, "vereda", filters)
+    handle_map_click_authoritative(map_data, veredas_data, "vereda", filters)
 
 def prepare_vereda_data_epidemiological(casos, epizootias, veredas_gdf, municipio_selected, colors):
     """Prepara datos de veredas para modo epidemiológico."""
