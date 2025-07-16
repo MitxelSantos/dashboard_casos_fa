@@ -126,7 +126,7 @@ def create_optimized_layout_50_25_25(casos, epizootias, geo_data, filters, color
     col_mapa, col_tarjetas1, col_tarjetas2 = st.columns([2, 1, 1], gap="medium")
     
     with col_mapa:
-        create_map_system_corrected(casos, epizootias, geo_data, filters, colors)
+        create_map_system_corrected(casos, epizootias, geo_data, filters, colors, data_filtered)
     
     with col_tarjetas1:
         create_cobertura_card_corrected(filters, colors, data_filtered)
@@ -136,29 +136,29 @@ def create_optimized_layout_50_25_25(casos, epizootias, geo_data, filters, color
         create_epizootias_card_optimized(epizootias, filters, colors)
         create_afectacion_card_authoritative(casos, epizootias, filters, colors, data_filtered)
 
-def create_map_system_corrected(casos, epizootias, geo_data, filters, colors):
+def create_map_system_corrected(casos, epizootias, geo_data, filters, colors, data_filtered):
     """Sistema de mapas CORREGIDO."""
     current_level = determine_map_level(filters)
     modo_mapa = filters.get("modo_mapa", "Epidemiológico")
     
     if current_level == "vereda" and filters.get("modo") == "unico":
-        create_vereda_specific_map(casos, epizootias, geo_data, filters, colors)
+        create_vereda_specific_map(casos, epizootias, geo_data, filters, colors, data_filtered)
     elif current_level == "departamento":
         if filters.get("modo") == "multiple":
-            create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors)
+            create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors, data_filtered)
         else:
-            create_departmental_map_single_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa)
+            create_departmental_map_single_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered)
     elif current_level == "municipio":
         if filters.get("modo") == "multiple":
-            create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters, colors)
+            create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters, colors, data_filtered)
         else:
-            create_municipal_map_single(casos, epizootias, geo_data, filters, colors, modo_mapa)
+            create_municipal_map_single(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered)
     else:
         show_fallback_summary(casos, epizootias, current_level, filters.get('municipio_display'))
 
 # ===== MAPAS DEPARTAMENTALES CORREGIDOS =====
 
-def create_departmental_map_single_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa):
+def create_departmental_map_single_corrected(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered):
     """Mapa departamental único CORREGIDO."""
     municipios = geo_data['municipios'].copy()
     logger.info(f"🏛️ Mapa departamental único {modo_mapa}: {len(municipios)} municipios")
@@ -179,9 +179,10 @@ def create_departmental_map_single_corrected(casos, epizootias, geo_data, filter
         key=f"map_dept_single_{modo_mapa.lower()}"
     )
     
-    handle_map_click_authoritative(map_data, municipios_data, "municipio", filters)
+    # CORREGIDO: Pasar data_filtered como data_original
+    handle_map_click_authoritative(map_data, municipios_data, "municipio", filters, data_filtered)
 
-def create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors):
+def create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filters, colors, data_filtered):
     """Mapa departamental múltiple CORREGIDO - coloración funcionando."""
     logger.info("🗂️ Creando mapa múltiple departamental CORREGIDO")
     
@@ -205,7 +206,8 @@ def create_departmental_map_multiple_corrected(casos, epizootias, geo_data, filt
         key=f"map_dept_multiple_{modo_mapa.lower()}_{hash(tuple(municipios_seleccionados))}"
     )
     
-    handle_map_click_multiple_authoritative(map_data, municipios_data, "municipio", filters)
+    # CORREGIDO: Pasar data_filtered como data_original
+    handle_map_click_multiple_authoritative(map_data, municipios_data, "municipio", filters, data_filtered)
 
 # ===== PREPARACIÓN DE DATOS CORREGIDA =====
 
@@ -457,7 +459,7 @@ def calculate_dynamic_coverage(municipio_name, active_filters, municipio_filtrad
 
 # ===== MAPAS MÚLTIPLES CORREGIDOS =====
 
-def create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters, colors):
+def create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters, colors, data_filtered):
     """Mapa municipal múltiple CORREGIDO."""
     municipios_seleccionados = filters.get("municipios_seleccionados", [])
     veredas_seleccionadas = filters.get("veredas_seleccionadas", [])
@@ -493,7 +495,8 @@ def create_municipal_map_multiple_corrected(casos, epizootias, geo_data, filters
         key=f"map_mun_multiple_{modo_mapa.lower()}_{hash(tuple(veredas_seleccionadas))}"
     )
     
-    handle_map_click_multiple_authoritative(map_data, veredas_data, "vereda", filters)
+    # CORREGIDO: Pasar data_filtered como data_original
+    handle_map_click_multiple_authoritative(map_data, veredas_data, "vereda", filters, data_filtered)
 
 def prepare_veredas_data_epidemiological_multiple_corrected(casos, epizootias, veredas_gdf, municipios_seleccionados, veredas_seleccionadas, colors):
     """Prepara datos de veredas para modo múltiple epidemiológico CORREGIDO."""
@@ -1466,7 +1469,7 @@ def create_municipio_tooltip_coverage(name, row, colors):
     </div>
     """
 
-def create_municipal_map_single(casos, epizootias, geo_data, filters, colors, modo_mapa):
+def create_municipal_map_single(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered):
     """Mapa municipal único."""
     municipio_selected = filters.get('municipio_display')
     if not municipio_selected or municipio_selected == "Todos":
@@ -1496,7 +1499,8 @@ def create_municipal_map_single(casos, epizootias, geo_data, filters, colors, mo
         key=f"map_mun_single_{modo_mapa.lower()}"
     )
     
-    handle_map_click_authoritative(map_data, veredas_data, "vereda", filters)
+    # CORREGIDO: Pasar data_filtered como data_original
+    handle_map_click_authoritative(map_data, veredas_data, "vereda", filters, data_filtered)
 
 def prepare_vereda_data_epidemiological(casos, epizootias, veredas_gdf, municipio_selected, colors):
     """Prepara datos de veredas para modo epidemiológico."""
@@ -1649,7 +1653,7 @@ def create_vereda_tooltip_coverage(name, row, colors):
     </div>
     """
 
-def create_vereda_specific_map(casos, epizootias, geo_data, filters, colors):
+def create_vereda_specific_map(casos, epizootias, geo_data, filters, colors, data_filtered):
     """Vista específica de vereda."""
     vereda_selected = filters.get('vereda_display')
     municipio_selected = filters.get('municipio_display')
