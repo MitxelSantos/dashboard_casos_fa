@@ -1,8 +1,5 @@
 """
-utils/data_processor.py CORREGIDO
-GARANTIZA: Todas las métricas usan datos filtrados
-ELIMINADOS: Accesos inconsistentes a datos originales
-CLARIFICADO: Todos los parámetros especifican si son filtrados
+utils/data_processor.py
 """
 
 import pandas as pd
@@ -11,30 +8,26 @@ import unicodedata
 import re
 import logging
 from datetime import datetime
-from config.settings import GRUPOS_EDAD, CONDICION_FINAL_MAP, DESCRIPCION_EPIZOOTIAS_MAP
+from pathlib import Path
 
-# Configurar logging
 logger = logging.getLogger(__name__)
 
+# ===== FUNCIONES CORE DE FECHAS (mantener las existentes) =====
 
 def excel_date_to_datetime(excel_date):
     """Convierte fecha de Excel a datetime con manejo robusto."""
     try:
-        # Si ya es datetime, retornar tal como está
         if isinstance(excel_date, (pd.Timestamp, datetime)):
             return excel_date
-
-        # Si está vacío o es NaN
+        
         if pd.isna(excel_date) or excel_date == "":
             return None
 
-        # Si es string, intentar parsear
         if isinstance(excel_date, str):
             excel_date = excel_date.strip()
             if not excel_date or excel_date.lower() in ['nan', 'none', 'null']:
                 return None
                 
-            # Formatos comunes
             formatos_fecha = [
                 "%d/%m/%Y", "%d/%m/%y", "%d-%m-%Y", "%d-%m-%y",
                 "%Y-%m-%d", "%d.%m.%Y", "%d.%m.%y",
@@ -51,17 +44,14 @@ def excel_date_to_datetime(excel_date):
                 except ValueError:
                     continue
             
-            # Fallback a pandas
             try:
                 return pd.to_datetime(excel_date, dayfirst=True, errors="coerce")
             except:
                 return None
 
-        # Si es número (formato Excel)
         if isinstance(excel_date, (int, float)):
             if pd.isna(excel_date) or excel_date < 0 or excel_date > 100000:
                 return None
-                
             try:
                 return pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
             except:
@@ -73,25 +63,19 @@ def excel_date_to_datetime(excel_date):
         logger.warning(f"Error procesando fecha: {excel_date} - {str(e)}")
         return None
 
-
 def format_date_display(date_value):
     """Formatea una fecha para mostrar."""
     if pd.isna(date_value):
         return ""
-
     try:
         if isinstance(date_value, (pd.Timestamp, datetime)):
             return date_value.strftime("%Y-%m-%d")
         else:
             converted_date = excel_date_to_datetime(date_value)
-            if converted_date:
-                return converted_date.strftime("%Y-%m-%d")
-            else:
-                return ""
+            return converted_date.strftime("%Y-%m-%d") if converted_date else ""
     except Exception as e:
         logger.warning(f"Error formateando fecha {date_value}: {e}")
         return ""
-
 
 def calculate_days_since(date_value):
     """Calcula los días transcurridos desde una fecha hasta hoy."""
@@ -108,11 +92,9 @@ def calculate_days_since(date_value):
             hoy = datetime.now()
             delta = hoy - fecha
             return delta.days
-        
         return None
     except:
         return None
-
 
 def format_time_elapsed(days):
     """Formatea tiempo transcurrido en formato legible."""
@@ -135,41 +117,668 @@ def format_time_elapsed(days):
         años = days // 365
         return f"{años} año{'s' if años > 1 else ''}"
 
+# ===== NUEVAS FUNCIONES: CARGA DE LISTA COMPLETA =====
 
-def get_latest_case_info(casos_filtrados_df, date_column, location_columns=None):
+def load_complete_veredas_list_authoritative(data_dir=None):
     """
-    CORREGIDO: Obtiene información del caso más reciente usando DATOS FILTRADOS.
+    Carga la lista completa de veredas desde BD_positivos.xlsx hoja "VEREDAS" 
+    como FUENTE AUTORITATIVA.
     
     Args:
-        casos_filtrados_df (pd.DataFrame): DataFrame de casos FILTRADOS
-        date_column (str): Columna de fecha
-        location_columns (list): Columnas de ubicación
-        
+        data_dir: Directorio donde buscar el archivo (opcional)
+    
     Returns:
-        dict: Información del caso más reciente en los datos filtrados
+        dict: Estructura completa con mapeo bidireccional
     """
-    if casos_filtrados_df.empty or date_column not in casos_filtrados_df.columns:
+    logger.info("🗂️ Cargando hoja VEREDAS como fuente AUTORITATIVA")
+    
+    # Rutas posibles para el archivo
+    possible_paths = []
+    
+    if data_dir:
+        possible_paths.append(Path(data_dir) / "BD_positivos.xlsx")
+    
+    # Rutas por defecto
+    default_paths = [
+        Path("data") / "BD_positivos.xlsx",
+        Path("BD_positivos.xlsx"),
+        Path("..") / "BD_positivos.xlsx"
+    ]
+    possible_paths.extend(default_paths)
+    
+    veredas_df = None
+    
+    # Intentar cargar desde cada ruta posible
+    for path in possible_paths:
+        if path.exists():
+            try:
+                logger.info(f"📁 Intentando cargar desde: {path}")
+                
+                # Verificar que la hoja "VEREDAS" existe
+                excel_file = pd.ExcelFile(path)
+                
+                if "VEREDAS" in excel_file.sheet_names:
+                    veredas_df = pd.read_excel(path, sheet_name="VEREDAS", engine="openpyxl")
+                    logger.info(f"✅ Hoja VEREDAS cargada desde {path}")
+                    break
+                else:
+                    logger.warning(f"⚠️ Hoja 'VEREDAS' no encontrada en {path}")
+                    logger.info(f"📋 Hojas disponibles: {excel_file.sheet_names}")
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Error cargando {path}: {str(e)}")
+                continue
+    
+    if veredas_df is None:
+        logger.error("❌ NO se pudo cargar hoja VEREDAS - CRÍTICO")
+        return create_emergency_fallback()
+    
+    # Procesar DataFrame de veredas como FUENTE AUTORITATIVA
+    return process_veredas_dataframe_authoritative(veredas_df)
+
+def process_veredas_dataframe_authoritative(veredas_df):
+    """
+    Procesa el DataFrame de veredas como FUENTE AUTORITATIVA.
+    
+    Expected columns: CODIGO_VER, NOM_DEP, municipi_1, vereda_nor, region
+    """
+    logger.info(f"🔧 Procesando hoja VEREDAS como AUTORITATIVA: {len(veredas_df)} registros")
+    
+    # Limpiar datos básicos
+    veredas_df = veredas_df.dropna(how="all")
+    
+    # Limpiar nombres de columnas
+    veredas_df.columns = veredas_df.columns.str.strip()
+    
+    # Verificar columnas requeridas
+    required_columns = ['municipi_1', 'vereda_nor']
+    missing_columns = [col for col in required_columns if col not in veredas_df.columns]
+    
+    if missing_columns:
+        logger.error(f"❌ Columnas CRÍTICAS faltantes en hoja VEREDAS: {missing_columns}")
+        logger.info(f"📋 Columnas disponibles: {list(veredas_df.columns)}")
+        return create_emergency_fallback()
+    
+    # LIMPIAR datos pero NO normalizar (mantener nombres exactos de shapefiles)
+    veredas_df = veredas_df[
+        (veredas_df['municipi_1'].notna()) & 
+        (veredas_df['vereda_nor'].notna()) &
+        (veredas_df['municipi_1'].str.strip() != '') &
+        (veredas_df['vereda_nor'].str.strip() != '')
+    ]
+    
+    # Limpiar espacios pero NO cambiar case
+    veredas_df['municipi_1'] = veredas_df['municipi_1'].str.strip()
+    veredas_df['vereda_nor'] = veredas_df['vereda_nor'].str.strip()
+    
+    # Crear estructuras de datos USANDO NOMBRES EXACTOS
+    veredas_por_municipio = {}
+    municipios_authoritativos = sorted(veredas_df['municipi_1'].unique())
+    
+    for municipio in municipios_authoritativos:
+        veredas_municipio = veredas_df[veredas_df['municipi_1'] == municipio]
+        veredas_lista = sorted(veredas_municipio['vereda_nor'].unique())
+        veredas_por_municipio[municipio] = veredas_lista
+    
+    # Crear mapeo display (nombres exactos = nombres display)
+    municipio_display_map = {municipio: municipio for municipio in municipios_authoritativos}
+    vereda_display_map = {}
+    
+    for _, row in veredas_df.iterrows():
+        municipio = row['municipi_1']
+        vereda = row['vereda_nor']
+        vereda_key = f"{municipio}|{vereda}"
+        vereda_display_map[vereda_key] = vereda
+    
+    # Extraer regiones si están disponibles
+    regiones = {}
+    if 'region' in veredas_df.columns:
+        regiones = get_regiones_from_dataframe_authoritative(veredas_df)
+    
+    logger.info(f"✅ HOJA VEREDAS procesada: {len(municipios_authoritativos)} municipios, {len(veredas_df)} veredas")
+    
+    return {
+        'veredas_por_municipio': veredas_por_municipio,
+        'municipios_authoritativos': municipios_authoritativos,  # NUEVA KEY
+        'veredas_completas': veredas_df,
+        'municipio_display_map': municipio_display_map,
+        'vereda_display_map': vereda_display_map,
+        'regiones': regiones,
+        'source': 'hoja_veredas_autoritativa'
+    }
+    
+def create_emergency_fallback():
+    """Fallback de emergencia si no se puede cargar hoja VEREDAS."""
+    logger.error("🚨 USANDO FALLBACK DE EMERGENCIA - hoja VEREDAS no disponible")
+    
+    # Lista mínima de municipios (nombres como están en shapefiles)
+    municipios_emergency = [
+        "Ibague", "Alpujarra", "Alvarado", "Ambalema", "Anzoategui",
+        "Armero", "Ataco", "Cajamarca", "Carmen de Apicala", "Casabianca", 
+        "Chaparral", "Coello", "Coyaima", "Cunday", "Dolores",
+        "Espinal", "Falan", "Flandes", "Fresno", "Guamo",
+        "Herveo", "Honda", "Icononzo", "Lerida", "Libano",
+        "Mariquita", "Melgar", "Murillo", "Natagaima", "Ortega",
+        "Palocabildo", "Piedras", "Planadas", "Prado", "Purificacion",
+        "Rioblanco", "Roncesvalles", "Rovira", "Saldaña", "San Antonio",
+        "San Luis", "Santa Isabel", "Suarez", "Valle de San Juan",
+        "Venadillo", "Villahermosa", "Villarrica"
+    ]
+    
+    veredas_por_municipio = {}
+    municipio_display_map = {}
+    
+    for municipio in municipios_emergency:
+        veredas_por_municipio[municipio] = [f"{municipio} Centro"]
+        municipio_display_map[municipio] = municipio
+    
+    return {
+        'veredas_por_municipio': veredas_por_municipio,
+        'municipios_authoritativos': municipios_emergency,
+        'veredas_completas': pd.DataFrame(),
+        'municipio_display_map': municipio_display_map,
+        'vereda_display_map': {},
+        'regiones': {},
+        'source': 'emergency_fallback'
+    }
+
+def create_shapefile_to_veredas_mapping(shapefile_data, veredas_data):
+    """
+    Crea mapeo bidireccional entre nombres de shapefiles y hoja VEREDAS.
+    
+    Args:
+        shapefile_data: GeoDataFrame con municipios del shapefile
+        veredas_data: Dict con datos de hoja VEREDAS
+    
+    Returns:
+        dict: Mapeo bidireccional
+    """
+    logger.info("🔗 Creando mapeo shapefile ↔ hoja VEREDAS")
+    
+    shapefile_names = []
+    if 'municipios' in shapefile_data and not shapefile_data['municipios'].empty:
+        municipios_gdf = shapefile_data['municipios']
+        
+        # Obtener nombres de municipios del shapefile
+        if 'municipi_1' in municipios_gdf.columns:
+            shapefile_names = municipios_gdf['municipi_1'].dropna().unique().tolist()
+        elif 'MpNombre' in municipios_gdf.columns:
+            shapefile_names = municipios_gdf['MpNombre'].dropna().unique().tolist()
+    
+    veredas_names = veredas_data.get('municipios_authoritativos', [])
+    
+    # Crear mapeo directo y detectar inconsistencias
+    shapefile_to_veredas = {}
+    veredas_to_shapefile = {}
+    inconsistencias = []
+    
+    for shapefile_name in shapefile_names:
+        shapefile_clean = shapefile_name.strip()
+        
+        # Buscar coincidencia exacta
+        if shapefile_clean in veredas_names:
+            shapefile_to_veredas[shapefile_clean] = shapefile_clean
+            veredas_to_shapefile[shapefile_clean] = shapefile_clean
+        else:
+            # Buscar coincidencia similar (case-insensitive)
+            found_match = False
+            for veredas_name in veredas_names:
+                if shapefile_clean.lower() == veredas_name.lower():
+                    shapefile_to_veredas[shapefile_clean] = veredas_name
+                    veredas_to_shapefile[veredas_name] = shapefile_clean
+                    found_match = True
+                    logger.info(f"🔗 Mapeo automático: '{shapefile_clean}' → '{veredas_name}'")
+                    break
+            
+            if not found_match:
+                inconsistencias.append({
+                    'shapefile': shapefile_clean,
+                    'sugerencia': 'Revisar hoja VEREDAS',
+                    'tipo': 'no_encontrado'
+                })
+    
+    # Reportar inconsistencias
+    if inconsistencias:
+        logger.warning(f"⚠️ {len(inconsistencias)} inconsistencias detectadas:")
+        for inconsistencia in inconsistencias:
+            logger.warning(f"  - Shapefile: '{inconsistencia['shapefile']}' no encontrado en hoja VEREDAS")
+    
+    logger.info(f"✅ Mapeo creado: {len(shapefile_to_veredas)} municipios mapeados")
+    
+    return {
+        'shapefile_to_veredas': shapefile_to_veredas,
+        'veredas_to_shapefile': veredas_to_shapefile,
+        'inconsistencias': inconsistencias,
+        'shapefile_names': shapefile_names,
+        'veredas_names': veredas_names
+    }
+
+def process_complete_data_structure_authoritative(casos_df, epizootias_df, shapefile_data=None, data_dir=None):
+    """
+    Función principal que procesa datos usando hoja VEREDAS como AUTORITATIVA.
+    
+    Args:
+        casos_df: DataFrame de casos
+        epizootias_df: DataFrame de epizootias
+        shapefile_data: Datos de shapefiles (opcional)
+        data_dir: Directorio para buscar archivos adicionales
+    
+    Returns:
+        dict: Estructura completa con hoja VEREDAS como autoritativa
+    """
+    logger.info("🚀 Procesando estructura con hoja VEREDAS como AUTORITATIVA")
+    
+    # Procesar DataFrames básicos
+    casos_processed = process_casos_dataframe(casos_df)
+    epizootias_processed = process_epizootias_dataframe(epizootias_df)
+    
+    # Cargar datos AUTHORITATIVOS de hoja VEREDAS
+    veredas_data = load_complete_veredas_list_authoritative(data_dir)
+    
+    # Crear mapeo con shapefiles si están disponibles
+    shapefile_mapping = {}
+    if shapefile_data:
+        shapefile_mapping = create_shapefile_to_veredas_mapping(shapefile_data, veredas_data)
+    
+    # Obtener ubicaciones de los datos actuales
+    ubicaciones_actuales = get_unique_locations(casos_processed, epizootias_processed)
+    
+    # USAR HOJA VEREDAS como base, complementar con datos actuales
+    municipios_authoritativos = veredas_data['municipios_authoritativos']
+    veredas_por_municipio = veredas_data['veredas_por_municipio'].copy()
+    
+    # Agregar municipios que aparecen en datos pero no en hoja VEREDAS
+    municipios_adicionales = []
+    for municipio in ubicaciones_actuales['municipios']:
+        if municipio not in municipios_authoritativos:
+            municipios_adicionales.append(municipio)
+            if municipio not in veredas_por_municipio:
+                veredas_por_municipio[municipio] = [f"{municipio} Centro"]
+    
+    if municipios_adicionales:
+        logger.warning(f"⚠️ Municipios en datos pero NO en hoja VEREDAS: {municipios_adicionales}")
+    
+    # Agregar veredas que aparecen en datos pero no en hoja VEREDAS
+    for municipio, veredas_data_current in ubicaciones_actuales['veredas_por_municipio'].items():
+        if municipio in veredas_por_municipio:
+            veredas_existentes = set(veredas_por_municipio[municipio])
+            veredas_nuevas = set(veredas_data_current)
+            veredas_adicionales = veredas_nuevas - veredas_existentes
+            
+            if veredas_adicionales:
+                logger.warning(f"⚠️ Veredas en datos pero NO en hoja VEREDAS para {municipio}: {list(veredas_adicionales)}")
+                veredas_por_municipio[municipio].extend(sorted(veredas_adicionales))
+    
+    # Crear lista final de municipios
+    municipios_finales = sorted(set(municipios_authoritativos + municipios_adicionales))
+    
+    # Crear mapeos display
+    municipio_display_map = veredas_data['municipio_display_map'].copy()
+    for municipio in municipios_adicionales:
+        municipio_display_map[municipio] = municipio
+    
+    # Resultado final
+    resultado = {
+        "casos": casos_processed,
+        "epizootias": epizootias_processed,
+        "municipios_normalizados": municipios_finales,  # MANTENER NOMBRE PARA COMPATIBILIDAD
+        "municipios_authoritativos": municipios_authoritativos,  # NUEVA KEY
+        "veredas_por_municipio": veredas_por_municipio,
+        "municipio_display_map": municipio_display_map,
+        "vereda_display_map": veredas_data['vereda_display_map'],
+        "veredas_completas": veredas_data['veredas_completas'],
+        "regiones": veredas_data.get('regiones', {}),
+        "shapefile_mapping": shapefile_mapping,
+        "data_source": "hoja_veredas_autoritativa"
+    }
+    
+    # Agregar función de manejo de áreas sin datos
+    resultado["handle_empty_area"] = handle_empty_area_filter
+    resultado["validate_location"] = lambda municipio, vereda: validate_location_exists(
+        municipio, vereda, resultado
+    )
+    
+    logger.info(f"✅ Estructura AUTORITATIVA completada: {len(municipios_finales)} municipios, {sum(len(v) for v in veredas_por_municipio.values())} veredas")
+    
+    return resultado
+
+def get_regiones_from_dataframe_authoritative(veredas_df):
+    """Extrae información de regiones del DataFrame AUTORITATIVO."""
+    if 'region' not in veredas_df.columns:
+        return {}
+    
+    regiones = {}
+    
+    for region in veredas_df['region'].dropna().unique():
+        municipios_region = veredas_df[veredas_df['region'] == region]['municipi_1'].unique()
+        regiones[region] = sorted(municipios_region)  # NO normalizar
+    
+    logger.info(f"🗺️ Regiones extraídas: {list(regiones.keys())}")
+    return regiones
+
+def create_fallback_veredas_structure():
+    """Crea estructura de fallback cuando no se puede cargar la lista completa."""
+    logger.warning("⚠️ Usando estructura de fallback para veredas")
+    
+    # Lista básica de municipios del Tolima
+    municipios_tolima = [
+        "IBAGUE", "ALPUJARRA", "ALVARADO", "AMBALEMA", "ANZOATEGUI",
+        "ARMERO", "ATACO", "CAJAMARCA", "CARMEN DE APICALA", "CASABIANCA", 
+        "CHAPARRAL", "COELLO", "COYAIMA", "CUNDAY", "DOLORES",
+        "ESPINAL", "FALAN", "FLANDES", "FRESNO", "GUAMO",
+        "HERVEO", "HONDA", "ICONONZO", "LERIDA", "LIBANO",
+        "MARIQUITA", "MELGAR", "MURILLO", "NATAGAIMA", "ORTEGA",
+        "PALOCABILDO", "PIEDRAS", "PLANADAS", "PRADO", "PURIFICACION",
+        "RIOBLANCO", "RONCESVALLES", "ROVIRA", "SALDAÑA", "SAN ANTONIO",
+        "SAN LUIS", "SANTA ISABEL", "SUAREZ", "VALLE DE SAN JUAN",
+        "VENADILLO", "VILLAHERMOSA", "VILLARRICA"
+    ]
+    
+    # Crear veredas básicas (placeholder)
+    veredas_por_municipio = {}
+    municipio_display_map = {}
+    
+    for municipio in municipios_tolima:
+        veredas_por_municipio[municipio] = [f"{municipio} CENTRO"]
+        municipio_display_map[municipio] = municipio
+    
+    return {
+        'veredas_por_municipio': veredas_por_municipio,
+        'municipios_completos': municipios_tolima,
+        'veredas_completas': pd.DataFrame(),
+        'municipio_display_map': municipio_display_map,
+        'vereda_display_map': {},
+        'regiones': {}
+    }
+
+# ===== NUEVAS FUNCIONES: MANEJO DE ÁREAS SIN DATOS =====
+
+def handle_empty_area_filter(municipio=None, vereda=None, casos_df=None, epizootias_df=None):
+    """
+    Maneja el filtrado de áreas sin datos, evitando bucles infinitos.
+    
+    Args:
+        municipio: Nombre del municipio filtrado
+        vereda: Nombre de la vereda filtrada  
+        casos_df: DataFrame de casos
+        epizootias_df: DataFrame de epizootias
+    
+    Returns:
+        dict: Datos filtrados con estructura consistente
+    """
+    logger.info(f"🎯 Manejando filtro área sin datos: {municipio}, {vereda}")
+    
+    def normalize_name(name):
+        return str(name).upper().strip() if pd.notna(name) else ""
+    
+    # Inicializar DataFrames vacíos si no se proporcionan
+    if casos_df is None:
+        casos_df = pd.DataFrame()
+    if epizootias_df is None:
+        epizootias_df = pd.DataFrame()
+    
+    # Aplicar filtros y crear estructura consistente
+    casos_filtrados = casos_df.copy() if not casos_df.empty else pd.DataFrame()
+    epizootias_filtradas = epizootias_df.copy() if not epizootias_df.empty else pd.DataFrame()
+    
+    # Filtrar por municipio si se especifica
+    if municipio and municipio != "Todos":
+        municipio_norm = normalize_name(municipio)
+        
+        if not casos_filtrados.empty and "municipio" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["municipio"].apply(normalize_name) == municipio_norm
+            ]
+        else:
+            casos_filtrados = pd.DataFrame()
+        
+        if not epizootias_filtradas.empty and "municipio" in epizootias_filtradas.columns:
+            epizootias_filtradas = epizootias_filtradas[
+                epizootias_filtradas["municipio"].apply(normalize_name) == municipio_norm
+            ]
+        else:
+            epizootias_filtradas = pd.DataFrame()
+    
+    # Filtrar por vereda si se especifica
+    if vereda and vereda != "Todas":
+        vereda_norm = normalize_name(vereda)
+        
+        if not casos_filtrados.empty and "vereda" in casos_filtrados.columns:
+            casos_filtrados = casos_filtrados[
+                casos_filtrados["vereda"].apply(normalize_name) == vereda_norm
+            ]
+        else:
+            casos_filtrados = pd.DataFrame()
+        
+        if not epizootias_filtradas.empty and "vereda" in epizootias_filtradas.columns:
+            epizootias_filtradas = epizootias_filtradas[
+                epizootias_filtradas["vereda"].apply(normalize_name) == vereda_norm
+            ]
+        else:
+            epizootias_filtradas = pd.DataFrame()
+    
+    # Crear métricas con ceros para áreas sin datos
+    metrics_with_zeros = create_zero_metrics_for_area(municipio, vereda)
+    
+    # Registrar resultado
+    total_casos = len(casos_filtrados)
+    total_epizootias = len(epizootias_filtradas)
+    
+    if total_casos == 0 and total_epizootias == 0:
+        logger.info(f"📊 Área sin datos - mostrando métricas en cero")
+    else:
+        logger.info(f"📊 Área con datos: {total_casos} casos, {total_epizootias} epizootias")
+    
+    return {
+        "casos": casos_filtrados,
+        "epizootias": epizootias_filtradas,
+        "tiene_datos": total_casos > 0 or total_epizootias > 0,
+        "metrics_zero": metrics_with_zeros,
+        "area_info": {
+            "municipio": municipio,
+            "vereda": vereda,
+            "tipo": "con_datos" if (total_casos > 0 or total_epizootias > 0) else "sin_datos"
+        }
+    }
+
+def create_zero_metrics_for_area(municipio, vereda):
+    """Crea métricas en cero para áreas sin datos."""
+    return {
+        "total_casos": 0,
+        "fallecidos": 0,
+        "vivos": 0,
+        "letalidad": 0.0,
+        "total_epizootias": 0,
+        "epizootias_positivas": 0,
+        "epizootias_en_estudio": 0,
+        "positividad": 0.0,
+        "municipios_con_casos": 0,
+        "municipios_con_epizootias": 0,
+        "ultimo_caso": {"existe": False, "ubicacion": f"{vereda or municipio or 'Área'} - Sin casos"},
+        "ultima_epizootia_positiva": {"existe": False, "ubicacion": f"{vereda or municipio or 'Área'} - Sin epizootias"}
+    }
+
+def validate_location_exists(municipio, vereda, complete_data):
+    """
+    Valida que una ubicación (municipio/vereda) existe en la lista completa.
+    
+    Args:
+        municipio: Nombre del municipio
+        vereda: Nombre de la vereda (opcional)
+        complete_data: Datos completos de ubicaciones
+    
+    Returns:
+        dict: {
+            'municipio_exists': bool,
+            'vereda_exists': bool, 
+            'suggestions': [lista_sugerencias]
+        }
+    """
+    def normalize_name(name):
+        return str(name).upper().strip() if pd.notna(name) else ""
+    
+    municipio_norm = normalize_name(municipio) if municipio else ""
+    vereda_norm = normalize_name(vereda) if vereda else ""
+    
+    # Validar municipio
+    municipio_exists = False
+    if complete_data.get('municipios_completos'):
+        municipio_exists = municipio_norm in complete_data['municipios_completos']
+    
+    # Validar vereda
+    vereda_exists = False
+    suggestions = []
+    
+    if vereda and municipio_exists:
+        veredas_municipio = complete_data.get('veredas_por_municipio', {}).get(municipio_norm, [])
+        vereda_exists = vereda_norm in veredas_municipio
+        
+        if not vereda_exists and veredas_municipio:
+            # Sugerir veredas similares
+            suggestions = find_similar_names(vereda_norm, veredas_municipio)
+    
+    elif not municipio_exists and municipio:
+        # Sugerir municipios similares
+        municipios_completos = complete_data.get('municipios_completos', [])
+        suggestions = find_similar_names(municipio_norm, municipios_completos)
+    
+    return {
+        'municipio_exists': municipio_exists,
+        'vereda_exists': vereda_exists or not vereda,  # True si no se especificó vereda
+        'suggestions': suggestions[:5]  # Máximo 5 sugerencias
+    }
+
+def find_similar_names(target_name, name_list, max_suggestions=5):
+    """Encuentra nombres similares usando distancia de edición simple."""
+    if not target_name or not name_list:
+        return []
+    
+    def simple_distance(s1, s2):
+        """Distancia de edición simple."""
+        if len(s1) < len(s2):
+            return simple_distance(s2, s1)
+        
+        if len(s2) == 0:
+            return len(s1)
+        
+        previous_row = list(range(len(s2) + 1))
+        for i, c1 in enumerate(s1):
+            current_row = [i + 1]
+            for j, c2 in enumerate(s2):
+                insertions = previous_row[j + 1] + 1
+                deletions = current_row[j] + 1
+                substitutions = previous_row[j] + (c1 != c2)
+                current_row.append(min(insertions, deletions, substitutions))
+            previous_row = current_row
+        
+        return previous_row[-1]
+    
+    # Calcular distancias y ordenar
+    similarities = []
+    for name in name_list:
+        distance = simple_distance(target_name.lower(), name.lower())
+        similarities.append((name, distance))
+    
+    # Ordenar por distancia y retornar los mejores
+    similarities.sort(key=lambda x: x[1])
+    return [name for name, distance in similarities[:max_suggestions] if distance < len(target_name)]
+
+# ===== FUNCIONES CORE DE CÁLCULO MEJORADAS =====
+
+def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
+    """Calcula métricas básicas con manejo mejorado de datos vacíos."""
+    logger.info(f"Calculando métricas: {len(casos_df)} casos, {len(epizootias_df)} epizootias")
+    
+    if not isinstance(casos_df, pd.DataFrame):
+        casos_df = pd.DataFrame()
+    if not isinstance(epizootias_df, pd.DataFrame):
+        epizootias_df = pd.DataFrame()
+    
+    # Si no hay datos y handle_empty está activado, retornar métricas en cero
+    if handle_empty and casos_df.empty and epizootias_df.empty:
+        return create_zero_metrics_for_area(None, None)
+    
+    metrics = {}
+
+    # Métricas de casos
+    metrics["total_casos"] = len(casos_df)
+
+    if "condicion_final" in casos_df.columns and not casos_df.empty:
+        fallecidos = (casos_df["condicion_final"] == "Fallecido").sum()
+        vivos = (casos_df["condicion_final"] == "Vivo").sum()
+        metrics["fallecidos"] = fallecidos
+        metrics["vivos"] = vivos
+        metrics["letalidad"] = (fallecidos / len(casos_df) * 100) if len(casos_df) > 0 else 0
+    else:
+        metrics["fallecidos"] = 0
+        metrics["vivos"] = 0
+        metrics["letalidad"] = 0
+
+    # Información del último caso
+    if not casos_df.empty:
+        ultimo_caso = get_latest_case_info(casos_df, "fecha_inicio_sintomas", ["vereda", "municipio"])
+        metrics["ultimo_caso"] = ultimo_caso
+    else:
+        metrics["ultimo_caso"] = {"existe": False, "ubicacion": "Sin casos registrados"}
+
+    # Métricas de epizootias
+    metrics["total_epizootias"] = len(epizootias_df)
+
+    if "descripcion" in epizootias_df.columns and not epizootias_df.empty:
+        positivos = (epizootias_df["descripcion"] == "POSITIVO FA").sum()
+        en_estudio = (epizootias_df["descripcion"] == "EN ESTUDIO").sum()
+        
+        metrics["epizootias_positivas"] = positivos
+        metrics["epizootias_en_estudio"] = en_estudio
+        metrics["positividad"] = (positivos / len(epizootias_df) * 100) if len(epizootias_df) > 0 else 0
+    else:
+        metrics["epizootias_positivas"] = 0
+        metrics["epizootias_en_estudio"] = 0
+        metrics["positividad"] = 0
+
+    # Información de la última epizootia positiva
+    if not epizootias_df.empty:
+        epizootias_positivas = epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"] if "descripcion" in epizootias_df.columns else pd.DataFrame()
+        ultima_epizootia = get_latest_case_info(epizootias_positivas, "fecha_recoleccion", ["vereda", "municipio"])
+        metrics["ultima_epizootia_positiva"] = ultima_epizootia
+    else:
+        metrics["ultima_epizootia_positiva"] = {"existe": False, "ubicacion": "Sin epizootias registradas"}
+
+    # Métricas geográficas
+    if "municipio" in casos_df.columns and not casos_df.empty:
+        metrics["municipios_con_casos"] = casos_df["municipio"].nunique()
+    else:
+        metrics["municipios_con_casos"] = 0
+
+    if "municipio" in epizootias_df.columns and not epizootias_df.empty:
+        metrics["municipios_con_epizootias"] = epizootias_df["municipio"].nunique()
+    else:
+        metrics["municipios_con_epizootias"] = 0
+
+    return metrics
+
+def get_latest_case_info(df, date_column, location_columns=None):
+    """Obtiene información del caso más reciente con manejo mejorado."""
+    if df.empty or date_column not in df.columns:
         return {
             "existe": False,
             "fecha": None,
-            "ubicacion": "Sin datos filtrados",
+            "ubicacion": "Sin datos",
             "dias_transcurridos": None,
-            "tiempo_transcurrido": "Sin datos filtrados"
+            "tiempo_transcurrido": "Sin datos"
         }
     
-    # Filtrar solo registros con fecha válida
-    df_with_dates = casos_filtrados_df.dropna(subset=[date_column])
+    df_with_dates = df.dropna(subset=[date_column])
     
     if df_with_dates.empty:
         return {
             "existe": False,
             "fecha": None,
-            "ubicacion": "Sin fechas válidas en datos filtrados",
+            "ubicacion": "Sin fechas válidas",
             "dias_transcurridos": None,
-            "tiempo_transcurrido": "Sin fechas válidas en datos filtrados"
+            "tiempo_transcurrido": "Sin fechas válidas"
         }
     
-    # Obtener el registro más reciente DE LOS DATOS FILTRADOS
     latest_idx = df_with_dates[date_column].idxmax()
     latest_record = df_with_dates.loc[latest_idx]
     
@@ -177,7 +786,6 @@ def get_latest_case_info(casos_filtrados_df, date_column, location_columns=None)
     dias = calculate_days_since(fecha)
     tiempo_transcurrido = format_time_elapsed(dias)
     
-    # Construir información de ubicación
     ubicacion_parts = []
     if location_columns:
         for col in location_columns:
@@ -194,121 +802,89 @@ def get_latest_case_info(casos_filtrados_df, date_column, location_columns=None)
         "tiempo_transcurrido": tiempo_transcurrido
     }
 
-def calculate_basic_metrics(casos_df, epizootias_df):
-    """
-    Calcula métricas básicas de los datos CON LOGGING DETALLADO.
-    ACTUALIZADO: Incluye métricas para positivas + en estudio
+# ===== FUNCIONES DE INTEGRACIÓN =====
 
+def integrate_complete_data_structure(casos_df, epizootias_df, data_dir=None):
+    """
+    Integra la estructura completa de datos con listas de municipios/veredas.
+    
     Args:
-        casos_df (pd.DataFrame): DataFrame de casos
-        epizootias_df (pd.DataFrame): DataFrame de epizootias
-
+        casos_df: DataFrame de casos
+        epizootias_df: DataFrame de epizootias  
+        data_dir: Directorio para buscar archivos adicionales
+    
     Returns:
-        dict: Diccionario con métricas calculadas
+        dict: Estructura de datos completa
     """
-    # LOGGING DETALLADO para debugging
-    logger.info(f"🧮 calculate_basic_metrics llamada:")
-    logger.info(f"   📊 Casos recibidos: {len(casos_df)} registros")
-    logger.info(f"   📊 Epizootias recibidas: {len(epizootias_df)} registros")
+    logger.info("🔗 Integrando estructura completa de datos")
     
-    # Verificar que son DataFrames válidos
-    if not isinstance(casos_df, pd.DataFrame):
-        logger.error(f"   ❌ casos_df no es DataFrame: {type(casos_df)}")
-        casos_df = pd.DataFrame()
-    if not isinstance(epizootias_df, pd.DataFrame):
-        logger.error(f"   ❌ epizootias_df no es DataFrame: {type(epizootias_df)}")
-        epizootias_df = pd.DataFrame()
+    # Cargar lista completa de veredas
+    complete_veredas = load_complete_veredas_list_authoritative(data_dir)
     
-    metrics = {}
-
-    # Métricas de casos
-    metrics["total_casos"] = len(casos_df)
-    logger.info(f"   🦠 Total casos: {metrics['total_casos']}")
-
-    if "condicion_final" in casos_df.columns and not casos_df.empty:
-        fallecidos = (casos_df["condicion_final"] == "Fallecido").sum()
-        vivos = (casos_df["condicion_final"] == "Vivo").sum()
-        metrics["fallecidos"] = fallecidos
-        metrics["vivos"] = vivos
-        metrics["letalidad"] = (
-            (fallecidos / len(casos_df) * 100) if len(casos_df) > 0 else 0
-        )
-        logger.info(f"   ⚰️ Fallecidos: {fallecidos}, Vivos: {vivos}, Letalidad: {metrics['letalidad']:.1f}%")
-    else:
-        metrics["fallecidos"] = 0
-        metrics["vivos"] = 0
-        metrics["letalidad"] = 0
-        logger.info(f"   ⚠️ No hay columna condicion_final o casos está vacío")
-
-    # NUEVO: Información del último caso
-    if not casos_df.empty:
-        ultimo_caso = get_latest_case_info(
-            casos_df, 
-            "fecha_inicio_sintomas", 
-            ["vereda", "municipio"]
-        )
-        metrics["ultimo_caso"] = ultimo_caso
-        if ultimo_caso["existe"]:
-            logger.info(f"   📍 Último caso: {ultimo_caso['ubicacion']} ({ultimo_caso['tiempo_transcurrido']})")
-    else:
-        metrics["ultimo_caso"] = {"existe": False}
-        logger.info(f"   📍 Sin casos para último caso")
-
-    # ACTUALIZADO: Métricas de epizootias (positivas + en estudio)
-    metrics["total_epizootias"] = len(epizootias_df)
-    logger.info(f"   🐒 Total epizootias: {metrics['total_epizootias']}")
-
-    if "descripcion" in epizootias_df.columns and not epizootias_df.empty:
-        positivos = (epizootias_df["descripcion"] == "POSITIVO FA").sum()
-        en_estudio = (epizootias_df["descripcion"] == "EN ESTUDIO").sum()
-        
-        metrics["epizootias_positivas"] = positivos
-        metrics["epizootias_en_estudio"] = en_estudio
-        metrics["positividad"] = (
-            (positivos / len(epizootias_df) * 100) if len(epizootias_df) > 0 else 0
-        )
-        logger.info(f"   🔴 Positivas: {positivos}, En estudio: {en_estudio}, Positividad: {metrics['positividad']:.1f}%")
-    else:
-        metrics["epizootias_positivas"] = 0
-        metrics["epizootias_en_estudio"] = 0
-        metrics["positividad"] = 0
-        logger.info(f"   ⚠️ No hay columna descripcion o epizootias está vacío")
-
-    # NUEVO: Información de la última epizootia positiva
-    if not epizootias_df.empty:
-        epizootias_positivas = epizootias_df[epizootias_df["descripcion"] == "POSITIVO FA"] if "descripcion" in epizootias_df.columns else pd.DataFrame()
-        ultima_epizootia = get_latest_case_info(
-            epizootias_positivas,
-            "fecha_recoleccion",
-            ["vereda", "municipio"]
-        )
-        metrics["ultima_epizootia_positiva"] = ultima_epizootia
-        if ultima_epizootia["existe"]:
-            logger.info(f"   📍 Última epizootia positiva: {ultima_epizootia['ubicacion']} ({ultima_epizootia['tiempo_transcurrido']})")
-    else:
-        metrics["ultima_epizootia_positiva"] = {"existe": False}
-        logger.info(f"   📍 Sin epizootias para última epizootia")
-
-    # Métricas geográficas usando nombres directos (sin normalización)
-    if "municipio" in casos_df.columns and not casos_df.empty:
-        metrics["municipios_con_casos"] = casos_df["municipio"].nunique()
-    else:
-        metrics["municipios_con_casos"] = 0
-
-    if "municipio" in epizootias_df.columns and not epizootias_df.empty:
-        metrics["municipios_con_epizootias"] = epizootias_df["municipio"].nunique()
-    else:
-        metrics["municipios_con_epizootias"] = 0
-
-    logger.info(f"   📍 Municipios con casos: {metrics['municipios_con_casos']}, con epizootias: {metrics['municipios_con_epizootias']}")
+    # Obtener ubicaciones de los datos actuales
+    ubicaciones_actuales = get_unique_locations(casos_df, epizootias_df)
     
-    # LOG FINAL CON RESUMEN
-    logger.info(f"🧮 Métricas calculadas: {metrics['total_casos']} casos, {metrics['total_epizootias']} epizootias, {metrics['fallecidos']} fallecidos, {metrics['epizootias_positivas']} positivas")
+    # Combinar datos
+    municipios_combinados = list(set(
+        complete_veredas['municipios_completos'] + 
+        ubicaciones_actuales['municipios']
+    ))
+    
+    # Combinar veredas por municipio
+    veredas_combinadas = complete_veredas['veredas_por_municipio'].copy()
+    
+    for municipio, veredas_actuales in ubicaciones_actuales['veredas_por_municipio'].items():
+        if municipio in veredas_combinadas:
+            # Combinar con veredas existentes
+            veredas_existentes = set(veredas_combinadas[municipio])
+            veredas_nuevas = set(veredas_actuales)
+            veredas_combinadas[municipio] = sorted(veredas_existentes.union(veredas_nuevas))
+        else:
+            # Municipio no estaba en lista completa
+            veredas_combinadas[municipio] = sorted(veredas_actuales)
+    
+    # Asegurar que todos los municipios tengan al menos una vereda
+    for municipio in municipios_combinados:
+        if municipio not in veredas_combinadas or not veredas_combinadas[municipio]:
+            veredas_combinadas[municipio] = [f"{municipio} CENTRO"]
+    
+    # Crear mapeos display
+    municipio_display_map = complete_veredas['municipio_display_map'].copy()
+    vereda_display_map = complete_veredas['vereda_display_map'].copy()
+    
+    # Agregar mapeos faltantes
+    for municipio in municipios_combinados:
+        if municipio not in municipio_display_map:
+            municipio_display_map[municipio] = municipio
+    
+    resultado = {
+        "casos": casos_df,
+        "epizootias": epizootias_df,
+        "municipios_normalizados": sorted(municipios_combinados),
+        "veredas_por_municipio": veredas_combinadas,
+        "municipio_display_map": municipio_display_map,
+        "vereda_display_map": vereda_display_map,
+        "veredas_completas": complete_veredas['veredas_completas'],
+        "regiones": complete_veredas.get('regiones', {}),
+        "data_source": "integrated"
+    }
+    
+    logger.info(f"✅ Estructura integrada: {len(municipios_combinados)} municipios, {sum(len(v) for v in veredas_combinadas.values())} veredas")
+    
+    return resultado
 
-    return metrics
+# ===== FUNCIONES DE PROCESAMIENTO (mantener las existentes) =====
 
 def create_age_groups(ages):
     """Crea grupos de edad a partir de una serie de edades."""
+    GRUPOS_EDAD = [
+        {"min": 0, "max": 14, "label": "0-14 años"},
+        {"min": 15, "max": 29, "label": "15-29 años"},
+        {"min": 30, "max": 44, "label": "30-44 años"},
+        {"min": 45, "max": 59, "label": "45-59 años"},
+        {"min": 60, "max": 120, "label": "60+ años"},
+    ]
+    
     def classify_age(age):
         if pd.isna(age):
             return "No especificado"
@@ -323,14 +899,12 @@ def create_age_groups(ages):
 
     return ages.apply(classify_age)
 
-
 def process_casos_dataframe(casos_df):
     """Procesa el dataframe de casos."""
     df_processed = casos_df.copy()
 
     # Procesar fechas
     if "fecha_inicio_sintomas" in df_processed.columns:
-        logger.info("📅 Procesando fechas de casos...")
         df_processed["fecha_inicio_sintomas"] = df_processed["fecha_inicio_sintomas"].apply(excel_date_to_datetime)
 
     # Crear grupos de edad
@@ -351,14 +925,12 @@ def process_casos_dataframe(casos_df):
 
     return df_processed
 
-
 def process_epizootias_dataframe(epizootias_df):
     """Procesa el dataframe de epizootias."""
     df_processed = epizootias_df.copy()
 
     # Procesar fechas
     if "fecha_recoleccion" in df_processed.columns:
-        logger.info("📅 Procesando fechas de epizootias...")
         df_processed["fecha_recoleccion"] = df_processed["fecha_recoleccion"].apply(excel_date_to_datetime)
 
     # Limpiar descripción
@@ -388,168 +960,41 @@ def process_epizootias_dataframe(epizootias_df):
 
     return df_processed
 
-
-def apply_filters_to_data(casos_df, epizootias_df, filters):
-    """
-    SIMPLIFICADO: Aplica filtros usando nombres directos.
-    NOTA: Esta función se mantiene solo para compatibilidad.
-    El filtrado principal debe hacerse a través del sistema unificado.
-    """
-    casos_filtrados = casos_df.copy()
-    epizootias_filtradas = epizootias_df.copy()
-
-    # Aplicar filtro de municipio
-    if filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
-        municipio = filters["municipio_display"]
-        casos_filtrados = casos_filtrados[casos_filtrados["municipio"] == municipio]
-        epizootias_filtradas = epizootias_filtradas[epizootias_filtradas["municipio"] == municipio]
-
-    # Aplicar filtro de vereda
-    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
-        vereda = filters["vereda_display"]
-        casos_filtrados = casos_filtrados[casos_filtrados["vereda"] == vereda]
-        epizootias_filtradas = epizootias_filtradas[epizootias_filtradas["vereda"] == vereda]
-
-    # Aplicar filtro de fechas
-    if filters.get("fecha_rango") and len(filters["fecha_rango"]) == 2:
-        fecha_inicio, fecha_fin = filters["fecha_rango"]
-        fecha_inicio = pd.Timestamp(fecha_inicio)
-        fecha_fin = pd.Timestamp(fecha_fin)
-
-        if "fecha_inicio_sintomas" in casos_filtrados.columns:
-            casos_filtrados = casos_filtrados[
-                (casos_filtrados["fecha_inicio_sintomas"] >= fecha_inicio)
-                & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
-            ]
-
-        if "fecha_recoleccion" in epizootias_filtradas.columns:
-            epizootias_filtradas = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
-                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
-            ]
-
-    return casos_filtrados, epizootias_filtradas
-
-
-def get_unique_locations(casos_filtrados_df, epizootias_filtradas_df):
-    """
-    CORREGIDO: Obtiene ubicaciones únicas de DATOS FILTRADOS.
-    
-    Args:
-        casos_filtrados_df (pd.DataFrame): Casos filtrados
-        epizootias_filtradas_df (pd.DataFrame): Epizootias filtradas
-        
-    Returns:
-        dict: Ubicaciones únicas en los datos filtrados
-    """
+def get_unique_locations(casos_df, epizootias_df):
+    """Obtiene ubicaciones únicas de los datos."""
     locations = {"municipios": set(), "veredas_por_municipio": {}}
 
-    # Obtener municipios únicos de datos filtrados
-    if "municipio" in casos_filtrados_df.columns:
-        locations["municipios"].update(casos_filtrados_df["municipio"].dropna().unique())
+    # Obtener municipios únicos
+    if "municipio" in casos_df.columns:
+        locations["municipios"].update(casos_df["municipio"].dropna().unique())
 
-    if "municipio" in epizootias_filtradas_df.columns:
-        locations["municipios"].update(epizootias_filtradas_df["municipio"].dropna().unique())
+    if "municipio" in epizootias_df.columns:
+        locations["municipios"].update(epizootias_df["municipio"].dropna().unique())
 
     locations["municipios"] = sorted(list(locations["municipios"]))
 
-    # Obtener veredas por municipio de datos filtrados
+    # Obtener veredas por municipio
     for municipio in locations["municipios"]:
         veredas = set()
 
-        # Veredas de casos filtrados
-        if "vereda" in casos_filtrados_df.columns:
-            veredas_casos = casos_filtrados_df[
-                casos_filtrados_df["municipio"] == municipio
-            ]["vereda"].dropna().unique()
+        if "vereda" in casos_df.columns:
+            veredas_casos = casos_df[casos_df["municipio"] == municipio]["vereda"].dropna().unique()
             veredas.update(veredas_casos)
 
-        # Veredas de epizootias filtradas
-        if "vereda" in epizootias_filtradas_df.columns:
-            veredas_epi = epizootias_filtradas_df[
-                epizootias_filtradas_df["municipio"] == municipio
-            ]["vereda"].dropna().unique()
+        if "vereda" in epizootias_df.columns:
+            veredas_epi = epizootias_df[epizootias_df["municipio"] == municipio]["vereda"].dropna().unique()
             veredas.update(veredas_epi)
 
         locations["veredas_por_municipio"][municipio] = sorted(list(veredas))
 
     return locations
 
+def prepare_dataframe_for_display(df, date_columns=None):
+    """Prepara DataFrame para mostrar."""
+    if df.empty:
+        return df
 
-def create_summary_by_location(casos_filtrados_df, epizootias_filtradas_df):
-    """
-    CORREGIDO: Crea resumen por ubicación usando DATOS FILTRADOS.
-    
-    Args:
-        casos_filtrados_df (pd.DataFrame): DataFrame de casos filtrados
-        epizootias_filtradas_df (pd.DataFrame): DataFrame de epizootias filtradas
-        
-    Returns:
-        pd.DataFrame: Resumen por ubicación de datos filtrados
-    """
-    summary_data = []
-
-    # Obtener ubicaciones únicas de los datos filtrados
-    locations = get_unique_locations(casos_filtrados_df, epizootias_filtradas_df)
-
-    for municipio in locations["municipios"]:
-        # Casos en el municipio (de datos filtrados)
-        casos_municipio = casos_filtrados_df[
-            casos_filtrados_df["municipio"] == municipio
-        ] if "municipio" in casos_filtrados_df.columns else pd.DataFrame()
-        
-        epizootias_municipio = epizootias_filtradas_df[
-            epizootias_filtradas_df["municipio"] == municipio
-        ] if "municipio" in epizootias_filtradas_df.columns else pd.DataFrame()
-
-        # Calcular métricas de datos filtrados
-        total_casos = len(casos_municipio)
-        total_epizootias = len(epizootias_municipio)
-
-        fallecidos = 0
-        if not casos_municipio.empty and "condicion_final" in casos_municipio.columns:
-            fallecidos = (casos_municipio["condicion_final"] == "Fallecido").sum()
-
-        positivos = 0
-        en_estudio = 0
-        if not epizootias_municipio.empty and "descripcion" in epizootias_municipio.columns:
-            positivos = (epizootias_municipio["descripcion"] == "POSITIVO FA").sum()
-            en_estudio = (epizootias_municipio["descripcion"] == "EN ESTUDIO").sum()
-
-        summary_data.append({
-            "municipio": municipio,
-            "total_casos": total_casos,
-            "fallecidos": fallecidos,
-            "letalidad": (fallecidos / total_casos * 100) if total_casos > 0 else 0,
-            "total_epizootias": total_epizootias,
-            "epizootias_positivas": positivos,
-            "epizootias_en_estudio": en_estudio,
-            "positividad": (
-                (positivos / total_epizootias * 100) if total_epizootias > 0 else 0
-            ),
-            "veredas_afectadas": len(
-                locations["veredas_por_municipio"].get(municipio, [])
-            ),
-        })
-
-    return pd.DataFrame(summary_data).sort_values("total_casos", ascending=False)
-
-
-def prepare_dataframe_for_display(df_filtrado, date_columns=None):
-    """
-    CORREGIDO: Prepara DataFrame filtrado para mostrar.
-    
-    Args:
-        df_filtrado (pd.DataFrame): DataFrame filtrado para mostrar
-        date_columns (list): Columnas de fecha a formatear
-        
-    Returns:
-        pd.DataFrame: DataFrame filtrado preparado para mostrar
-    """
-    if df_filtrado.empty:
-        return df_filtrado
-
-    df_display = df_filtrado.copy()
+    df_display = df.copy()
 
     # Formatear columnas de fecha
     if date_columns:
@@ -564,274 +1009,28 @@ def prepare_dataframe_for_display(df_filtrado, date_columns=None):
 
     return df_display
 
-
-def validate_data_consistency(casos_filtrados_df, epizootias_filtradas_df):
-    """
-    CORREGIDO: Valida consistencia de DATOS FILTRADOS.
-    
-    Args:
-        casos_filtrados_df (pd.DataFrame): Casos filtrados
-        epizootias_filtradas_df (pd.DataFrame): Epizootias filtradas
-        
-    Returns:
-        dict: Reporte de validación de datos filtrados
-    """
-    validation_report = {
-        "casos_filtrados": {}, 
-        "epizootias_filtradas": {}, 
-        "warnings": [], 
-        "errors": []
-    }
-
-    # Validar casos filtrados
-    if not casos_filtrados_df.empty:
-        validation_report["casos_filtrados"]["total_rows"] = len(casos_filtrados_df)
-        validation_report["casos_filtrados"]["columns"] = list(casos_filtrados_df.columns)
-
-        # Verificar fechas válidas en datos filtrados
-        if "fecha_inicio_sintomas" in casos_filtrados_df.columns:
-            fechas_validas = casos_filtrados_df["fecha_inicio_sintomas"].notna().sum()
-            validation_report["casos_filtrados"]["fechas_validas"] = fechas_validas
-            if fechas_validas == 0:
-                validation_report["warnings"].append("No hay fechas válidas en casos filtrados")
-
-    # Validar epizootias filtradas
-    if not epizootias_filtradas_df.empty:
-        validation_report["epizootias_filtradas"]["total_rows"] = len(epizootias_filtradas_df)
-        validation_report["epizootias_filtradas"]["columns"] = list(epizootias_filtradas_df.columns)
-
-        # Verificar distribución de descripciones en datos filtrados
-        if "descripcion" in epizootias_filtradas_df.columns:
-            desc_counts = epizootias_filtradas_df["descripcion"].value_counts()
-            validation_report["epizootias_filtradas"]["distribuciones"] = desc_counts.to_dict()
-
-    return validation_report
-
-
-# ==================== FUNCIONES DE LOGGING PARA DEBUGGING ====================
-
-def log_filter_application(data_original, data_filtered, filter_description=""):
-    """
-    NUEVA: Función para logging detallado del filtrado.
-    Ayuda a debugging del problema reportado.
-    """
-    casos_orig = len(data_original.get("casos", []))
-    epi_orig = len(data_original.get("epizootias", []))
-    
-    casos_filt = len(data_filtered.get("casos", []))
-    epi_filt = len(data_filtered.get("epizootias", []))
-    
-    logger.info(f"🔍 Filtrado aplicado {filter_description}:")
-    logger.info(f"   🦠 Casos: {casos_orig} → {casos_filt} ({((casos_orig-casos_filt)/casos_orig*100):.1f}% filtrado)" if casos_orig > 0 else f"   🦠 Casos: 0 → 0")
-    logger.info(f"   🐒 Epizootias: {epi_orig} → {epi_filt} ({((epi_orig-epi_filt)/epi_orig*100):.1f}% filtrado)" if epi_orig > 0 else f"   🐒 Epizootias: 0 → 0")
-
-
-def verify_filtered_data_usage(df, function_name=""):
-    """
-    NUEVA: Función para verificar que se están usando datos filtrados.
-    """
-    if df.empty:
-        logger.warning(f"⚠️ {function_name}: DataFrame vacío - posiblemente sobre-filtrado")
-    else:
-        logger.info(f"✅ {function_name}: Usando {len(df)} registros filtrados")
-        
-def verify_filtered_data_usage(data, context="unknown"):
-    """
-    Verifica que se estén usando datos filtrados y no datos originales.
-    
-    Args:
-        data (pd.DataFrame): DataFrame a verificar
-        context (str): Contexto donde se está usando (para logging)
-    """
-    if data is None:
-        logger.warning(f"⚠️ {context}: Datos nulos recibidos")
-        return False
-    
-    # Log básico de verificación
-    total_rows = len(data)
-    logger.info(f"✅ {context}: Usando datos con {total_rows} registros")
-    
-    # Verificación adicional: si los datos vienen del session_state de filtros
-    if hasattr(data, 'name') and 'filtered' in str(data.name):
-        logger.info(f"✅ {context}: Confirmado uso de datos filtrados")
-    
-    return True
-
-
-def log_filter_application(data_original, data_filtered, filter_description=""):
-    """
-    Registra la aplicación de filtros para debugging.
-    
-    Args:
-        data_original (dict): Datos originales con 'casos' y 'epizootias'
-        data_filtered (dict): Datos filtrados con 'casos' y 'epizootias' 
-        filter_description (str): Descripción de los filtros aplicados
-    """
-    try:
-        # Conteos originales
-        casos_orig = len(data_original.get("casos", []))
-        epi_orig = len(data_original.get("epizootias", []))
-        
-        # Conteos filtrados
-        casos_filt = len(data_filtered.get("casos", []))
-        epi_filt = len(data_filtered.get("epizootias", []))
-        
-        # Calcular porcentajes de reducción
-        casos_reduction = ((casos_orig - casos_filt) / casos_orig * 100) if casos_orig > 0 else 0
-        epi_reduction = ((epi_orig - epi_filt) / epi_orig * 100) if epi_orig > 0 else 0
-        
-        # Log detallado
-        logger.info(f"🔍 Aplicación de filtros: {filter_description}")
-        logger.info(f"   🦠 Casos: {casos_orig} → {casos_filt} ({casos_reduction:.1f}% filtrado)")
-        logger.info(f"   🐒 Epizootias: {epi_orig} → {epi_filt} ({epi_reduction:.1f}% filtrado)")
-        
-        if casos_reduction > 0 or epi_reduction > 0:
-            logger.info(f"   ✅ Filtros aplicados correctamente")
-        else:
-            logger.info(f"   ℹ️ Sin filtrado (mostrando datos completos)")
-            
-    except Exception as e:
-        logger.error(f"❌ Error en log_filter_application: {str(e)}")
-
-
-def ensure_filtered_data_usage(casos_filtrados, epizootias_filtradas, context=""):
-    """
-    Asegura que se estén usando datos filtrados en lugar de originales.
-    
-    Args:
-        casos_filtrados (pd.DataFrame): Casos filtrados
-        epizootias_filtradas (pd.DataFrame): Epizootias filtradas
-        context (str): Contexto de uso
-        
-    Returns:
-        tuple: (casos_verificados, epizootias_verificadas)
-    """
-    # Verificar casos
-    verify_filtered_data_usage(casos_filtrados, f"{context} - casos")
-    
-    # Verificar epizootias  
-    verify_filtered_data_usage(epizootias_filtradas, f"{context} - epizootias")
-    
-    # Log de confirmación
-    total_casos = len(casos_filtrados) if casos_filtrados is not None else 0
-    total_epi = len(epizootias_filtradas) if epizootias_filtradas is not None else 0
-    
-    logger.info(f"🎯 {context}: Confirmado uso de datos filtrados - {total_casos} casos, {total_epi} epizootias")
-    
-    return casos_filtrados, epizootias_filtradas
-
-
-def validate_data_consistency_filtered(data_filtered, filters):
-    """
-    Valida la consistencia de datos filtrados con los filtros aplicados.
-    
-    Args:
-        data_filtered (dict): Datos filtrados
-        filters (dict): Filtros aplicados
-        
-    Returns:
-        dict: Reporte de validación
-    """
-    validation_report = {
-        "casos_count": 0,
-        "epizootias_count": 0,
-        "filters_applied": [],
-        "consistency_issues": [],
-        "status": "ok"
-    }
-    
-    try:
-        casos = data_filtered.get("casos", pd.DataFrame())
-        epizootias = data_filtered.get("epizootias", pd.DataFrame())
-        
-        validation_report["casos_count"] = len(casos)
-        validation_report["epizootias_count"] = len(epizootias)
-        
-        # Verificar filtros activos
-        active_filters = filters.get("active_filters", [])
-        validation_report["filters_applied"] = active_filters
-        
-        # Validar consistencia con filtros de ubicación
-        municipio_filter = filters.get("municipio_display", "Todos")
-        vereda_filter = filters.get("vereda_display", "Todas")
-        
-        if municipio_filter != "Todos":
-            # Verificar que los casos filtrados correspondan al municipio
-            if not casos.empty and "municipio" in casos.columns:
-                casos_municipio = casos["municipio"].unique()
-                if len(casos_municipio) > 1 or (len(casos_municipio) == 1 and casos_municipio[0] != municipio_filter):
-                    validation_report["consistency_issues"].append(f"Casos no coinciden con filtro de municipio: {municipio_filter}")
-            
-            # Verificar epizootias
-            if not epizootias.empty and "municipio" in epizootias.columns:
-                epi_municipio = epizootias["municipio"].unique()
-                if len(epi_municipio) > 1 or (len(epi_municipio) == 1 and epi_municipio[0] != municipio_filter):
-                    validation_report["consistency_issues"].append(f"Epizootias no coinciden con filtro de municipio: {municipio_filter}")
-        
-        if vereda_filter != "Todas":
-            # Verificar que los datos filtrados correspondan a la vereda
-            if not casos.empty and "vereda" in casos.columns:
-                casos_vereda = casos["vereda"].unique()
-                if len(casos_vereda) > 1 or (len(casos_vereda) == 1 and casos_vereda[0] != vereda_filter):
-                    validation_report["consistency_issues"].append(f"Casos no coinciden con filtro de vereda: {vereda_filter}")
-        
-        # Determinar status final
-        if validation_report["consistency_issues"]:
-            validation_report["status"] = "issues_found"
-            logger.warning(f"⚠️ Problemas de consistencia en datos filtrados: {validation_report['consistency_issues']}")
-        else:
-            validation_report["status"] = "ok"
-            logger.info(f"✅ Datos filtrados consistentes con filtros aplicados")
-            
-    except Exception as e:
-        validation_report["status"] = "error"
-        validation_report["consistency_issues"].append(f"Error en validación: {str(e)}")
-        logger.error(f"❌ Error validando consistencia de datos filtrados: {str(e)}")
-    
-    return validation_report
-
+# ===== FUNCIONES DE DEBUGGING SIMPLIFICADAS =====
 
 def debug_data_flow(data_original, data_filtered, filters, stage="unknown"):
-    """
-    Debug detallado del flujo de datos para identificar problemas de filtrado.
-    
-    Args:
-        data_original (dict): Datos originales
-        data_filtered (dict): Datos filtrados  
-        filters (dict): Filtros aplicados
-        stage (str): Etapa del proceso
-    """
-    logger.info(f"🔧 DEBUG {stage} - Análisis de flujo de datos:")
-    
-    # Análisis de datos originales
-    if isinstance(data_original, dict):
+    """Debug simplificado del flujo de datos."""
+    if isinstance(data_original, dict) and isinstance(data_filtered, dict):
         casos_orig = len(data_original.get("casos", []))
         epi_orig = len(data_original.get("epizootias", []))
-        logger.info(f"   📊 Originales: {casos_orig} casos, {epi_orig} epizootias")
-    else:
-        logger.warning(f"   ⚠️ data_original no es dict: {type(data_original)}")
-    
-    # Análisis de datos filtrados
-    if isinstance(data_filtered, dict):
         casos_filt = len(data_filtered.get("casos", []))
         epi_filt = len(data_filtered.get("epizootias", []))
-        logger.info(f"   🎯 Filtrados: {casos_filt} casos, {epi_filt} epizootias")
         
-        # Verificar si realmente hay filtrado
-        if isinstance(data_original, dict):
-            if casos_filt == casos_orig and epi_filt == epi_orig:
-                logger.warning(f"   ⚠️ Los datos filtrados son iguales a los originales - filtros no aplicados?")
-            else:
-                logger.info(f"   ✅ Filtrado detectado correctamente")
-    else:
-        logger.warning(f"   ⚠️ data_filtered no es dict: {type(data_filtered)}")
+        logger.info(f"Debug {stage}: Casos {casos_orig}→{casos_filt}, Epizootias {epi_orig}→{epi_filt}")
+        
+        active_filters = filters.get("active_filters", []) if isinstance(filters, dict) else []
+        if active_filters:
+            logger.info(f"Filtros activos: {len(active_filters)}")
+
+def verify_filtered_data_usage(data, context=""):
+    """Verifica que se estén usando datos filtrados."""
+    if data is None:
+        logger.warning(f"⚠️ {context}: Datos nulos")
+        return False
     
-    # Análisis de filtros
-    active_filters = filters.get("active_filters", []) if isinstance(filters, dict) else []
-    logger.info(f"   🎛️ Filtros activos: {len(active_filters)} - {active_filters[:2] if active_filters else 'Ninguno'}")
-    
-    # Filtros específicos
-    if isinstance(filters, dict):
-        municipio = filters.get("municipio_display", "Todos")
-        vereda = filters.get("vereda_display", "Todas")
-        logger.info(f"   📍 Ubicación: {municipio} / {vereda}")
+    total_rows = len(data)
+    logger.debug(f"✅ {context}: {total_rows} registros")
+    return True

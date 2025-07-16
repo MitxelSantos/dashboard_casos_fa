@@ -1,18 +1,9 @@
 """
-Componente de barra lateral del dashboard - Minimalista.
+Componente de barra lateral.
 """
 
 import streamlit as st
 from pathlib import Path
-from datetime import datetime
-
-# Importación opcional de Google Drive
-try:
-    from gdrive_utils import get_file_from_drive, check_google_drive_availability
-
-    GDRIVE_AVAILABLE = True
-except ImportError:
-    GDRIVE_AVAILABLE = False
 
 # Definir rutas
 ROOT_DIR = Path(__file__).resolve().parent.parent
@@ -21,78 +12,63 @@ ASSETS_DIR = ROOT_DIR / "assets"
 IMAGES_DIR = ASSETS_DIR / "images"
 
 def create_sidebar():
-    """
-    Crea la barra lateral del dashboard.
-    """
+    """Crea la barra lateral completa."""
     with st.sidebar:
-        # Logo de la Gobernación
         display_logo()
-
-        # Separador minimalista
         st.markdown("---")
 
-
 def display_logo():
-    """
-    Muestra el logo de manera responsive.
-    """
-    logo_displayed = False
-
-    # Lista de rutas posibles para el logo
-    possible_logo_paths = [
+    """Muestra logo con fallback automático."""
+    # Rutas posibles para el logo
+    logo_paths = [
         DATA_DIR / "Gobernacion.png",
-        DATA_DIR / "gobernacion.png",
+        DATA_DIR / "gobernacion.png", 
         DATA_DIR / "logo.png",
         IMAGES_DIR / "Gobernacion.png",
     ]
-
-    # Buscar logo en las rutas definidas
-    for logo_path in possible_logo_paths:
+    
+    # Buscar logo local
+    for logo_path in logo_paths:
         if logo_path.exists():
-            display_logo_image(str(logo_path))
-            logo_displayed = True
-            break
+            try:
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.image(logo_path, use_container_width=True)
+                return
+            except Exception:
+                continue
+    
+    # Intentar Google Drive si está disponible
+    if try_google_drive_logo():
+        return
+    
+    # Fallback: placeholder
+    create_logo_placeholder()
 
-    # Intentar cargar logo desde Google Drive si está disponible
-    if not logo_displayed and GDRIVE_AVAILABLE and check_google_drive_availability():
-        try:
-            if (
-                hasattr(st.secrets, "drive_files")
-                and "logo_gobernacion" in st.secrets.drive_files
-            ):
-                logo_id = st.secrets.drive_files["logo_gobernacion"]
-                logo_path = get_file_from_drive(logo_id, "Gobernacion.png")
-                if logo_path and Path(logo_path).exists():
-                    display_logo_image(logo_path)
-                    logo_displayed = True
-        except Exception:
-            pass
-
-    # Si no se encuentra ningún logo, mostrar placeholder
-    if not logo_displayed:
-        create_logo_placeholder()
-
-
-def display_logo_image(logo_path):
-    """
-    Muestra una imagen de logo de manera responsive.
-    """
+def try_google_drive_logo():
+    """Intenta cargar logo desde Google Drive."""
     try:
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            st.image(
-                logo_path,
-                caption=None,
-                use_container_width=True,
-            )
+        from gdrive_utils import check_google_drive_availability, get_file_from_drive
+        
+        if (check_google_drive_availability() and 
+            hasattr(st.secrets, "drive_files") and 
+            "logo_gobernacion" in st.secrets.drive_files):
+            
+            logo_id = st.secrets.drive_files["logo_gobernacion"]
+            logo_path = get_file_from_drive(logo_id, "Gobernacion.png")
+            
+            if logo_path and Path(logo_path).exists():
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.image(logo_path, use_container_width=True)
+                return True
     except Exception:
-        create_logo_placeholder()
-
+        pass
+    
+    return False
 
 def create_logo_placeholder():
-    """
-    Crea un placeholder visual responsive cuando no se encuentra el logo.
-    """
+    """Crea placeholder visual cuando no hay logo."""
     st.markdown(
         """
         <div style="
@@ -118,9 +94,7 @@ def create_logo_placeholder():
     )
 
 def add_copyright():
-    """
-    Agrega copyright minimalista al final de la sidebar.
-    """
+    """Agrega copyright al final del sidebar."""
     st.sidebar.markdown("---")
     st.sidebar.markdown(
         """
@@ -141,22 +115,15 @@ def add_copyright():
         unsafe_allow_html=True,
     )
 
-
-def add_responsive_css():
-    """
-    Agrega CSS minimalista para el sidebar.
-    """
+def init_responsive_sidebar():
+    """Inicializa sidebar con CSS responsive."""
+    # CSS minimalista para sidebar
     st.markdown(
         """
         <style>
         .css-1d391kg {
             min-width: 280px;
             background-color: #fafafa;
-        }
-        
-        .sidebar .stMarkdown {
-            font-size: clamp(0.8rem, 2vw, 0.9rem);
-            line-height: 1.4;
         }
         
         .sidebar .stButton > button {
@@ -184,13 +151,6 @@ def add_responsive_css():
         """,
         unsafe_allow_html=True,
     )
-
-
-# Función principal para inicializar sidebar minimalista
-def init_responsive_sidebar():
-    """
-    Inicializa la barra lateral minimalista.
-    """
-    add_responsive_css()
+    
+    # Crear sidebar
     create_sidebar()
-    # Copyright se agrega al final desde filters.py

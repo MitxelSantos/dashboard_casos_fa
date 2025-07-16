@@ -1,22 +1,16 @@
 """
-Utilidades del dashboard de Fiebre Amarilla.
-OPTIMIZADO: Solo exporta las funciones que realmente se usan en el proyecto.
+Utilidades del dashboard de Fiebre Amarilla
 """
 
-# Solo importar lo que realmente se usa en el proyecto
+# ===== DATA PROCESSOR =====
 from .data_processor import (
     excel_date_to_datetime,
-    format_date_display,
-    process_casos_dataframe,
-    process_epizootias_dataframe,
-    apply_filters_to_data,
     calculate_basic_metrics,
-    get_unique_locations,
-    create_summary_by_location,
-    prepare_dataframe_for_display,
+    verify_filtered_data_usage,
+    debug_data_flow,
 )
 
-# Importaciones condicionales para responsive
+# ===== RESPONSIVE UTILS =====
 try:
     from .responsive import (
         init_responsive_utils,
@@ -24,32 +18,77 @@ try:
         optimize_plotly_chart,
         create_responsive_dataframe,
     )
-
-    RESPONSIVE_UTILS_AVAILABLE = True
+    RESPONSIVE_AVAILABLE = True
 except ImportError:
-    RESPONSIVE_UTILS_AVAILABLE = False
+    RESPONSIVE_AVAILABLE = False
 
-# Lista de exports actualizada - SOLO lo que se usa realmente
+# ===== MAP INTERACTIONS =====
+try:
+    from .map_interactions import (
+        detect_map_click,
+        apply_map_filter,
+        create_map_navigation_buttons,
+        process_map_interaction,
+        create_simple_popup,
+    )
+    MAP_INTERACTIONS_AVAILABLE = True
+except ImportError:
+    MAP_INTERACTIONS_AVAILABLE = False
+
+# ===== SHAPEFILE LOADER =====
+try:
+    from .shapefile_loader import (
+        load_tolima_shapefiles,
+        check_shapefiles_availability,
+        show_shapefile_setup_instructions,
+    )
+    SHAPEFILE_LOADER_AVAILABLE = True
+except ImportError:
+    SHAPEFILE_LOADER_AVAILABLE = False
+
+# ===== EXPORTS LIMPIOS =====
 __all__ = [
-    # Data processor (usado en app.py y vistas)
+    # Data processor (CORE - siempre disponible)
     "excel_date_to_datetime",
-    "format_date_display",
-    "process_casos_dataframe",
-    "process_epizootias_dataframe",
-    "apply_filters_to_data",
-    "calculate_basic_metrics",
-    "get_unique_locations",
-    "create_summary_by_location",
-    "prepare_dataframe_for_display",
+    "calculate_basic_metrics", 
+    "verify_filtered_data_usage",
+    "debug_data_flow",
 ]
 
-# Agregar responsive utils si están disponibles
-if RESPONSIVE_UTILS_AVAILABLE:
-    __all__.extend(
-        [
-            "init_responsive_utils",
-            "create_responsive_metric_cards",
-            "optimize_plotly_chart",
-            "create_responsive_dataframe",
-        ]
-    )
+# Agregar responsive si disponible
+if RESPONSIVE_AVAILABLE:
+    __all__.extend([
+        "init_responsive_utils",
+        "create_responsive_metric_cards", 
+        "optimize_plotly_chart",
+        "create_responsive_dataframe",
+    ])
+
+# Agregar map interactions si disponible
+if MAP_INTERACTIONS_AVAILABLE:
+    __all__.extend([
+        "detect_map_click",
+        "apply_map_filter",
+        "create_map_navigation_buttons",
+        "process_map_interaction", 
+        "create_simple_popup",
+    ])
+
+# Agregar shapefile loader si disponible
+if SHAPEFILE_LOADER_AVAILABLE:
+    __all__.extend([
+        "load_tolima_shapefiles",
+        "check_shapefiles_availability",
+        "show_shapefile_setup_instructions",
+    ])
+
+# ===== INFO DE DISPONIBILIDAD =====
+def get_utils_info():
+    """Retorna información de utilidades disponibles."""
+    return {
+        "data_processor": True,  # Siempre disponible
+        "responsive": RESPONSIVE_AVAILABLE,
+        "map_interactions": MAP_INTERACTIONS_AVAILABLE, 
+        "shapefile_loader": SHAPEFILE_LOADER_AVAILABLE,
+        "total_functions": len(__all__),
+    }
