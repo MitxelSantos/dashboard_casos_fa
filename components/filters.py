@@ -217,18 +217,6 @@ def create_hierarchical_filters_with_multiselect_authoritative(data):
     # Selector de modo de filtrado
     st.sidebar.markdown("### 🎯 Modo de Filtrado")
 
-    # Mostrar información sobre fuente de datos
-    if data.get("data_source") == "hoja_veredas_simple":
-        st.sidebar.markdown(
-            "✅ **Fuente:** Hoja VEREDAS (Simplificado)",
-            help="Datos tomados de la hoja VEREDAS sin normalización compleja",
-        )
-    else:
-        st.sidebar.markdown(
-            "⚠️ **Fuente:** Fallback",
-            help="Hoja VEREDAS no disponible, usando datos alternativos",
-        )
-
     filtro_modo = st.sidebar.radio(
         "Seleccione el tipo de filtrado:",
         ["Único", "Múltiple"],
