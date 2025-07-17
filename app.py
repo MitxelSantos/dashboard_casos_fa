@@ -41,7 +41,7 @@ try:
         excel_date_to_datetime,
         calculate_basic_metrics,
         process_complete_data_structure_authoritative,
-        handle_empty_area_filter,
+        handle_empty_area_filter_simple,
     )
     from components.filters import create_unified_filter_system
 
