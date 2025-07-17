@@ -352,10 +352,11 @@ def create_emergency_fallback():
 
 
 def process_complete_data_structure_authoritative(
-    casos_df, epizootias_df, shapefile_data=None, data_dir=None
+    casos_df, epizootias_df, shapefile_data=None, data_dir=None, veredas_data=None
 ):
     """
     Función principal que procesa datos SIMPLIFICADO - sin normalización compleja
+    MODIFICADA: Ahora acepta veredas_data desde Google Drive
     """
     logger.info("🚀 Procesando estructura SIMPLIFICADO")
 
@@ -363,14 +364,21 @@ def process_complete_data_structure_authoritative(
     casos_processed = process_casos_dataframe(casos_df)
     epizootias_processed = process_epizootias_dataframe(epizootias_df)
 
-    # Cargar datos de hoja VEREDAS
-    veredas_data = load_complete_veredas_list_authoritative(data_dir)
+    # Cargar datos de hoja VEREDAS - MODIFICADO
+    if veredas_data:
+        # Usar datos de veredas pasados como parámetro (desde Google Drive)
+        logger.info("✅ Usando datos de veredas desde Google Drive")
+        veredas_data_processed = veredas_data
+    else:
+        # Cargar desde archivo local (comportamiento original)
+        logger.info("📁 Cargando datos de veredas desde archivo local")
+        veredas_data_processed = load_complete_veredas_list_authoritative(data_dir)
 
     # Validación de datos SIMPLIFICADA
     validation_report = validate_data_simple(
         casos_processed,
         epizootias_processed,
-        veredas_data.get("municipios_authoritativos", []),
+        veredas_data_processed.get("municipios_authoritativos", []),
     )
 
     # Obtener ubicaciones de los datos actuales SIN NORMALIZACIÓN COMPLEJA
@@ -379,8 +387,8 @@ def process_complete_data_structure_authoritative(
     )
 
     # USAR HOJA VEREDAS como base, complementar con datos actuales
-    municipios_authoritativos = veredas_data["municipios_authoritativos"]
-    veredas_por_municipio = veredas_data["veredas_por_municipio"].copy()
+    municipios_authoritativos = veredas_data_processed["municipios_authoritativos"]
+    veredas_por_municipio = veredas_data_processed["veredas_por_municipio"].copy()
 
     # Agregar municipios adicionales si existen
     municipios_adicionales = []
@@ -409,7 +417,7 @@ def process_complete_data_structure_authoritative(
     municipios_finales = sorted(set(municipios_authoritativos + municipios_adicionales))
 
     # Crear mapeos display
-    municipio_display_map = veredas_data["municipio_display_map"].copy()
+    municipio_display_map = veredas_data_processed["municipio_display_map"].copy()
     for municipio in municipios_adicionales:
         municipio_display_map[municipio] = municipio
 
@@ -419,13 +427,13 @@ def process_complete_data_structure_authoritative(
         "epizootias": epizootias_processed,
         "municipios_normalizados": municipios_finales,
         "municipios_authoritativos": municipios_authoritativos,
-        "veredas_por_municipio": veredas_por_municipio,
+        "veredas_por_municipio": veredas_por_municipio,  # ✅ Ahora esto estará poblado
         "municipio_display_map": municipio_display_map,
-        "vereda_display_map": veredas_data["vereda_display_map"],
-        "veredas_completas": veredas_data["veredas_completas"],
-        "regiones": veredas_data.get("regiones", {}),
+        "vereda_display_map": veredas_data_processed["vereda_display_map"],
+        "veredas_completas": veredas_data_processed["veredas_completas"],
+        "regiones": veredas_data_processed.get("regiones", {}),
         "validation_report": validation_report,
-        "data_source": "hoja_veredas_simple",
+        "data_source": veredas_data_processed.get("source", "hoja_veredas_simple"),
     }
 
     # Agregar funciones de manejo simplificadas
