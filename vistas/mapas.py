@@ -2711,6 +2711,26 @@ def get_total_veredas_municipio_simplified(municipio, data_original):
     """Obtiene total REAL de veredas desde hoja VEREDAS SIMPLIFICADO."""
     veredas_por_municipio = data_original.get("veredas_por_municipio", {})
 
+    # ===== DEBUG TEMPORAL =====
+    logger.info(f"🔍 DEBUG VERIFICACIÓN PARA: {municipio}")
+    logger.info(f"📊 data_original keys: {list(data_original.keys())}")
+    
+    veredas_por_municipio = data_original.get("veredas_por_municipio", {})
+    logger.info(f"📊 veredas_por_municipio tipo: {type(veredas_por_municipio)}")
+    logger.info(f"📊 veredas_por_municipio len: {len(veredas_por_municipio)}")
+    logger.info(f"📊 veredas_por_municipio keys: {list(veredas_por_municipio.keys())[:5]}")
+    
+    data_source = data_original.get("data_source", "unknown")
+    logger.info(f"📊 data_source: {data_source}")
+    
+    if hasattr(st, 'write'):
+        st.write(f"**DEBUG {municipio}:**")
+        st.write(f"- Data source: `{data_source}`")
+        st.write(f"- Veredas_por_municipio length: `{len(veredas_por_municipio)}`")
+        st.write(f"- Municipality keys (first 5): `{list(veredas_por_municipio.keys())[:5]}`")
+        st.write(f"- Target municipality in keys: `{municipio in veredas_por_municipio}`")
+    # ===== FIN DEBUG =====
+
     # Buscar coincidencia directa
     if municipio in veredas_por_municipio:
         total_real = len(veredas_por_municipio[municipio])
