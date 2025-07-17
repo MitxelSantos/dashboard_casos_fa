@@ -1,23 +1,12 @@
 """
-Vista de mapas CORREGIDA - Solucionando coloración múltiple, afectación y filtrado desde mapa.
+Vista de mapas SIMPLIFICADA - Sin normalización compleja
+Soluciona: Error Ibagué, MARIQUITA vs SAN SEBASTIAN, clics departamental→municipal, afectación
 """
 
 import streamlit as st
 import pandas as pd
 import logging
 from datetime import datetime, timedelta
-
-from utils.name_normalizer import (
-    normalize_name_robust,
-    normalize_name_with_accents,
-    normalize_name_for_display,
-    match_name_fuzzy,
-    validate_municipio_name,
-    get_canonical_municipio_name,
-    find_equivalent_names,
-    debug_name_matching,
-    create_cross_reference_map,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +15,6 @@ try:
     import geopandas as gpd
     import folium
     from streamlit_folium import st_folium
-
     MAPS_AVAILABLE = True
 except ImportError:
     MAPS_AVAILABLE = False
@@ -40,13 +28,72 @@ try:
         check_shapefiles_availability,
         show_shapefile_setup_instructions,
     )
-
     SHAPEFILE_LOADER_AVAILABLE = True
 except ImportError:
     SHAPEFILE_LOADER_AVAILABLE = False
 
-# ===== CONFIGURACIÓN DE COLORES =====
+# ===== DICCIONARIO DE MAPEO PARA INCONSISTENCIAS CONOCIDAS =====
+MUNICIPIO_MAPPING = {
+    # Shapefile → Base de datos
+    "SAN SEBASTIAN DE MARIQUITA": "MARIQUITA",
+    "MARIQUITA": "MARIQUITA",
+    # Agregar otros mapeos según sea necesario
+}
 
+VEREDA_MUNICIPIO_MAPPING = {
+    # Para casos donde el municipio en shapefile no coincide con base de datos
+    "SAN SEBASTIAN DE MARIQUITA": "MARIQUITA",
+}
+
+# ===== FUNCIONES DE MAPEO SIMPLIFICADAS =====
+
+def simple_name_match(name1: str, name2: str) -> bool:
+    """Comparación simple con mapeo de inconsistencias conocidas."""
+    if not name1 or not name2:
+        return False
+    
+    name1_clean = str(name1).strip()
+    name2_clean = str(name2).strip()
+    
+    # Comparación directa
+    if name1_clean == name2_clean:
+        return True
+    
+    # Verificar mapeos conocidos
+    mapped_name1 = MUNICIPIO_MAPPING.get(name1_clean, name1_clean)
+    mapped_name2 = MUNICIPIO_MAPPING.get(name2_clean, name2_clean)
+    
+    return mapped_name1 == mapped_name2
+
+def get_mapped_municipio(municipio_name: str) -> str:
+    """Obtiene el nombre mapeado de un municipio."""
+    if not municipio_name:
+        return ""
+    
+    municipio_clean = str(municipio_name).strip()
+    return MUNICIPIO_MAPPING.get(municipio_clean, municipio_clean)
+
+def find_municipio_in_data(shapefile_municipio: str, available_municipios: list) -> str:
+    """Encuentra municipio en datos usando mapeo simple."""
+    if not shapefile_municipio or not available_municipios:
+        return None
+    
+    shapefile_clean = str(shapefile_municipio).strip()
+    
+    # Buscar coincidencia exacta primero
+    for municipio in available_municipios:
+        if simple_name_match(shapefile_clean, municipio):
+            return municipio
+    
+    # Buscar usando mapeo
+    mapped_municipio = get_mapped_municipio(shapefile_clean)
+    for municipio in available_municipios:
+        if simple_name_match(mapped_municipio, municipio):
+            return municipio
+    
+    return None
+
+# ===== CONFIGURACIÓN DE COLORES =====
 
 def get_color_scheme_epidemiological(colors):
     """Esquema de colores epidemiológico."""
@@ -58,7 +105,6 @@ def get_color_scheme_epidemiological(colors):
         "seleccionado": colors["primary"],
         "no_seleccionado": "#F3F4F6",
     }
-
 
 def get_color_scheme_coverage(colors):
     """Esquema de colores por cobertura de vacunación."""
@@ -72,21 +118,10 @@ def get_color_scheme_coverage(colors):
         "no_seleccionado": "#F3F4F6",
     }
 
-
-def determine_feature_color_epidemiological(
-    casos_count,
-    epizootias_count,
-    fallecidos_count,
-    positivas_count,
-    en_estudio_count,
-    color_scheme,
-):
+def determine_feature_color_epidemiological(casos_count, epizootias_count, fallecidos_count, positivas_count, en_estudio_count, color_scheme):
     """Determina color según modo epidemiológico."""
     if casos_count > 0 and epizootias_count > 0 and fallecidos_count > 0:
-        return (
-            color_scheme["casos_epizootias_fallecidos"],
-            "🔴 Casos + Epizootias + Fallecidos",
-        )
+        return color_scheme["casos_epizootias_fallecidos"], "🔴 Casos + Epizootias + Fallecidos"
     elif casos_count > 0 and epizootias_count == 0:
         return color_scheme["solo_casos"], "🟠 Solo casos"
     elif casos_count == 0 and epizootias_count > 0:
@@ -94,40 +129,11 @@ def determine_feature_color_epidemiological(
     else:
         return color_scheme["sin_datos"], "⚪ Sin datos"
 
-
-def determine_feature_color_coverage(cobertura_porcentaje, color_scheme):
-    """Determina color según cobertura de vacunación."""
-    if pd.isna(cobertura_porcentaje):
-        return color_scheme["sin_datos"], "Sin datos de cobertura"
-
-    if cobertura_porcentaje > 95:
-        return (
-            color_scheme["cobertura_alta"],
-            f"Cobertura alta: {cobertura_porcentaje:.1f}%",
-        )
-    elif cobertura_porcentaje >= 80:
-        return (
-            color_scheme["cobertura_buena"],
-            f"Cobertura buena: {cobertura_porcentaje:.1f}%",
-        )
-    elif cobertura_porcentaje >= 60:
-        return (
-            color_scheme["cobertura_regular"],
-            f"Cobertura regular: {cobertura_porcentaje:.1f}%",
-        )
-    else:
-        return (
-            color_scheme["cobertura_baja"],
-            f"Cobertura baja: {cobertura_porcentaje:.1f}%",
-        )
-
-
 # ===== FUNCIÓN PRINCIPAL =====
 
-
 def show(data_filtered, filters, colors):
-    """Vista principal de mapas CORREGIDA."""
-    logger.info("🗺️ INICIANDO VISTA DE MAPAS CORREGIDA")
+    """Vista principal de mapas SIMPLIFICADA."""
+    logger.info("🗺️ INICIANDO VISTA DE MAPAS SIMPLIFICADA")
 
     apply_maps_css_optimized(colors)
 
@@ -167,223 +173,152 @@ def show(data_filtered, filters, colors):
         casos_filtrados, epizootias_filtradas, geo_data, filters, colors, data_filtered
     )
 
-
 # ===== LAYOUT =====
 
-
-def create_optimized_layout_50_25_25(
-    casos, epizootias, geo_data, filters, colors, data_filtered
-):
+def create_optimized_layout_50_25_25(casos, epizootias, geo_data, filters, colors, data_filtered):
     """Layout optimizado 50-25-25."""
     col_mapa, col_tarjetas1, col_tarjetas2 = st.columns([2, 1, 1], gap="medium")
 
     with col_mapa:
-        create_map_system_corrected(
-            casos, epizootias, geo_data, filters, colors, data_filtered
-        )
+        create_map_system_simplified(casos, epizootias, geo_data, filters, colors, data_filtered)
 
     with col_tarjetas1:
-        create_cobertura_card_corrected(filters, colors, data_filtered)
+        create_cobertura_card_simplified(filters, colors, data_filtered)
         create_casos_card_optimized(casos, filters, colors)
 
     with col_tarjetas2:
         create_epizootias_card_optimized(epizootias, filters, colors)
-        create_afectacion_card_authoritative(
-            casos, epizootias, filters, colors, data_filtered
-        )
+        create_afectacion_card_simplified(casos, epizootias, filters, colors, data_filtered)
 
-
-def create_map_system_corrected(
-    casos, epizootias, geo_data, filters, colors, data_filtered
-):
-    """Sistema de mapas CORREGIDO."""
+def create_map_system_simplified(casos, epizootias, geo_data, filters, colors, data_filtered):
+    """Sistema de mapas SIMPLIFICADO."""
     current_level = determine_map_level(filters)
     modo_mapa = filters.get("modo_mapa", "Epidemiológico")
 
-    if current_level == "vereda" and filters.get("modo") == "unico":
-        create_vereda_specific_map(
-            casos, epizootias, geo_data, filters, colors, data_filtered
-        )
-    elif current_level == "departamento":
-        if filters.get("modo") == "multiple":
-            create_departmental_map_multiple_corrected(
-                casos, epizootias, geo_data, filters, colors, data_filtered
-            )
-        else:
-            create_departmental_map_single_corrected(
-                casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered
-            )
+    if current_level == "departamento":
+        create_departmental_map_simplified(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered)
     elif current_level == "municipio":
-        if filters.get("modo") == "multiple":
-            create_municipal_map_multiple_corrected(
-                casos, epizootias, geo_data, filters, colors, data_filtered
-            )
-        else:
-            create_municipal_map_single(
-                casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered
-            )
+        create_municipal_map_simplified(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered)
     else:
-        show_fallback_summary(
-            casos, epizootias, current_level, filters.get("municipio_display")
-        )
+        show_fallback_summary(casos, epizootias, current_level, filters.get("municipio_display"))
 
+# ===== MAPAS SIMPLIFICADOS =====
 
-# ===== MAPAS DEPARTAMENTALES CORREGIDOS =====
-
-
-def create_departmental_map_single_corrected(
-    casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered
-):
-    """Mapa departamental único CORREGIDO."""
+def create_departmental_map_simplified(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered):
+    """Mapa departamental SIMPLIFICADO."""
     municipios = geo_data["municipios"].copy()
-    logger.info(f"🏛️ Mapa departamental único {modo_mapa}: {len(municipios)} municipios")
+    logger.info(f"🏛️ Mapa departamental simplificado {modo_mapa}: {len(municipios)} municipios")
 
     if modo_mapa == "Epidemiológico":
-        municipios_data = prepare_municipal_data_epidemiological(
-            casos, epizootias, municipios, colors
-        )
+        municipios_data = prepare_municipal_data_epidemiological_simplified(casos, epizootias, municipios, colors)
     else:
-        municipios_data = prepare_municipal_data_coverage_corrected(
-            municipios, filters, colors
-        )
+        municipios_data = prepare_municipal_data_coverage_simplified(municipios, filters, colors)
 
     m = create_folium_map(municipios_data, zoom_start=8)
-    add_municipios_to_map(m, municipios_data, colors, modo_mapa)
+    add_municipios_to_map_simplified(m, municipios_data, colors, modo_mapa)
 
     map_data = st_folium(
         m,
         width="100%",
         height=600,
         returned_objects=["last_object_clicked"],
-        key=f"map_dept_single_{modo_mapa.lower()}",
+        key=f"map_dept_simple_{modo_mapa.lower()}",
     )
 
-    # CORREGIDO: Pasar data_filtered como data_original
-    handle_map_click_authoritative(
-        map_data, municipios_data, "municipio", filters, data_filtered
-    )
+    # CORREGIDO: Manejo de clics simplificado
+    handle_map_click_simplified(map_data, municipios_data, "municipio", filters, data_filtered)
 
+def create_municipal_map_simplified(casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered):
+    """Mapa municipal SIMPLIFICADO."""
+    municipio_selected = filters.get("municipio_display")
+    if not municipio_selected or municipio_selected == "Todos":
+        st.error("No se pudo determinar el municipio para la vista de veredas")
+        return
 
-def create_departmental_map_multiple_corrected(
-    casos, epizootias, geo_data, filters, colors, data_filtered
-):
-    """Mapa departamental múltiple CORREGIDO - coloración funcionando."""
-    logger.info("🗂️ Creando mapa múltiple departamental CORREGIDO")
+    veredas = geo_data["veredas"].copy()
+    
+    # Buscar veredas del municipio con mapeo
+    veredas_municipio = find_veredas_for_municipio_simplified(veredas, municipio_selected)
 
-    municipios = geo_data["municipios"].copy()
-    municipios_seleccionados = filters.get("municipios_seleccionados", [])
-    modo_mapa = filters.get("modo_mapa", "Epidemiológico")
+    if veredas_municipio.empty:
+        st.warning(f"No se encontraron veredas para {municipio_selected}")
+        show_available_municipios_in_shapefile(veredas, municipio_selected)
+        return
 
     if modo_mapa == "Epidemiológico":
-        municipios_data = prepare_municipal_data_epidemiological_multiple_corrected(
-            casos, epizootias, municipios, municipios_seleccionados, colors
-        )
+        veredas_data = prepare_vereda_data_epidemiological_simplified(casos, epizootias, veredas_municipio, municipio_selected, colors)
     else:
-        municipios_data = prepare_municipal_data_coverage_multiple_corrected(
-            municipios, municipios_seleccionados, filters, colors
-        )
+        veredas_data = prepare_vereda_data_coverage_simplified(veredas_municipio, municipio_selected, colors)
 
-    m = create_folium_map(municipios_data, zoom_start=8)
-    add_municipios_to_map_multiple_corrected(m, municipios_data, colors, modo_mapa)
+    m = create_folium_map(veredas_data, zoom_start=10)
+    add_veredas_to_map_simplified(m, veredas_data, colors, modo_mapa)
 
     map_data = st_folium(
         m,
         width="100%",
         height=600,
         returned_objects=["last_object_clicked"],
-        key=f"map_dept_multiple_{modo_mapa.lower()}_{hash(tuple(municipios_seleccionados))}",
+        key=f"map_mun_simple_{modo_mapa.lower()}",
     )
 
-    # CORREGIDO: Pasar data_filtered como data_original
-    handle_map_click_multiple_authoritative(
-        map_data, municipios_data, "municipio", filters, data_filtered
-    )
+    # Manejo de clics simplificado
+    handle_map_click_simplified(map_data, veredas_data, "vereda", filters, data_filtered)
 
+# ===== PREPARACIÓN DE DATOS SIMPLIFICADA =====
 
-# ===== PREPARACIÓN DE DATOS CORREGIDA =====
-
-
-def prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors):
-    """
-    Prepara datos municipales para modo epidemiológico con normalización robusta.
-    """
+def prepare_municipal_data_epidemiological_simplified(casos, epizootias, municipios, colors):
+    """Prepara datos municipales SIMPLIFICADOS."""
     municipios = municipios.copy()
-    municipios["municipi_1_norm"] = municipios["municipi_1"].apply(
-        normalize_name_robust
-    )
     color_scheme = get_color_scheme_epidemiological(colors)
 
     contadores_municipios = {}
 
+    # Obtener nombres de municipios del shapefile
+    municipio_col = get_municipio_column(municipios)
+    
+    if not municipio_col:
+        logger.error("❌ No se encontró columna de municipios en shapefile")
+        return municipios
+
+    # Procesar casos
     if not casos.empty and "municipio" in casos.columns:
-        casos_norm = casos.copy()
-        casos_norm["municipio_norm"] = casos_norm["municipio"].apply(
-            normalize_name_robust
-        )
+        for shapefile_municipio in municipios[municipio_col].unique():
+            casos_mun = find_casos_for_shapefile_municipio(casos, shapefile_municipio)
+            fallecidos_mun = casos_mun[casos_mun["condicion_final"] == "Fallecido"] if "condicion_final" in casos_mun.columns else pd.DataFrame()
 
-        for municipio_norm in municipios["municipi_1_norm"].unique():
-            casos_mun = casos_norm[casos_norm["municipio_norm"] == municipio_norm]
-            fallecidos_mun = (
-                casos_mun[casos_mun["condicion_final"] == "Fallecido"]
-                if "condicion_final" in casos_mun.columns
-                else pd.DataFrame()
-            )
-
-            contadores_municipios[municipio_norm] = {
+            contadores_municipios[shapefile_municipio] = {
                 "casos": len(casos_mun),
                 "fallecidos": len(fallecidos_mun),
             }
 
+    # Procesar epizootias - CORREGIDO: Verificar que 'epizootias' existe
     if not epizootias.empty and "municipio" in epizootias.columns:
-        epi_norm = epizootias.copy()
-        epi_norm["municipio_norm"] = epi_norm["municipio"].apply(normalize_name_robust)
+        for shapefile_municipio in municipios[municipio_col].unique():
+            if shapefile_municipio not in contadores_municipios:
+                contadores_municipios[shapefile_municipio] = {"casos": 0, "fallecidos": 0}
 
-        for municipio_norm in municipios["municipi_1_norm"].unique():
-            if municipio_norm not in contadores_municipios:
-                contadores_municipios[municipio_norm] = {"casos": 0, "fallecidos": 0}
+            epi_mun = find_epizootias_for_shapefile_municipio(epizootias, shapefile_municipio)
+            positivas_mun = epi_mun[epi_mun["descripcion"] == "POSITIVO FA"] if "descripcion" in epi_mun.columns else pd.DataFrame()
+            en_estudio_mun = epi_mun[epi_mun["descripcion"] == "EN ESTUDIO"] if "descripcion" in epi_mun.columns else pd.DataFrame()
 
-            epi_mun = epi_norm[epi_norm["municipio_norm"] == municipio_norm]
-            positivas_mun = (
-                epi_mun[epi_mun["descripcion"] == "POSITIVO FA"]
-                if "descripcion" in epi_mun.columns
-                else pd.DataFrame()
-            )
-            en_estudio_mun = (
-                epi_mun[epi_mun["descripcion"] == "EN ESTUDIO"]
-                if "descripcion" in epi_mun.columns
-                else pd.DataFrame()
-            )
+            contadores_municipios[shapefile_municipio].update({
+                "epizootias": len(epi_mun),
+                "positivas": len(positivas_mun),
+                "en_estudio": len(en_estudio_mun),
+            })
 
-            contadores_municipios[municipio_norm].update(
-                {
-                    "epizootias": len(epi_mun),
-                    "positivas": len(positivas_mun),
-                    "en_estudio": len(en_estudio_mun),
-                }
-            )
-
+    # Aplicar colores
     municipios_data = municipios.copy()
 
     for idx, row in municipios_data.iterrows():
-        municipio_norm = row["municipi_1_norm"]
-        contadores = contadores_municipios.get(
-            municipio_norm,
-            {
-                "casos": 0,
-                "fallecidos": 0,
-                "epizootias": 0,
-                "positivas": 0,
-                "en_estudio": 0,
-            },
-        )
+        shapefile_municipio = row[municipio_col]
+        contadores = contadores_municipios.get(shapefile_municipio, {
+            "casos": 0, "fallecidos": 0, "epizootias": 0, "positivas": 0, "en_estudio": 0,
+        })
 
         color, descripcion = determine_feature_color_epidemiological(
-            contadores["casos"],
-            contadores["epizootias"],
-            contadores["fallecidos"],
-            contadores["positivas"],
-            contadores["en_estudio"],
-            color_scheme,
+            contadores["casos"], contadores["epizootias"], contadores["fallecidos"],
+            contadores["positivas"], contadores["en_estudio"], color_scheme,
         )
 
         municipios_data.loc[idx, "color"] = color
@@ -392,196 +327,148 @@ def prepare_municipal_data_epidemiological(casos, epizootias, municipios, colors
         for key, value in contadores.items():
             municipios_data.loc[idx, key] = value
 
-    logger.info(
-        f"✅ Datos municipales epidemiológicos preparados con normalización robusta"
-    )
+    logger.info("✅ Datos municipales epidemiológicos preparados SIMPLIFICADOS")
     return municipios_data
 
+def find_casos_for_shapefile_municipio(casos, shapefile_municipio):
+    """Encuentra casos para municipio del shapefile usando mapeo simple."""
+    if casos.empty or "municipio" in casos.columns == False:
+        return pd.DataFrame()
+    
+    # Buscar coincidencia directa
+    casos_directos = casos[casos["municipio"] == shapefile_municipio]
+    if not casos_directos.empty:
+        return casos_directos
+    
+    # Buscar usando mapeo
+    mapped_municipio = get_mapped_municipio(shapefile_municipio)
+    casos_mapeados = casos[casos["municipio"] == mapped_municipio]
+    
+    return casos_mapeados
 
-def prepare_municipal_data_epidemiological_multiple_corrected(
-    casos, epizootias, municipios, municipios_seleccionados, colors
-):
-    """
-    Preparación de datos múltiples CORREGIDA con normalización robusta.
-    """
-    municipios = municipios.copy()
-    municipios["municipi_1_norm"] = municipios["municipi_1"].apply(
-        normalize_name_robust
-    )
-    municipios_sel_norm = [normalize_name_robust(m) for m in municipios_seleccionados]
+def find_epizootias_for_shapefile_municipio(epizootias, shapefile_municipio):
+    """Encuentra epizootias para municipio del shapefile usando mapeo simple."""
+    if epizootias.empty or "municipio" not in epizootias.columns:
+        return pd.DataFrame()
+    
+    # Buscar coincidencia directa
+    epi_directos = epizootias[epizootias["municipio"] == shapefile_municipio]
+    if not epi_directos.empty:
+        return epi_directos
+    
+    # Buscar usando mapeo
+    mapped_municipio = get_mapped_municipio(shapefile_municipio)
+    epi_mapeados = epizootias[epizootias["municipio"] == mapped_municipio]
+    
+    return epi_mapeados
 
+def find_veredas_for_municipio_simplified(veredas_gdf, municipio_selected):
+    """Encuentra veredas para municipio SIMPLIFICADO con mapeo."""
+    municipio_col = get_municipio_column(veredas_gdf)
+    
+    if not municipio_col:
+        logger.error("❌ No se encontró columna de municipios en veredas shapefile")
+        return pd.DataFrame()
+    
+    # Buscar veredas por coincidencia directa
+    veredas_directas = veredas_gdf[veredas_gdf[municipio_col] == municipio_selected]
+    if not veredas_directas.empty:
+        logger.info(f"✅ Encontradas {len(veredas_directas)} veredas para {municipio_selected} (directo)")
+        return veredas_directas
+    
+    # Buscar usando mapeo inverso (base de datos → shapefile)
+    reverse_mapping = {v: k for k, v in MUNICIPIO_MAPPING.items()}
+    shapefile_municipio = reverse_mapping.get(municipio_selected, municipio_selected)
+    
+    veredas_mapeadas = veredas_gdf[veredas_gdf[municipio_col] == shapefile_municipio]
+    if not veredas_mapeadas.empty:
+        logger.info(f"✅ Encontradas {len(veredas_mapeadas)} veredas para {municipio_selected} (mapeado como {shapefile_municipio})")
+        return veredas_mapeadas
+    
+    logger.warning(f"⚠️ No se encontraron veredas para {municipio_selected}")
+    return pd.DataFrame()
+
+def prepare_vereda_data_epidemiological_simplified(casos, epizootias, veredas_gdf, municipio_selected, colors):
+    """Prepara datos de veredas SIMPLIFICADOS."""
+    veredas_gdf = veredas_gdf.copy()
     color_scheme = get_color_scheme_epidemiological(colors)
 
-    # Contadores por municipio
-    contadores_municipios = {}
+    vereda_col = get_vereda_column(veredas_gdf)
+    contadores_veredas = {}
 
-    if not casos.empty and "municipio" in casos.columns:
-        casos_norm = casos.copy()
-        casos_norm["municipio_norm"] = casos_norm["municipio"].apply(
-            normalize_name_robust
-        )
+    if not vereda_col:
+        logger.error("❌ No se encontró columna de veredas en shapefile")
+        return veredas_gdf
 
-        for municipio_norm in municipios["municipi_1_norm"].unique():
-            casos_mun = casos_norm[casos_norm["municipio_norm"] == municipio_norm]
-            fallecidos_mun = (
-                casos_mun[casos_mun["condicion_final"] == "Fallecido"]
-                if "condicion_final" in casos_mun.columns
-                else pd.DataFrame()
-            )
+    # Procesar casos por vereda
+    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
+        casos_municipio = casos[casos["municipio"] == municipio_selected]
+        
+        for vereda_shapefile in veredas_gdf[vereda_col].unique():
+            casos_ver = casos_municipio[casos_municipio["vereda"] == vereda_shapefile]
+            fallecidos_ver = casos_ver[casos_ver["condicion_final"] == "Fallecido"] if "condicion_final" in casos_ver.columns else pd.DataFrame()
 
-            contadores_municipios[municipio_norm] = {
-                "casos": len(casos_mun),
-                "fallecidos": len(fallecidos_mun),
+            contadores_veredas[vereda_shapefile] = {
+                "casos": len(casos_ver),
+                "fallecidos": len(fallecidos_ver),
             }
 
-    if not epizootias.empty and "municipio" in epizootias.columns:
-        epi_norm = epizootias.copy()
-        epi_norm["municipio_norm"] = epi_norm["municipio"].apply(normalize_name_robust)
+    # Procesar epizootias por vereda
+    if not epizootias.empty and "vereda" in epizootias.columns and "municipio" in epizootias.columns:
+        epi_municipio = epizootias[epizootias["municipio"] == municipio_selected]
+        
+        for vereda_shapefile in veredas_gdf[vereda_col].unique():
+            if vereda_shapefile not in contadores_veredas:
+                contadores_veredas[vereda_shapefile] = {"casos": 0, "fallecidos": 0}
 
-        for municipio_norm in municipios["municipi_1_norm"].unique():
-            if municipio_norm not in contadores_municipios:
-                contadores_municipios[municipio_norm] = {"casos": 0, "fallecidos": 0}
+            epi_ver = epi_municipio[epi_municipio["vereda"] == vereda_shapefile]
+            positivas_ver = epi_ver[epi_ver["descripcion"] == "POSITIVO FA"] if "descripcion" in epi_ver.columns else pd.DataFrame()
+            en_estudio_ver = epi_ver[epi_ver["descripcion"] == "EN ESTUDIO"] if "descripcion" in epi_ver.columns else pd.DataFrame()
 
-            epi_mun = epi_norm[epi_norm["municipio_norm"] == municipio_norm]
-            positivas_mun = (
-                epi_mun[epi_mun["descripcion"] == "POSITIVO FA"]
-                if "descripcion" in epi_mun.columns
-                else pd.DataFrame()
-            )
-            en_estudio_mun = (
-                epi_mun[epi_mun["descripcion"] == "EN ESTUDIO"]
-                if "descripcion" in epi_mun.columns
-                else pd.DataFrame()
-            )
+            contadores_veredas[vereda_shapefile].update({
+                "epizootias": len(epi_ver),
+                "positivas": len(positivas_ver),
+                "en_estudio": len(en_estudio_ver),
+            })
 
-            contadores_municipios[municipio_norm].update(
-                {
-                    "epizootias": len(epi_mun),
-                    "positivas": len(positivas_mun),
-                    "en_estudio": len(en_estudio_mun),
-                }
-            )
+    # Aplicar colores
+    veredas_data = veredas_gdf.copy()
 
-    # CORREGIDO: Aplicar colores manteniendo la lógica epidemiológica SIEMPRE con normalización robusta
-    municipios_data = municipios.copy()
+    for idx, row in veredas_data.iterrows():
+        vereda_shapefile = row[vereda_col]
+        contadores = contadores_veredas.get(vereda_shapefile, {
+            "casos": 0, "fallecidos": 0, "epizootias": 0, "positivas": 0, "en_estudio": 0,
+        })
 
-    for idx, row in municipios_data.iterrows():
-        municipio_norm = row["municipi_1_norm"]
-        es_seleccionado = municipio_norm in municipios_sel_norm
-
-        contadores = contadores_municipios.get(
-            municipio_norm,
-            {
-                "casos": 0,
-                "fallecidos": 0,
-                "epizootias": 0,
-                "positivas": 0,
-                "en_estudio": 0,
-            },
-        )
-
-        # CORREGIDO: SIEMPRE usar color epidemiológico, NUNCA gris
         color, descripcion = determine_feature_color_epidemiological(
-            contadores["casos"],
-            contadores["epizootias"],
-            contadores["fallecidos"],
-            contadores["positivas"],
-            contadores["en_estudio"],
-            color_scheme,
+            contadores["casos"], contadores["epizootias"], contadores["fallecidos"],
+            contadores["positivas"], contadores["en_estudio"], color_scheme,
         )
 
-        municipios_data.loc[idx, "color"] = color
-        municipios_data.loc[idx, "descripcion_color"] = descripcion
-        municipios_data.loc[idx, "es_seleccionado"] = es_seleccionado
+        veredas_data.loc[idx, "color"] = color
+        veredas_data.loc[idx, "descripcion_color"] = descripcion
 
         for key, value in contadores.items():
-            municipios_data.loc[idx, key] = value
+            veredas_data.loc[idx, key] = value
 
-    logger.info(
-        f"🎨 Datos municipales múltiples CORREGIDOS con normalización robusta: {len(municipios_sel_norm)} seleccionados"
-    )
-    return municipios_data
+    return veredas_data
 
-
-def debug_map_click_issue(shapefile_name, data_original, feature_type):
-    """
-    Función específica para debugging problemas de clic en mapas.
-    """
-    logger.info(f"🔍 DEBUGGING CLIC EN MAPA: '{shapefile_name}' (tipo: {feature_type})")
-
-    if feature_type == "municipio":
-        # Analizar municipios disponibles
-        municipios_authoritativos = data_original.get("municipios_authoritativos", [])
-        municipios_normalizados = data_original.get("municipios_normalizados", [])
-
-        logger.info(f"  📋 Municipios authoritativos: {len(municipios_authoritativos)}")
-        logger.info(f"  📋 Municipios normalizados: {len(municipios_normalizados)}")
-
-        # Analizar shapefile_name
-        logger.info(f"  🔍 Analizando '{shapefile_name}':")
-        logger.info(f"    Sin tildes: '{normalize_name_robust(shapefile_name)}'")
-        logger.info(f"    Con tildes: '{normalize_name_with_accents(shapefile_name)}'")
-        logger.info(f"    Equivalencias: {find_equivalent_names(shapefile_name)}")
-
-        # Buscar coincidencias
-        all_municipios = list(set(municipios_authoritativos + municipios_normalizados))
-        for municipio in all_municipios:
-            debug_info = debug_name_matching(shapefile_name, municipio)
-            if debug_info["match_fuzzy"]:
-                logger.info(f"  ✅ COINCIDENCIA: '{shapefile_name}' ↔ '{municipio}'")
-                logger.info(f"    Debug: {debug_info}")
-                return municipio
-
-        # Mostrar primeros municipios para comparación manual
-        logger.info(f"  📋 Primeros municipios disponibles:")
-        for i, municipio in enumerate(all_municipios[:5]):
-            debug_info = debug_name_matching(shapefile_name, municipio)
-            logger.info(
-                f"    {i+1}. '{municipio}' - exact: {debug_info['match_exact']}, fuzzy: {debug_info['match_fuzzy']}"
-            )
-
-    elif feature_type == "vereda":
-        # Analizar veredas disponibles
-        veredas_por_municipio = data_original.get("veredas_por_municipio", {})
-        total_veredas = sum(len(veredas) for veredas in veredas_por_municipio.values())
-
-        logger.info(f"  📋 Total veredas disponibles: {total_veredas}")
-        logger.info(f"  📋 Municipios con veredas: {len(veredas_por_municipio)}")
-
-        # Buscar en todas las veredas
-        for municipio, veredas in veredas_por_municipio.items():
-            vereda_match = match_name_fuzzy(shapefile_name, veredas)
-            if vereda_match:
-                logger.info(
-                    f"  ✅ VEREDA ENCONTRADA: '{shapefile_name}' → '{vereda_match}' (en {municipio})"
-                )
-                return vereda_match
-
-    logger.warning(f"  ❌ NO SE ENCONTRÓ COINCIDENCIA PARA: '{shapefile_name}'")
-    return None
-
-
-def prepare_municipal_data_coverage_corrected(municipios, filters, colors):
-    """Preparación de cobertura CORREGIDA - dinámica según filtros."""
+def prepare_municipal_data_coverage_simplified(municipios, filters, colors):
+    """Preparación de cobertura SIMPLIFICADA."""
     municipios_data = municipios.copy()
     color_scheme = get_color_scheme_coverage(colors)
 
-    # CORREGIDO: Cobertura dinámica según filtros
-    active_filters = filters.get("active_filters", [])
-    municipio_filtrado = filters.get("municipio_display")
-    modo_filtrado = filters.get("modo")
+    # Cobertura base simulada
+    import random
+    random.seed(42)
 
+    municipio_col = get_municipio_column(municipios)
+    
     for idx, row in municipios_data.iterrows():
-        municipio_name = row.get("MpNombre", row.get("municipi_1", "DESCONOCIDO"))
+        municipio_name = row.get(municipio_col, "DESCONOCIDO")
+        cobertura_base = random.uniform(75, 95)
 
-        # CORREGIDO: Cobertura base calculada dinámicamente
-        cobertura_base = calculate_dynamic_coverage(
-            municipio_name, active_filters, municipio_filtrado, modo_filtrado
-        )
-
-        color, descripcion = determine_feature_color_coverage(
-            cobertura_base, color_scheme
-        )
+        color, descripcion = determine_feature_color_coverage(cobertura_base, color_scheme)
 
         municipios_data.loc[idx, "color"] = color
         municipios_data.loc[idx, "descripcion_color"] = descripcion
@@ -589,978 +476,144 @@ def prepare_municipal_data_coverage_corrected(municipios, filters, colors):
 
     return municipios_data
 
-
-def prepare_municipal_data_coverage_multiple_corrected(
-    municipios, municipios_seleccionados, filters, colors
-):
-    """Preparación de cobertura múltiple CORREGIDA."""
-
-    def normalize_name(name):
-        """
-        Función de compatibilidad que usa el nuevo normalizador robusto.
-        """
-        return normalize_name_robust(name)
-
-    municipios_data = municipios.copy()
-    municipios_data["municipi_1_norm"] = municipios_data["municipi_1"].apply(
-        normalize_name
-    )
-    municipios_sel_norm = [normalize_name(m) for m in municipios_seleccionados]
-
-    color_scheme = get_color_scheme_coverage(colors)
-    active_filters = filters.get("active_filters", [])
-
-    for idx, row in municipios_data.iterrows():
-        municipio_name = row.get("MpNombre", row.get("municipi_1", "DESCONOCIDO"))
-        municipio_norm = row["municipi_1_norm"]
-        es_seleccionado = municipio_norm in municipios_sel_norm
-
-        # CORREGIDO: Cobertura dinámica
-        cobertura_value = calculate_dynamic_coverage(
-            municipio_name, active_filters, None, "multiple"
-        )
-
-        # CORREGIDO: SIEMPRE usar color de cobertura, NUNCA gris
-        color, descripcion = determine_feature_color_coverage(
-            cobertura_value, color_scheme
-        )
-
-        municipios_data.loc[idx, "color"] = color
-        municipios_data.loc[idx, "descripcion_color"] = descripcion
-        municipios_data.loc[idx, "es_seleccionado"] = es_seleccionado
-        municipios_data.loc[idx, "cobertura"] = cobertura_value
-
-    return municipios_data
-
-
-def calculate_dynamic_coverage(
-    municipio_name, active_filters, municipio_filtrado, modo_filtrado
-):
-    """
-    Calcula cobertura dinámica según filtros con normalización robusta.
-    """
-
-    # Base de coberturas del Tolima (EDITABLE MANUALMENTE) - NORMALIZADA
-    COBERTURAS_BASE = {
-        normalize_name_robust("IBAGUÉ"): 85.2,
-        normalize_name_robust("ALPUJARRA"): 78.5,
-        normalize_name_robust("ALVARADO"): 92.1,
-        normalize_name_robust("AMBALEMA"): 67.8,
-        normalize_name_robust("ANZOÁTEGUI"): 73.4,
-        normalize_name_robust("ARMERO"): 69.2,
-        normalize_name_robust("ATACO"): 81.7,
-        normalize_name_robust("CAJAMARCA"): 88.3,
-        normalize_name_robust("CARMEN DE APICALÁ"): 74.9,
-        normalize_name_robust("CASABIANCA"): 82.6,
-        normalize_name_robust("CHAPARRAL"): 79.1,
-        normalize_name_robust("COELLO"): 86.4,
-        normalize_name_robust("COYAIMA"): 71.3,
-        normalize_name_robust("CUNDAY"): 77.8,
-        normalize_name_robust("DOLORES"): 65.7,
-        normalize_name_robust("ESPINAL"): 89.5,
-        normalize_name_robust("FALÁN"): 83.2,
-        normalize_name_robust("FLANDES"): 91.8,
-        normalize_name_robust("FRESNO"): 76.4,
-        normalize_name_robust("GUAMO"): 84.1,
-        normalize_name_robust("HERVEO"): 72.9,
-        normalize_name_robust("HONDA"): 87.6,
-        normalize_name_robust("ICONONZO"): 75.3,
-        normalize_name_robust("LÉRIDA"): 80.7,
-        normalize_name_robust("LÍBANO"): 85.9,
-        normalize_name_robust("MARIQUITA"): 88.2,
-        normalize_name_robust("MELGAR"): 82.4,
-        normalize_name_robust("MURILLO"): 70.6,
-        normalize_name_robust("NATAGAIMA"): 68.9,
-        normalize_name_robust("ORTEGA"): 79.8,
-        normalize_name_robust("PALOCABILDO"): 74.2,
-        normalize_name_robust("PIEDRAS"): 86.7,
-        normalize_name_robust("PLANADAS"): 77.1,
-        normalize_name_robust("PRADO"): 83.5,
-        normalize_name_robust("PURIFICACIÓN"): 81.3,
-        normalize_name_robust("RIOBLANCO"): 69.8,
-        normalize_name_robust("RONCESVALLES"): 75.6,
-        normalize_name_robust("ROVIRA"): 84.8,
-        normalize_name_robust("SALDAÑA"): 87.3,
-        normalize_name_robust("SAN ANTONIO"): 73.7,
-        normalize_name_robust("SAN LUIS"): 78.9,
-        normalize_name_robust("SANTA ISABEL"): 80.4,
-        normalize_name_robust("SUÁREZ"): 76.8,
-        normalize_name_robust("VALLE DE SAN JUAN"): 85.6,
-        normalize_name_robust("VENADILLO"): 89.1,
-        normalize_name_robust("VILLAHERMOSA"): 72.2,
-        normalize_name_robust("VILLARRICA"): 81.9,
-    }
-
-    # Normalizar nombre de entrada
-    municipio_name_norm = normalize_name_robust(municipio_name)
-
-    # Buscar cobertura base usando normalización
-    cobertura_base = COBERTURAS_BASE.get(municipio_name_norm, 75.0)
-
-    # MODIFICADORES DINÁMICOS (EDITABLES MANUALMENTE):
-
-    # Modificador por filtros activos
-    if active_filters:
-        cobertura_base *= 0.95  # 5% reducción si hay filtros (simula datos específicos)
-
-    # Modificador por tipo de filtrado
-    if modo_filtrado == "multiple":
-        cobertura_base *= (
-            1.02  # 2% aumento en modo múltiple (simula selección dirigida)
-        )
-
-    # Modificador por municipio específico filtrado usando normalización
-    if municipio_filtrado and municipio_filtrado != "Todos":
-        municipio_filtrado_norm = normalize_name_robust(municipio_filtrado)
-        if municipio_name_norm == municipio_filtrado_norm:
-            cobertura_base *= 1.05  # 5% aumento si es el municipio filtrado
-        else:
-            cobertura_base *= 0.98  # 2% reducción para otros municipios
-
-    # Modificador temporal (simula campañas recientes)
-    from datetime import datetime
-
-    mes_actual = datetime.now().month
-    if mes_actual in [4, 5, 10, 11]:  # Meses de campaña típicos
-        cobertura_base *= 1.03  # 3% aumento en meses de campaña
-
-    # LIMITADORES (para mantener realismo)
-    cobertura_base = max(50.0, min(98.0, cobertura_base))  # Entre 50% y 98%
-
-    logger.debug(
-        f"Cobertura calculada para '{municipio_name}' (norm: '{municipio_name_norm}'): {cobertura_base:.1f}%"
-    )
-
-    return round(cobertura_base, 1)
-
-
-def initialize_robust_normalization():
-    """
-    Función para inicializar la normalización robusta en mapas.
-    Debe llamarse al inicio del módulo show().
-    """
-    logger.info("🔧 Inicializando normalización robusta para vistas/mapas.py")
-
-    # Mostrar estadísticas de normalización disponible
-    logger.info("📊 Sistema de normalización robusta:")
-    logger.info("  ✅ Manejo de tildes: Ibagué ↔ Ibague")
-    logger.info("  ✅ Manejo de tildes: Purificación ↔ Purificacion")
-    logger.info("  ✅ Mapeo fuzzy entre shapefiles y hoja VEREDAS")
-    logger.info("  ✅ Debug detallado para casos problemáticos")
-    logger.info("  ✅ Validación de nombres canónicos")
-
-    return True
-
-
-# ===== MAPAS MÚLTIPLES CORREGIDOS =====
-
-
-def create_municipal_map_multiple_corrected(
-    casos, epizootias, geo_data, filters, colors, data_filtered
-):
-    """Mapa municipal múltiple CORREGIDO."""
-    municipios_seleccionados = filters.get("municipios_seleccionados", [])
-    veredas_seleccionadas = filters.get("veredas_seleccionadas", [])
-
-    if not municipios_seleccionados:
-        st.info("🗂️ Seleccione municipios primero para ver veredas en modo múltiple")
-        return
-
-    logger.info("🏘️ Creando mapa múltiple municipal CORREGIDO")
-
-    veredas = geo_data["veredas"].copy()
-    veredas_municipios = veredas[veredas["municipi_1"].isin(municipios_seleccionados)]
-
-    if veredas_municipios.empty:
-        st.warning(f"No se encontraron veredas para los municipios seleccionados")
-        return
-
-    modo_mapa = filters.get("modo_mapa", "Epidemiológico")
-
-    if modo_mapa == "Epidemiológico":
-        veredas_data = prepare_veredas_data_epidemiological_multiple_corrected(
-            casos,
-            epizootias,
-            veredas_municipios,
-            municipios_seleccionados,
-            veredas_seleccionadas,
-            colors,
-        )
-    else:
-        veredas_data = prepare_veredas_data_coverage_multiple_corrected(
-            veredas_municipios,
-            municipios_seleccionados,
-            veredas_seleccionadas,
-            filters,
-            colors,
-        )
-
-    m = create_folium_map(veredas_data, zoom_start=10)
-    add_veredas_to_map_multiple_corrected(m, veredas_data, colors, modo_mapa)
-
-    map_data = st_folium(
-        m,
-        width="100%",
-        height=600,
-        returned_objects=["last_object_clicked"],
-        key=f"map_mun_multiple_{modo_mapa.lower()}_{hash(tuple(veredas_seleccionadas))}",
-    )
-
-    # CORREGIDO: Pasar data_filtered como data_original
-    handle_map_click_multiple_authoritative(
-        map_data, veredas_data, "vereda", filters, data_filtered
-    )
-
-
-def prepare_veredas_data_epidemiological_multiple_corrected(
-    casos,
-    epizootias,
-    veredas_gdf,
-    municipios_seleccionados,
-    veredas_seleccionadas,
-    colors,
-):
-    """Prepara datos de veredas para modo múltiple epidemiológico CORREGIDO."""
-
-    def normalize_name(name):
-        """
-        Función de compatibilidad que usa el nuevo normalizador robusto.
-        """
-        return normalize_name_robust(name)
-
-    veredas_gdf = veredas_gdf.copy()
-    veredas_gdf["vereda_nor_norm"] = veredas_gdf["vereda_nor"].apply(normalize_name)
-    veredas_sel_norm = [normalize_name(v) for v in veredas_seleccionadas]
-
-    color_scheme = get_color_scheme_epidemiological(colors)
-
-    contadores_veredas = {}
-
-    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
-        casos_norm = casos.copy()
-        casos_norm["vereda_norm"] = casos_norm["vereda"].apply(normalize_name)
-        casos_norm["municipio_norm"] = casos_norm["municipio"].apply(normalize_name)
-
-        casos_municipios = casos_norm[
-            casos_norm["municipio_norm"].isin(
-                [normalize_name(m) for m in municipios_seleccionados]
-            )
-        ]
-
-        for vereda_norm in veredas_gdf["vereda_nor_norm"].unique():
-            casos_ver = casos_municipios[casos_municipios["vereda_norm"] == vereda_norm]
-            fallecidos_ver = (
-                casos_ver[casos_ver["condicion_final"] == "Fallecido"]
-                if "condicion_final" in casos_ver.columns
-                else pd.DataFrame()
-            )
-
-            contadores_veredas[vereda_norm] = {
-                "casos": len(casos_ver),
-                "fallecidos": len(fallecidos_ver),
-            }
-
-    if (
-        not epizootias.empty
-        and "vereda" in epizootias.columns
-        and "municipio" in epizootias.columns
-    ):
-        epi_norm = epizootias.copy()
-        epi_norm["vereda_norm"] = epi_norm["vereda"].apply(normalize_name)
-        epi_norm["municipio_norm"] = epi_norm["municipio"].apply(normalize_name)
-
-        epi_municipios = epi_norm[
-            epi_norm["municipio_norm"].isin(
-                [normalize_name(m) for m in municipios_seleccionados]
-            )
-        ]
-
-        for vereda_norm in veredas_gdf["vereda_nor_norm"].unique():
-            if vereda_norm not in contadores_veredas:
-                contadores_veredas[vereda_norm] = {"casos": 0, "fallecidos": 0}
-
-            epi_ver = epi_municipios[epi_municipios["vereda_norm"] == vereda_norm]
-            positivas_ver = (
-                epi_ver[epi_ver["descripcion"] == "POSITIVO FA"]
-                if "descripcion" in epi_ver.columns
-                else pd.DataFrame()
-            )
-            en_estudio_ver = (
-                epi_ver[epi_ver["descripcion"] == "EN ESTUDIO"]
-                if "descripcion" in epi_ver.columns
-                else pd.DataFrame()
-            )
-
-            contadores_veredas[vereda_norm].update(
-                {
-                    "epizootias": len(epi_ver),
-                    "positivas": len(positivas_ver),
-                    "en_estudio": len(en_estudio_ver),
-                }
-            )
-
-    # CORREGIDO: SIEMPRE aplicar color epidemiológico
+def prepare_vereda_data_coverage_simplified(veredas_gdf, municipio_selected, colors):
+    """Prepara datos de veredas para modo cobertura SIMPLIFICADO."""
     veredas_data = veredas_gdf.copy()
-
-    for idx, row in veredas_data.iterrows():
-        vereda_norm = row["vereda_nor_norm"]
-        es_seleccionada = vereda_norm in veredas_sel_norm
-
-        contadores = contadores_veredas.get(
-            vereda_norm,
-            {
-                "casos": 0,
-                "fallecidos": 0,
-                "epizootias": 0,
-                "positivas": 0,
-                "en_estudio": 0,
-            },
-        )
-
-        # CORREGIDO: SIEMPRE color epidemiológico
-        color, descripcion = determine_feature_color_epidemiological(
-            contadores["casos"],
-            contadores["epizootias"],
-            contadores["fallecidos"],
-            contadores["positivas"],
-            contadores["en_estudio"],
-            color_scheme,
-        )
-
-        veredas_data.loc[idx, "color"] = color
-        veredas_data.loc[idx, "descripcion_color"] = descripcion
-        veredas_data.loc[idx, "es_seleccionada"] = es_seleccionada
-
-        for key, value in contadores.items():
-            veredas_data.loc[idx, key] = value
-
-    return veredas_data
-
-
-def prepare_veredas_data_coverage_multiple_corrected(
-    veredas_gdf, municipios_seleccionados, veredas_seleccionadas, filters, colors
-):
-    """Prepara datos de veredas para modo múltiple cobertura."""
-
-    def normalize_name(name):
-        return normalize_name_robust(name)
-
-    veredas_data = veredas_gdf.copy()
-    veredas_data["vereda_nor_norm"] = veredas_data["vereda_nor"].apply(normalize_name)
-    veredas_sel_norm = [normalize_name(v) for v in veredas_seleccionadas]
-
     color_scheme = get_color_scheme_coverage(colors)
-    active_filters = filters.get("active_filters", [])
 
     import random
-
     random.seed(42)
 
     for idx, row in veredas_data.iterrows():
-        vereda_norm = row["vereda_nor_norm"]
-        es_seleccionada = vereda_norm in veredas_sel_norm
-
-        # CORREGIDO: Cobertura dinámica para veredas
         cobertura_base = random.uniform(70, 95)
-        if active_filters:
-            cobertura_base *= 0.97
-        if es_seleccionada:
-            cobertura_base *= 1.03
 
-        # CORREGIDO: SIEMPRE color de cobertura
-        color, descripcion = determine_feature_color_coverage(
-            cobertura_base, color_scheme
-        )
+        color, descripcion = determine_feature_color_coverage(cobertura_base, color_scheme)
 
         veredas_data.loc[idx, "color"] = color
         veredas_data.loc[idx, "descripcion_color"] = descripcion
-        veredas_data.loc[idx, "es_seleccionada"] = es_seleccionada
         veredas_data.loc[idx, "cobertura"] = cobertura_base
 
     return veredas_data
 
-
-# ===== AGREGAR A MAPA CORREGIDO =====
-
-
-def add_municipios_to_map_multiple_corrected(
-    folium_map, municipios_data, colors, modo_mapa
-):
-    """Agrega municipios al mapa múltiple CORREGIDO."""
-    for idx, row in municipios_data.iterrows():
-        municipio_name = row.get("MpNombre", row.get("municipi_1", "DESCONOCIDO"))
-        color = row["color"]
-        es_seleccionado = row.get("es_seleccionado", False)
-
-        # CORREGIDO: Diferenciación visual con borde, NO con color de relleno
-        border_color = colors["primary"] if es_seleccionado else "#9CA3AF"
-        border_width = 3 if es_seleccionado else 1
-
-        # Crear tooltip
-        if modo_mapa == "Epidemiológico":
-            tooltip_text = create_municipio_tooltip_multiple_epidemiological_corrected(
-                municipio_name, row, colors, es_seleccionado
-            )
-        else:
-            tooltip_text = create_municipio_tooltip_multiple_coverage_corrected(
-                municipio_name, row, colors, es_seleccionado
-            )
-
-        folium.GeoJson(
-            row["geometry"],
-            style_function=lambda x, color=color, border_color=border_color, border_width=border_width: {
-                "fillColor": color,  # CORREGIDO: Color SIEMPRE según datos
-                "color": border_color,
-                "weight": border_width,
-                "fillOpacity": 0.7,
-                "opacity": 1,
-            },
-            tooltip=folium.Tooltip(tooltip_text, sticky=True),
-        ).add_to(folium_map)
-
-
-def add_veredas_to_map_multiple_corrected(folium_map, veredas_data, colors, modo_mapa):
-    """Agrega veredas al mapa múltiple CORREGIDO."""
-    for idx, row in veredas_data.iterrows():
-        vereda_name = row["vereda_nor"]
-        color = row["color"]
-        es_seleccionada = row.get("es_seleccionada", False)
-
-        # CORREGIDO: Diferenciación visual con borde
-        border_color = colors["accent"] if es_seleccionada else "#D1D5DB"
-        border_width = 2.5 if es_seleccionada else 1
-
-        # Crear tooltip
-        if modo_mapa == "Epidemiológico":
-            tooltip_text = create_vereda_tooltip_multiple_epidemiological_corrected(
-                vereda_name, row, colors, es_seleccionada
-            )
-        else:
-            tooltip_text = create_vereda_tooltip_multiple_coverage_corrected(
-                vereda_name, row, colors, es_seleccionada
-            )
-
-        try:
-            folium.GeoJson(
-                row["geometry"],
-                style_function=lambda x, color=color, border_color=border_color, border_width=border_width: {
-                    "fillColor": color,  # CORREGIDO: Color SIEMPRE según datos
-                    "color": border_color,
-                    "weight": border_width,
-                    "fillOpacity": 0.6,
-                    "opacity": 0.8,
-                },
-                tooltip=folium.Tooltip(tooltip_text, sticky=True),
-            ).add_to(folium_map)
-        except Exception as e:
-            logger.warning(f"⚠️ Error agregando vereda {vereda_name}: {str(e)}")
-
-
-# ===== TOOLTIPS CORREGIDOS =====
-
-
-def create_municipio_tooltip_multiple_epidemiological_corrected(
-    name, row, colors, es_seleccionado
-):
-    """Tooltip CORREGIDO para municipio múltiple epidemiológico."""
-    status_icon = "✅" if es_seleccionado else "⚪"
-    status_text = "Seleccionado" if es_seleccionado else "No seleccionado"
-
-    return f"""
-    <div style="font-family: Arial; padding: 10px; max-width: 250px;">
-        <b style="color: {colors['primary']}; font-size: 1.1em;">{status_icon} {name}</b><br>
-        <div style="margin: 8px 0; padding: 6px; background: #f8f9fa; border-radius: 4px;">
-            🦠 Casos: {row.get('casos', 0)}<br>
-            ⚰️ Fallecidos: {row.get('fallecidos', 0)}<br>
-            🐒 Epizootias: {row.get('epizootias', 0)}<br>
-            🔴 Positivas: {row.get('positivas', 0)}
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.9em;">
-            {row.get('descripcion_color', 'Sin clasificar')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para {('quitar' if es_seleccionado else 'agregar')} selección</i>
-    </div>
-    """
-
-
-def create_municipio_tooltip_multiple_coverage_corrected(
-    name, row, colors, es_seleccionado
-):
-    """Tooltip CORREGIDO para municipio múltiple cobertura."""
-    status_icon = "✅" if es_seleccionado else "⚪"
-
-    return f"""
-    <div style="font-family: Arial; padding: 10px; max-width: 200px;">
-        <b style="color: {colors['primary']}; font-size: 1.1em;">{status_icon} {name}</b><br>
-        <div style="margin: 8px 0; padding: 6px; background: #f0f8ff; border-radius: 4px;">
-            💉 Cobertura: {row.get('cobertura', 0):.1f}%<br>
-            📊 {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para {('quitar' if es_seleccionado else 'agregar')} selección</i>
-    </div>
-    """
-
-
-def create_vereda_tooltip_multiple_epidemiological_corrected(
-    name, row, colors, es_seleccionada
-):
-    """Tooltip CORREGIDO para vereda múltiple epidemiológico."""
-    status_icon = "✅" if es_seleccionada else "⚪"
-
-    return f"""
-    <div style="font-family: Arial; padding: 8px; max-width: 200px;">
-        <b style="color: {colors['primary']};">{status_icon} {name}</b><br>
-        <div style="margin: 6px 0; font-size: 0.9em;">
-            🦠 Casos: {row.get('casos', 0)}<br>
-            🐒 Epizootias: {row.get('epizootias', 0)}<br>
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.8em;">
-            {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para {('quitar' if es_seleccionada else 'agregar')} selección</i>
-    </div>
-    """
-
-
-def create_vereda_tooltip_multiple_coverage_corrected(
-    name, row, colors, es_seleccionada
-):
-    """Tooltip CORREGIDO para vereda múltiple cobertura."""
-    status_icon = "✅" if es_seleccionada else "⚪"
-
-    return f"""
-    <div style="font-family: Arial; padding: 8px; max-width: 180px;">
-        <b style="color: {colors['primary']};">{status_icon} {name}</b><br>
-        <div style="margin: 6px 0;">
-            💉 Cobertura: {row.get('cobertura', 0):.1f}%
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.8em;">
-            {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para {('quitar' if es_seleccionada else 'agregar')} selección</i>
-    </div>
-    """
-
-
-# ===== MANEJO DE CLICKS CORREGIDO =====
-
-
-def handle_map_click_authoritative(
-    map_data, features_data, feature_type, filters, data_original
-):
-    """
-    Manejo de clicks AUTORITATIVO usando hoja VEREDAS con normalización robusta.
-    """
-    if not map_data or not map_data.get("last_object_clicked"):
-        return
-
-    try:
-        clicked_object = map_data["last_object_clicked"]
-
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get("lat")
-            clicked_lng = clicked_object.get("lng")
-
-            if clicked_lat and clicked_lng:
-                # Obtener nombre del shapefile
-                shapefile_name = find_closest_feature_corrected(
-                    clicked_lat, clicked_lng, features_data, feature_type
-                )
-
-                if shapefile_name:
-                    logger.info(
-                        f"🎯 Click en shapefile: '{shapefile_name}' (normalización robusta activa)"
-                    )
-
-                    # MAPEAR nombre del shapefile a nombre AUTORITATIVO con normalización robusta
-                    authoritative_name = map_shapefile_to_authoritative(
-                        shapefile_name, data_original, feature_type
-                    )
-
-                    if not authoritative_name:
-                        logger.error(
-                            f"❌ No se pudo mapear '{shapefile_name}' a hoja VEREDAS con normalización robusta"
-                        )
-
-                        # Mostrar información de debugging
-                        if feature_type == "municipio":
-                            municipios_disponibles = data_original.get(
-                                "municipios_authoritativos", []
-                            )
-                            logger.info(
-                                f"🔍 Municipios disponibles: {municipios_disponibles[:5]}... (total: {len(municipios_disponibles)})"
-                            )
-
-                            # Mostrar debug detallado para los primeros municipios
-                            for municipio in municipios_disponibles[:3]:
-                                debug_info = debug_name_matching(
-                                    shapefile_name, municipio
-                                )
-                                if debug_info["match_fuzzy"]:
-                                    logger.info(
-                                        f"🔍 Posible coincidencia: {debug_info}"
-                                    )
-
-                        st.error(
-                            f"Municipio/Vereda no encontrado en datos: {shapefile_name}"
-                        )
-                        return
-
-                    logger.info(
-                        f"🔗 Mapeado con normalización robusta: '{shapefile_name}' → '{authoritative_name}'"
-                    )
-
-                    # Verificar si ya está seleccionado para evitar bucle
-                    current_municipio = st.session_state.get(
-                        "municipio_filter", "Todos"
-                    )
-                    current_vereda = st.session_state.get("vereda_filter", "Todas")
-
-                    cambio_realizado = False
-
-                    if feature_type == "municipio":
-                        # Comparar usando normalización robusta
-                        if normalize_name_robust(
-                            current_municipio
-                        ) != normalize_name_robust(authoritative_name):
-                            st.session_state["municipio_filter"] = authoritative_name
-                            st.session_state["vereda_filter"] = "Todas"
-                            cambio_realizado = True
-                            logger.info(
-                                f"✅ Filtro municipio aplicado con normalización: {authoritative_name}"
-                            )
-                        else:
-                            logger.info(
-                                f"📍 Municipio ya seleccionado (normalización): {authoritative_name}"
-                            )
-
-                    elif feature_type == "vereda":
-                        # Comparar usando normalización robusta
-                        if normalize_name_robust(
-                            current_vereda
-                        ) != normalize_name_robust(authoritative_name):
-                            st.session_state["vereda_filter"] = authoritative_name
-                            cambio_realizado = True
-                            logger.info(
-                                f"✅ Filtro vereda aplicado con normalización: {authoritative_name}"
-                            )
-                        else:
-                            logger.info(
-                                f"🏘️ Vereda ya seleccionada (normalización): {authoritative_name}"
-                            )
-
-                    # Solo hacer rerun si hubo cambio
-                    if cambio_realizado:
-                        st.success(
-                            f"✅ **{authoritative_name}** seleccionado (normalización robusta)"
-                        )
-
-                        # Delay para evitar bucle
-                        import time
-
-                        time.sleep(0.1)
-                        st.rerun()
-                    else:
-                        st.info(f"📍 **{authoritative_name}** ya estaba seleccionado")
-
-    except Exception as e:
-        logger.error(
-            f"❌ Error procesando clic autoritativo con normalización: {str(e)}"
-        )
-        st.error(f"Error procesando clic en mapa: {str(e)}")
-
-
-def handle_map_click_multiple_authoritative(
-    map_data, features_data, feature_type, filters, data_original
-):
-    """
-    Manejo de clicks múltiple AUTORITATIVO usando hoja VEREDAS con normalización robusta.
-    """
-    if not map_data or not map_data.get("last_object_clicked"):
-        return
-
-    try:
-        clicked_object = map_data["last_object_clicked"]
-
-        if isinstance(clicked_object, dict):
-            clicked_lat = clicked_object.get("lat")
-            clicked_lng = clicked_object.get("lng")
-
-            if clicked_lat and clicked_lng:
-                # Obtener nombre del shapefile
-                shapefile_name = find_closest_feature_corrected(
-                    clicked_lat, clicked_lng, features_data, feature_type
-                )
-
-                if shapefile_name:
-                    logger.info(
-                        f"🎯 Click múltiple en shapefile: '{shapefile_name}' (normalización robusta)"
-                    )
-
-                    # MAPEAR nombre del shapefile a nombre AUTORITATIVO con normalización robusta
-                    authoritative_name = map_shapefile_to_authoritative(
-                        shapefile_name, data_original, feature_type
-                    )
-
-                    if not authoritative_name:
-                        logger.error(
-                            f"❌ No se pudo mapear '{shapefile_name}' a hoja VEREDAS con normalización"
-                        )
-                        st.error(
-                            f"Municipio/Vereda no encontrado en datos: {shapefile_name}"
-                        )
-                        return
-
-                    logger.info(
-                        f"🔗 Mapeado múltiple con normalización: '{shapefile_name}' → '{authoritative_name}'"
-                    )
-
-                    # Determinar session_key
-                    if feature_type == "municipio":
-                        session_key = "municipios_multiselect"
-                        # Verificar que esté en opciones autorizadas usando normalización robusta
-                        available_options = data_original.get(
-                            "municipios_authoritativos", []
-                        )
-                        option_match = match_name_fuzzy(
-                            authoritative_name, available_options
-                        )
-
-                        if not option_match:
-                            logger.warning(
-                                f"⚠️ Municipio no autorizado con normalización: {authoritative_name}"
-                            )
-                            st.warning(
-                                f"Municipio no reconocido en hoja VEREDAS: {authoritative_name}"
-                            )
-                            return
-
-                        # Usar el nombre que coincide exactamente con las opciones disponibles
-                        authoritative_name = option_match
-
-                    else:
-                        session_key = "veredas_multiselect"
-                        # Para veredas, verificar que esté en las veredas de los municipios seleccionados
-                        municipios_sel = st.session_state.get(
-                            "municipios_multiselect", []
-                        )
-                        if not municipios_sel:
-                            st.warning("Seleccione municipios primero")
-                            return
-
-                        # Verificar que la vereda esté en alguno de los municipios seleccionados usando normalización
-                        vereda_valida = False
-                        veredas_por_municipio = data_original.get(
-                            "veredas_por_municipio", {}
-                        )
-
-                        for municipio in municipios_sel:
-                            municipio_match = match_name_fuzzy(
-                                municipio, list(veredas_por_municipio.keys())
-                            )
-                            if (
-                                municipio_match
-                                and municipio_match in veredas_por_municipio
-                            ):
-                                veredas_municipio = veredas_por_municipio[
-                                    municipio_match
-                                ]
-                                vereda_match = match_name_fuzzy(
-                                    authoritative_name, veredas_municipio
-                                )
-                                if vereda_match:
-                                    vereda_valida = True
-                                    authoritative_name = (
-                                        vereda_match  # Usar nombre exacto de la lista
-                                    )
-                                    break
-
-                        if not vereda_valida:
-                            st.warning(
-                                f"Vereda '{authoritative_name}' no pertenece a los municipios seleccionados"
-                            )
-                            return
-
-                    # Validar session_state antes de modificar
-                    current_selection = st.session_state.get(session_key, [])
-                    if not isinstance(current_selection, list):
-                        current_selection = []
-
-                    # Toggle selección múltiple usando normalización robusta para comparar
-                    ya_seleccionado = False
-                    for item in current_selection:
-                        if normalize_name_robust(item) == normalize_name_robust(
-                            authoritative_name
-                        ):
-                            current_selection.remove(item)
-                            action = "quitado de"
-                            ya_seleccionado = True
-                            break
-
-                    if not ya_seleccionado:
-                        current_selection.append(authoritative_name)
-                        action = "agregado a"
-
-                    # Actualizar session_state de forma segura
-                    st.session_state[session_key] = current_selection
-
-                    st.success(
-                        f"✅ **{authoritative_name}** {action} la selección (normalización robusta)"
-                    )
-
-                    # Rerun seguro con delay
-                    import time
-
-                    time.sleep(0.1)
-                    st.rerun()
-
-    except Exception as e:
-        logger.error(
-            f"❌ Error procesando clic múltiple autoritativo con normalización: {str(e)}"
-        )
-        st.error(f"Error procesando clic múltiple: {str(e)}")
-
-
-def map_shapefile_to_authoritative(shapefile_name, data_original, feature_type):
-    """
-    Mapea nombre de shapefile a nombre AUTORITATIVO de hoja VEREDAS usando normalización robusta.
-
-    Args:
-        shapefile_name: Nombre del feature en shapefile
-        data_original: Datos originales con mapeo
-        feature_type: "municipio" o "vereda"
-
-    Returns:
-        str: Nombre autoritativo o None si no se encuentra
-    """
-    logger.info(
-        f"🔗 Mapeando shapefile '{shapefile_name}' (tipo: {feature_type}) con normalización robusta"
-    )
-
-    if feature_type == "municipio":
-        # Para municipios, usar mapeo directo con normalización robusta
-        shapefile_mapping = data_original.get("shapefile_mapping", {})
-        shapefile_to_veredas = shapefile_mapping.get("shapefile_to_veredas", {})
-
-        # Buscar en mapeo existente primero
-        if shapefile_name in shapefile_to_veredas:
-            result = shapefile_to_veredas[shapefile_name]
-            logger.info(f"✅ Mapeo directo: '{shapefile_name}' → '{result}'")
-            return result
-
-        # Si no hay mapeo, usar normalización robusta con municipios authoritativos
-        municipios_authoritativos = data_original.get("municipios_authoritativos", [])
-        if municipios_authoritativos:
-            municipio_match = match_name_fuzzy(
-                shapefile_name, municipios_authoritativos
-            )
-            if municipio_match:
-                logger.info(
-                    f"✅ Mapeo con normalización robusta: '{shapefile_name}' → '{municipio_match}'"
-                )
-                return municipio_match
-
-        # Fallback: verificar municipios_normalizados
-        municipios_normalizados = data_original.get("municipios_normalizados", [])
-        municipio_match = match_name_fuzzy(shapefile_name, municipios_normalizados)
-        if municipio_match:
-            logger.info(f"✅ Mapeo fallback: '{shapefile_name}' → '{municipio_match}'")
-            return municipio_match
-
-        # Debug específico para casos problemáticos
-        if shapefile_name.lower() in [
-            "ibague",
-            "ibagué",
-            "purificacion",
-            "purificación",
-        ]:
-            logger.warning(f"🔍 Caso problemático específico: '{shapefile_name}'")
-
-            # Buscar manualmente en todas las opciones
-            all_options = municipios_authoritativos + municipios_normalizados
-            for option in all_options:
-                debug_info = debug_name_matching(shapefile_name, option)
-                logger.info(
-                    f"  🔍 vs '{option}': exact={debug_info['match_exact']}, fuzzy={debug_info['match_fuzzy']}"
-                )
-
-                if debug_info["match_fuzzy"]:
-                    logger.info(
-                        f"✅ Debug match encontrado: '{shapefile_name}' → '{option}'"
-                    )
-                    return option
-
-        logger.error(
-            f"❌ Municipio '{shapefile_name}' no encontrado en hoja VEREDAS con normalización robusta"
-        )
-        return None
-
-    elif feature_type == "vereda":
-        # Para veredas, buscar en veredas_por_municipio con normalización robusta
-        veredas_por_municipio = data_original.get("veredas_por_municipio", {})
-
-        # Buscar en todas las veredas de todos los municipios
-        todas_las_veredas = []
-        municipio_de_vereda = None
-
-        for municipio, veredas in veredas_por_municipio.items():
-            vereda_match = match_name_fuzzy(shapefile_name, veredas)
-            if vereda_match:
-                logger.info(
-                    f"✅ Vereda encontrada con normalización: '{shapefile_name}' → '{vereda_match}' (en {municipio})"
-                )
-                return vereda_match
-
-            todas_las_veredas.extend(veredas)
-
-        # Si no se encuentra, hacer búsqueda global
-        vereda_global_match = match_name_fuzzy(shapefile_name, todas_las_veredas)
-        if vereda_global_match:
-            logger.info(
-                f"✅ Vereda encontrada globalmente: '{shapefile_name}' → '{vereda_global_match}'"
-            )
-            return vereda_global_match
-
-        logger.error(
-            f"❌ Vereda '{shapefile_name}' no encontrada en hoja VEREDAS con normalización robusta"
-        )
-        return None
-
+def determine_feature_color_coverage(cobertura_porcentaje, color_scheme):
+    """Determina color según cobertura de vacunación."""
+    if pd.isna(cobertura_porcentaje):
+        return color_scheme["sin_datos"], "Sin datos de cobertura"
+
+    if cobertura_porcentaje > 95:
+        return color_scheme["cobertura_alta"], f"Cobertura alta: {cobertura_porcentaje:.1f}%"
+    elif cobertura_porcentaje >= 80:
+        return color_scheme["cobertura_buena"], f"Cobertura buena: {cobertura_porcentaje:.1f}%"
+    elif cobertura_porcentaje >= 60:
+        return color_scheme["cobertura_regular"], f"Cobertura regular: {cobertura_porcentaje:.1f}%"
+    else:
+        return color_scheme["cobertura_baja"], f"Cobertura baja: {cobertura_porcentaje:.1f}%"
+
+# ===== FUNCIONES DE APOYO =====
+
+def get_municipio_column(gdf):
+    """Detecta la columna de municipios en el shapefile."""
+    possible_cols = ["municipi_1", "MpNombre", "NOMBRE_MUN", "municipio"]
+    for col in possible_cols:
+        if col in gdf.columns:
+            return col
     return None
 
+def get_vereda_column(gdf):
+    """Detecta la columna de veredas en el shapefile."""
+    possible_cols = ["vereda_nor", "NOMBRE_VER", "vereda", "nombre_vereda"]
+    for col in possible_cols:
+        if col in gdf.columns:
+            return col
+    return None
 
-def find_closest_feature_corrected(lat, lng, features_data, feature_type):
-    """Encuentra feature más cercano CORREGIDO."""
+def show_available_municipios_in_shapefile(veredas_gdf, municipio_selected):
+    """Muestra municipios disponibles en shapefile para debug."""
+    municipio_col = get_municipio_column(veredas_gdf)
+    if municipio_col:
+        municipios_disponibles = sorted(veredas_gdf[municipio_col].unique())
+        logger.info(f"🏛️ Municipios disponibles en shapefile: {municipios_disponibles}")
+        
+        st.info(
+            f"**Municipios disponibles en shapefile de veredas:**\n\n"
+            f"{', '.join(municipios_disponibles[:10])}"
+            f"{f' y {len(municipios_disponibles)-10} más...' if len(municipios_disponibles) > 10 else ''}\n\n"
+            f"**Buscado:** {municipio_selected}\n\n"
+            f"**Sugerencia:** Verificar mapeo en MUNICIPIO_MAPPING"
+        )
+
+# ===== MANEJO DE CLICS SIMPLIFICADO =====
+
+def handle_map_click_simplified(map_data, features_data, feature_type, filters, data_original):
+    """Manejo de clics SIMPLIFICADO."""
+    if not map_data or not map_data.get("last_object_clicked"):
+        return
+
+    try:
+        clicked_object = map_data["last_object_clicked"]
+
+        if isinstance(clicked_object, dict):
+            clicked_lat = clicked_object.get("lat")
+            clicked_lng = clicked_object.get("lng")
+
+            if clicked_lat and clicked_lng:
+                # Obtener nombre del shapefile
+                shapefile_name = find_closest_feature_simplified(clicked_lat, clicked_lng, features_data, feature_type)
+
+                if shapefile_name:
+                    logger.info(f"🎯 Click en shapefile: '{shapefile_name}' (simplificado)")
+
+                    # Mapear a nombre de base de datos
+                    data_name = map_shapefile_to_data_simplified(shapefile_name, data_original, feature_type)
+
+                    if not data_name:
+                        logger.error(f"❌ No se pudo mapear '{shapefile_name}' a base de datos")
+                        st.error(f"Ubicación no encontrada en datos: {shapefile_name}")
+                        return
+
+                    logger.info(f"🔗 Mapeado: '{shapefile_name}' → '{data_name}'")
+
+                    # Aplicar filtro
+                    apply_filter_simplified(data_name, feature_type, filters)
+
+    except Exception as e:
+        logger.error(f"❌ Error procesando clic simplificado: {str(e)}")
+        st.error(f"Error procesando clic en mapa: {str(e)}")
+
+def find_closest_feature_simplified(lat, lng, features_data, feature_type):
+    """Encuentra feature más cercano SIMPLIFICADO."""
     try:
         from shapely.geometry import Point
-
         click_point = Point(lng, lat)
+        
+        if feature_type == "municipio":
+            municipio_col = get_municipio_column(features_data)
+            col_name = municipio_col
+        else:
+            vereda_col = get_vereda_column(features_data)
+            col_name = vereda_col
+        
+        if not col_name:
+            return None
+
+        for idx, row in features_data.iterrows():
+            try:
+                if click_point.within(row["geometry"]):
+                    return row[col_name]
+            except Exception:
+                continue
+
+        # Si no está dentro de ninguno, buscar el más cercano
         min_distance = float("inf")
         closest_feature = None
 
         for idx, row in features_data.iterrows():
             try:
-                feature_geom = row["geometry"]
-
-                # CORREGIDO: Verificar si el punto está dentro del polígono primero
-                if click_point.within(feature_geom):
-                    if feature_type == "municipio":
-                        return row.get("MpNombre", row.get("municipi_1", "DESCONOCIDO"))
-                    else:
-                        return row.get("vereda_nor", "DESCONOCIDA")
-
-                # Si no está dentro, calcular distancia
-                distance = click_point.distance(feature_geom)
-
+                distance = click_point.distance(row["geometry"])
                 if distance < min_distance:
                     min_distance = distance
-                    if feature_type == "municipio":
-                        closest_feature = row.get(
-                            "MpNombre", row.get("municipi_1", "DESCONOCIDO")
-                        )
-                    else:
-                        closest_feature = row.get("vereda_nor", "DESCONOCIDA")
-            except Exception as e:
+                    closest_feature = row[col_name]
+            except Exception:
                 continue
 
         return closest_feature
@@ -1568,89 +621,70 @@ def find_closest_feature_corrected(lat, lng, features_data, feature_type):
     except ImportError:
         # Fallback sin shapely
         if not features_data.empty:
-            row = features_data.iloc[0]
             if feature_type == "municipio":
-                return row.get("MpNombre", row.get("municipi_1", "DESCONOCIDO"))
+                municipio_col = get_municipio_column(features_data)
+                return features_data.iloc[0][municipio_col] if municipio_col else None
             else:
-                return row.get("vereda_nor", "DESCONOCIDA")
+                vereda_col = get_vereda_column(features_data)
+                return features_data.iloc[0][vereda_col] if vereda_col else None
         return None
 
+def map_shapefile_to_data_simplified(shapefile_name, data_original, feature_type):
+    """Mapea nombre de shapefile a nombre de base de datos SIMPLIFICADO."""
+    if feature_type == "municipio":
+        # Para municipios, usar mapeo directo
+        mapped_name = get_mapped_municipio(shapefile_name)
+        
+        # Verificar que existe en datos
+        municipios_disponibles = data_original.get("municipios_authoritativos", [])
+        if not municipios_disponibles:
+            municipios_disponibles = data_original.get("municipios_normalizados", [])
+        
+        if mapped_name in municipios_disponibles:
+            return mapped_name
+        
+        # Si no se encuentra, buscar coincidencia directa
+        if shapefile_name in municipios_disponibles:
+            return shapefile_name
+        
+        return None
+    
+    elif feature_type == "vereda":
+        # Para veredas, retornar el nombre directamente (ya están estandarizados)
+        return shapefile_name
+    
+    return None
 
-# ===== TARJETAS CORREGIDAS =====
+def apply_filter_simplified(location_name, feature_type, filters):
+    """Aplica filtro SIMPLIFICADO."""
+    # Verificar si ya está seleccionado para evitar bucle
+    if feature_type == "municipio":
+        current_value = st.session_state.get("municipio_filter", "Todos")
+        if current_value != location_name:
+            st.session_state["municipio_filter"] = location_name
+            st.session_state["vereda_filter"] = "Todas"  # Reset vereda
+            st.success(f"✅ **{location_name}** seleccionado")
+            st.rerun()
+        else:
+            st.info(f"📍 **{location_name}** ya estaba seleccionado")
+    
+    elif feature_type == "vereda":
+        current_value = st.session_state.get("vereda_filter", "Todas")
+        if current_value != location_name:
+            st.session_state["vereda_filter"] = location_name
+            st.success(f"✅ **{location_name}** seleccionado")
+            st.rerun()
+        else:
+            st.info(f"🏘️ **{location_name}** ya estaba seleccionado")
 
+# ===== TARJETAS SIMPLIFICADAS =====
 
-def create_cobertura_card_corrected(filters, colors, data_filtered):
-    """Tarjeta de cobertura CORREGIDA - dinámica."""
+def create_afectacion_card_simplified(casos, epizootias, filters, colors, data_original):
+    """Tarjeta de afectación SIMPLIFICADA - CON CONTEO CORRECTO."""
     filter_context = get_filter_context_compact(filters)
 
-    # CORREGIDO: Calcular cobertura dinámica según filtros
-    active_filters = filters.get("active_filters", [])
-    municipio_filtrado = filters.get("municipio_display")
-    modo_filtrado = filters.get("modo")
-
-    # Cobertura base dinámica
-    if municipio_filtrado and municipio_filtrado != "Todos":
-        cobertura_simulada = calculate_dynamic_coverage(
-            municipio_filtrado, active_filters, municipio_filtrado, modo_filtrado
-        )
-    else:
-        # Promedio ponderado para múltiples municipios o vista departamental
-        cobertura_simulada = 82.3
-        if active_filters:
-            cobertura_simulada *= 0.95
-        if modo_filtrado == "multiple":
-            cobertura_simulada *= 1.02
-
-    # Cálculos derivados
-    dosis_aplicadas = int(45650 * (cobertura_simulada / 82.3))  # Proporcionalmente
-    gap_cobertura = 95.0 - cobertura_simulada
-    ultima_actualizacion = datetime.now().strftime("%d/%m/%Y")
-
-    st.markdown(
-        f"""
-        <div class="tarjeta-optimizada cobertura-card">
-            <div class="tarjeta-header">
-                <div class="tarjeta-icon">💉</div>
-                <div class="tarjeta-info">
-                    <div class="tarjeta-titulo">COBERTURA</div>
-                    <div class="tarjeta-subtitulo">{filter_context}</div>
-                </div>
-                <div class="tarjeta-valor">{cobertura_simulada:.1f}%</div>
-            </div>
-            <div class="tarjeta-contenido">
-                <div class="cobertura-barra">
-                    <div class="cobertura-progreso" style="width: {cobertura_simulada}%"></div>
-                </div>
-                <div class="tarjeta-metricas">
-                    <div class="metrica-item warning">
-                        <div class="metrica-valor">{dosis_aplicadas:,}</div>
-                        <div class="metrica-etiqueta">Dosis</div>
-                    </div>
-                    <div class="metrica-item danger">
-                        <div class="metrica-valor">{gap_cobertura:.1f}%</div>
-                        <div class="metrica-etiqueta">GAP</div>
-                    </div>
-                </div>
-                <div class="tarjeta-footer">
-                    📅 {ultima_actualizacion} {'(Filtrado)' if active_filters else ''}
-                </div>
-            </div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
-def create_afectacion_card_authoritative(
-    casos, epizootias, filters, colors, data_original
-):
-    """Tarjeta de afectación usando hoja VEREDAS AUTORITATIVA."""
-    filter_context = get_filter_context_compact(filters)
-
-    # USAR FUNCIÓN AUTORITATIVA
-    afectacion_info = calculate_afectacion_authoritative(
-        casos, epizootias, filters, data_original
-    )
+    # Calcular afectación CORREGIDA
+    afectacion_info = calculate_afectacion_simplified(casos, epizootias, filters, data_original)
 
     st.markdown(
         f"""
@@ -1687,201 +721,136 @@ def create_afectacion_card_authoritative(
         unsafe_allow_html=True,
     )
 
+def calculate_afectacion_simplified(casos, epizootias, filters, data_original):
+    """Calcula información de afectación SIMPLIFICADA CON CONTEO CORRECTO."""
+    
+    if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
+        # Vista de vereda específica
+        return {
+            "total": "1/1",
+            "casos_texto": f"{len(casos)} casos registrados",
+            "epizootias_texto": f"{len(epizootias)} epizootias registradas",
+            "ambos_texto": "Vista detallada activa",
+            "descripcion": f"vereda {filters.get('vereda_display', '')}",
+        }
+    
+    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
+        # Vista municipal - CORREGIDO: Contar veredas reales
+        municipio_actual = filters.get("municipio_display")
+        
+        veredas_con_casos = set()
+        veredas_con_epizootias = set()
 
-def calculate_afectacion_authoritative(casos, epizootias, filters, data_original):
-    """Calcula información de afectación."""
+        if not casos.empty and "vereda" in casos.columns:
+            veredas_con_casos = set(casos["vereda"].dropna())
 
-    def normalize_name(name):
-        return normalize_name_robust(name)
+        if not epizootias.empty and "vereda" in epizootias.columns:
+            veredas_con_epizootias = set(epizootias["vereda"].dropna())
 
-    # Usar hoja VEREDAS como referencia
-    veredas_completas = data_original.get("veredas_completas", pd.DataFrame())
+        veredas_con_ambos = veredas_con_casos.intersection(veredas_con_epizootias)
+        veredas_afectadas = veredas_con_casos.union(veredas_con_epizootias)
 
-    if filters.get("modo") == "multiple":
-        municipios_sel = filters.get("municipios_seleccionados", [])
-        if len(municipios_sel) > 1:
-            return calculate_afectacion_multiple_authoritative(
-                casos, epizootias, municipios_sel, data_original
-            )
-        else:
-            return calculate_afectacion_departamental_authoritative(
-                casos, epizootias, data_original
-            )
+        # CORREGIDO: Contar veredas totales del municipio desde hoja VEREDAS
+        total_veredas_real = get_total_veredas_municipio_simplified(municipio_actual, data_original)
+
+        return {
+            "total": f"{len(veredas_afectadas)}/{total_veredas_real}",
+            "casos_texto": f"{len(veredas_con_casos)}/{total_veredas_real} con casos",
+            "epizootias_texto": f"{len(veredas_con_epizootias)}/{total_veredas_real} con epizootias",
+            "ambos_texto": f"{len(veredas_con_ambos)}/{total_veredas_real} con ambos",
+            "descripcion": f"veredas afectadas en {municipio_actual}",
+        }
+    
     else:
-        if filters.get("vereda_display") != "Todas":
-            return calculate_afectacion_vereda_authoritative(
-                casos, epizootias, filters, data_original
-            )
-        elif filters.get("municipio_display") != "Todos":
-            return calculate_afectacion_municipal_authoritative(
-                casos, epizootias, filters, data_original
-            )
-        else:
-            return calculate_afectacion_departamental_authoritative(
-                casos, epizootias, data_original
-            )
+        # Vista departamental
+        municipios_con_casos = set()
+        municipios_con_epizootias = set()
 
+        if not casos.empty and "municipio" in casos.columns:
+            municipios_con_casos = set(casos["municipio"].dropna())
 
-def calculate_afectacion_departamental_authoritative(casos, epizootias, data_original):
-    """Afectación departamental usando hoja VEREDAS AUTORITATIVA."""
-    municipios_con_casos = set()
-    municipios_con_epizootias = set()
+        if not epizootias.empty and "municipio" in epizootias.columns:
+            municipios_con_epizootias = set(epizootias["municipio"].dropna())
 
-    if not casos.empty and "municipio" in casos.columns:
-        municipios_con_casos = set(casos["municipio"].dropna())
+        municipios_con_ambos = municipios_con_casos.intersection(municipios_con_epizootias)
+        municipios_afectados = municipios_con_casos.union(municipios_con_epizootias)
 
-    if not epizootias.empty and "municipio" in epizootias.columns:
-        municipios_con_epizootias = set(epizootias["municipio"].dropna())
+        # CORREGIDO: Total real de municipios del Tolima
+        total_municipios_real = 47  # Tolima tiene 47 municipios
 
-    municipios_con_ambos = municipios_con_casos.intersection(municipios_con_epizootias)
+        return {
+            "total": f"{len(municipios_afectados)}/{total_municipios_real}",
+            "casos_texto": f"{len(municipios_con_casos)}/{total_municipios_real} con casos",
+            "epizootias_texto": f"{len(municipios_con_epizootias)}/{total_municipios_real} con epizootias",
+            "ambos_texto": f"{len(municipios_con_ambos)}/{total_municipios_real} con ambos",
+            "descripcion": "municipios afectados del Tolima",
+        }
 
-    # USAR HOJA VEREDAS para total real
-    municipios_authoritativos = data_original.get("municipios_authoritativos", [])
-    total_municipios_real = len(municipios_authoritativos)
-
-    return {
-        "total": f"{len(municipios_con_casos | municipios_con_epizootias)}/{total_municipios_real}",
-        "casos_texto": f"{len(municipios_con_casos)}/{total_municipios_real} con casos",
-        "epizootias_texto": f"{len(municipios_con_epizootias)}/{total_municipios_real} con epizootias",
-        "ambos_texto": f"{len(municipios_con_ambos)}/{total_municipios_real} con ambos",
-        "descripcion": "municipios afectados",
-    }
-
-
-def calculate_afectacion_municipal_authoritative(
-    casos, epizootias, filters, data_original
-):
-    """Afectación municipal."""
-    municipio_actual = filters.get("municipio_display")
-
-    def normalize_name(name):
-        return normalize_name_robust(name)
-
-    municipio_norm = normalize_name(municipio_actual)
-
-    veredas_con_casos = set()
-    veredas_con_epizootias = set()
-
-    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
-        casos_municipio = casos[
-            casos["municipio"].apply(normalize_name) == municipio_norm
-        ]
-        veredas_con_casos = set(casos_municipio["vereda"].dropna())
-
-    if (
-        not epizootias.empty
-        and "vereda" in epizootias.columns
-        and "municipio" in epizootias.columns
-    ):
-        epi_municipio = epizootias[
-            epizootias["municipio"].apply(normalize_name) == municipio_norm
-        ]
-        veredas_con_epizootias = set(epi_municipio["vereda"].dropna())
-
-    veredas_con_ambos = veredas_con_casos.intersection(veredas_con_epizootias)
-
-    # USAR HOJA VEREDAS para total real
-    total_veredas_real = get_total_veredas_municipio_authoritative(
-        municipio_actual, data_original
-    )
-
-    return {
-        "total": f"{len(veredas_con_casos | veredas_con_epizootias)}/{total_veredas_real}",
-        "casos_texto": f"{len(veredas_con_casos)}/{total_veredas_real} con casos",
-        "epizootias_texto": f"{len(veredas_con_epizootias)}/{total_veredas_real} con epizootias",
-        "ambos_texto": f"{len(veredas_con_ambos)}/{total_veredas_real} con ambos",
-        "descripcion": f"veredas afectadas en {municipio_actual}",
-    }
-
-
-def calculate_afectacion_vereda_authoritative(
-    casos, epizootias, filters, data_original
-):
-    """Afectación de vereda específica usando hoja VEREDAS AUTORITATIVA."""
-    return {
-        "total": "1/1",
-        "casos_texto": f"{len(casos)} casos registrados",
-        "epizootias_texto": f"{len(epizootias)} epizootias registradas",
-        "ambos_texto": "Vista detallada activa",
-        "descripcion": f"vereda {filters.get('vereda_display', '')}",
-    }
-
-
-def calculate_afectacion_multiple_authoritative(
-    casos, epizootias, municipios_sel, data_original
-):
-    """Afectación para selección múltiple."""
-
-    def normalize_name(name):
-        return normalize_name_robust(name)
-
-    municipios_norm = [normalize_name(m) for m in municipios_sel]
-    municipios_con_casos = set()
-    municipios_con_epizootias = set()
-
-    if not casos.empty and "municipio" in casos.columns:
-        for municipio in municipios_norm:
-            if len(casos[casos["municipio"].apply(normalize_name) == municipio]) > 0:
-                municipios_con_casos.add(municipio)
-
-    if not epizootias.empty and "municipio" in epizootias.columns:
-        for municipio in municipios_norm:
-            if (
-                len(
-                    epizootias[
-                        epizootias["municipio"].apply(normalize_name) == municipio
-                    ]
-                )
-                > 0
-            ):
-                municipios_con_epizootias.add(municipio)
-
-    municipios_con_ambos = municipios_con_casos.intersection(municipios_con_epizootias)
-
-    return {
-        "total": f"{len(municipios_con_casos | municipios_con_epizootias)}/{len(municipios_sel)}",
-        "casos_texto": f"{len(municipios_con_casos)}/{len(municipios_sel)} con casos",
-        "epizootias_texto": f"{len(municipios_con_epizootias)}/{len(municipios_sel)} con epizootias",
-        "ambos_texto": f"{len(municipios_con_ambos)}/{len(municipios_sel)} con ambos",
-        "descripcion": "municipios seleccionados",
-    }
-
-
-def get_total_veredas_municipio_authoritative(municipio, data_original):
-    """
-    Obtiene total REAL de veredas desde hoja VEREDAS AUTORITATIVA.
-
-    Args:
-        municipio: Nombre del municipio
-        data_original: Datos originales con hoja VEREDAS
-
-    Returns:
-        int: Número total de veredas en el municipio
-    """
+def get_total_veredas_municipio_simplified(municipio, data_original):
+    """Obtiene total REAL de veredas desde hoja VEREDAS SIMPLIFICADO."""
     veredas_por_municipio = data_original.get("veredas_por_municipio", {})
 
+    # Buscar coincidencia directa
     if municipio in veredas_por_municipio:
         total_real = len(veredas_por_municipio[municipio])
-        logger.info(
-            f"📊 {municipio}: {total_real} veredas desde hoja VEREDAS AUTORITATIVA"
-        )
+        logger.info(f"📊 {municipio}: {total_real} veredas desde hoja VEREDAS")
         return total_real
 
-    # Búsqueda case-insensitive
-    for mun_key, veredas in veredas_por_municipio.items():
-        if municipio.lower() == mun_key.lower():
-            total_real = len(veredas)
-            logger.info(
-                f"📊 {municipio}: {total_real} veredas desde hoja VEREDAS (case-insensitive)"
-            )
-            return total_real
+    # Buscar usando mapeo
+    mapped_municipio = get_mapped_municipio(municipio)
+    if mapped_municipio != municipio and mapped_municipio in veredas_por_municipio:
+        total_real = len(veredas_por_municipio[mapped_municipio])
+        logger.info(f"📊 {municipio} (como {mapped_municipio}): {total_real} veredas desde hoja VEREDAS")
+        return total_real
 
-    logger.warning(f"⚠️ Municipio '{municipio}' no encontrado en hoja VEREDAS")
-    return 1  # Mínimo 1 para evitar errores
+    logger.warning(f"⚠️ Municipio '{municipio}' no encontrado en hoja VEREDAS, usando estimado")
+    return 5  # Estimado por defecto
 
+def create_cobertura_card_simplified(filters, colors, data_filtered):
+    """Tarjeta de cobertura SIMPLIFICADA."""
+    filter_context = get_filter_context_compact(filters)
 
-# ===== FUNCIONES DE APOYO =====
+    # Cobertura simulada
+    cobertura_simulada = 82.3
+    dosis_aplicadas = 45650
+    gap_cobertura = 95.0 - cobertura_simulada
+    ultima_actualizacion = datetime.now().strftime("%d/%m/%Y")
 
+    st.markdown(
+        f"""
+        <div class="tarjeta-optimizada cobertura-card">
+            <div class="tarjeta-header">
+                <div class="tarjeta-icon">💉</div>
+                <div class="tarjeta-info">
+                    <div class="tarjeta-titulo">COBERTURA</div>
+                    <div class="tarjeta-subtitulo">{filter_context}</div>
+                </div>
+                <div class="tarjeta-valor">{cobertura_simulada:.1f}%</div>
+            </div>
+            <div class="tarjeta-contenido">
+                <div class="cobertura-barra">
+                    <div class="cobertura-progreso" style="width: {cobertura_simulada}%"></div>
+                </div>
+                <div class="tarjeta-metricas">
+                    <div class="metrica-item warning">
+                        <div class="metrica-valor">{dosis_aplicadas:,}</div>
+                        <div class="metrica-etiqueta">Dosis</div>
+                    </div>
+                    <div class="metrica-item danger">
+                        <div class="metrica-valor">{gap_cobertura:.1f}%</div>
+                        <div class="metrica-etiqueta">GAP</div>
+                    </div>
+                </div>
+                <div class="tarjeta-footer">
+                    📅 {ultima_actualizacion}
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ===== FUNCIONES EXISTENTES MANTENIDAS =====
 
 def load_geographic_data():
     """Carga datos geográficos."""
@@ -1894,26 +863,17 @@ def load_geographic_data():
         logger.error(f"❌ Error cargando datos geográficos: {str(e)}")
         return None
 
-
 def determine_map_level(filters):
     """Determina el nivel del mapa según filtros."""
     if filters.get("vereda_display") and filters.get("vereda_display") != "Todas":
         return "vereda"
-    elif (
-        filters.get("municipio_display") and filters.get("municipio_display") != "Todos"
-    ):
+    elif filters.get("municipio_display") and filters.get("municipio_display") != "Todos":
         return "municipio"
     else:
         return "departamento"
 
-
 def get_filter_context_compact(filters):
     """Contexto de filtrado compacto."""
-    if filters.get("modo") == "multiple":
-        municipios_sel = len(filters.get("municipios_seleccionados", []))
-        if municipios_sel > 0:
-            return f"{municipios_sel} municipios"
-
     municipio = filters.get("municipio_display", "Todos")
     vereda = filters.get("vereda_display", "Todas")
 
@@ -1923,7 +883,6 @@ def get_filter_context_compact(filters):
         return f"{municipio[:12]}..."
     else:
         return "Tolima"
-
 
 def create_casos_card_optimized(casos, filters, colors):
     """Tarjeta de casos optimizada."""
@@ -1938,9 +897,7 @@ def create_casos_card_optimized(casos, filters, colors):
 
     ultimo_caso_info = "Sin casos"
     if ultimo_caso["existe"]:
-        ultimo_caso_info = (
-            f"{ultimo_caso['ubicacion'][:20]}... • {ultimo_caso['tiempo_transcurrido']}"
-        )
+        ultimo_caso_info = f"{ultimo_caso['ubicacion'][:20]}... • {ultimo_caso['tiempo_transcurrido']}"
 
     st.markdown(
         f"""
@@ -1975,7 +932,6 @@ def create_casos_card_optimized(casos, filters, colors):
         """,
         unsafe_allow_html=True,
     )
-
 
 def create_epizootias_card_optimized(epizootias, filters, colors):
     """Tarjeta de epizootias optimizada."""
@@ -2022,10 +978,6 @@ def create_epizootias_card_optimized(epizootias, filters, colors):
         unsafe_allow_html=True,
     )
 
-
-# ===== FUNCIONES BÁSICAS NECESARIAS =====
-
-
 def create_folium_map(geo_data, zoom_start=8):
     """Crea mapa base de Folium."""
     if hasattr(geo_data, "total_bounds"):
@@ -2033,12 +985,7 @@ def create_folium_map(geo_data, zoom_start=8):
     else:
         bounds = geo_data.bounds
         if len(bounds) > 0:
-            bounds = [
-                bounds.minx.min(),
-                bounds.miny.min(),
-                bounds.maxx.max(),
-                bounds.maxy.max(),
-            ]
+            bounds = [bounds.minx.min(), bounds.miny.min(), bounds.maxx.max(), bounds.maxy.max()]
         else:
             bounds = [-76.0, 3.5, -74.5, 5.5]
 
@@ -2058,21 +1005,15 @@ def create_folium_map(geo_data, zoom_start=8):
 
     return m
 
-
-def add_municipios_to_map(folium_map, municipios_data, colors, modo_mapa):
-    """Agrega municipios al mapa."""
+def add_municipios_to_map_simplified(folium_map, municipios_data, colors, modo_mapa):
+    """Agrega municipios al mapa SIMPLIFICADO."""
+    municipio_col = get_municipio_column(municipios_data)
+    
     for idx, row in municipios_data.iterrows():
-        municipio_name = row.get("MpNombre", row.get("municipi_1", "DESCONOCIDO"))
+        municipio_name = row.get(municipio_col, "DESCONOCIDO")
         color = row["color"]
 
-        if modo_mapa == "Epidemiológico":
-            tooltip_text = create_municipio_tooltip_epidemiological(
-                municipio_name, row, colors
-            )
-        else:
-            tooltip_text = create_municipio_tooltip_coverage(
-                municipio_name, row, colors
-            )
+        tooltip_text = create_municipio_tooltip_simplified(municipio_name, row, colors, modo_mapa)
 
         folium.GeoJson(
             row["geometry"],
@@ -2086,220 +1027,15 @@ def add_municipios_to_map(folium_map, municipios_data, colors, modo_mapa):
             tooltip=folium.Tooltip(tooltip_text, sticky=True),
         ).add_to(folium_map)
 
-
-def create_municipio_tooltip_epidemiological(name, row, colors):
-    """Tooltip para municipio epidemiológico."""
-    return f"""
-    <div style="font-family: Arial; padding: 10px; max-width: 250px;">
-        <b style="color: {colors['primary']}; font-size: 1.1em;">🏛️ {name}</b><br>
-        <div style="margin: 8px 0; padding: 6px; background: #f8f9fa; border-radius: 4px;">
-            🦠 Casos: {row.get('casos', 0)}<br>
-            ⚰️ Fallecidos: {row.get('fallecidos', 0)}<br>
-            🐒 Epizootias: {row.get('epizootias', 0)}<br>
-        </div>
-        <div style="color: {colors['info']}; font-size: 0.9em;">
-            {row.get('descripcion_color', 'Sin clasificar')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
-
-
-def create_municipio_tooltip_coverage(name, row, colors):
-    """Tooltip para municipio cobertura."""
-    return f"""
-    <div style="font-family: Arial; padding: 10px; max-width: 200px;">
-        <b style="color: {colors['primary']}; font-size: 1.1em;">🏛️ {name}</b><br>
-        <div style="margin: 8px 0; padding: 6px; background: #f0f8ff; border-radius: 4px;">
-            💉 Cobertura: {row.get('cobertura', 0):.1f}%<br>
-            📊 {row.get('descripcion_color', 'Sin datos')}
-        </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
-
-
-def create_municipal_map_single(
-    casos, epizootias, geo_data, filters, colors, modo_mapa, data_filtered
-):
-    """Mapa municipal único."""
-    municipio_selected = filters.get("municipio_display")
-    if not municipio_selected or municipio_selected == "Todos":
-        st.error("No se pudo determinar el municipio para la vista de veredas")
-        return
-
-    veredas = geo_data["veredas"].copy()
-    veredas_municipio = veredas[veredas["municipi_1"] == municipio_selected]
-
-    if veredas_municipio.empty:
-        st.warning(f"No se encontraron veredas para {municipio_selected}")
-        return
-
-    if modo_mapa == "Epidemiológico":
-        veredas_data = prepare_vereda_data_epidemiological(
-            casos, epizootias, veredas_municipio, municipio_selected, colors
-        )
-    else:
-        veredas_data = prepare_vereda_data_coverage(
-            veredas_municipio, municipio_selected, colors
-        )
-
-    m = create_folium_map(veredas_data, zoom_start=10)
-    add_veredas_to_map(m, veredas_data, colors, modo_mapa)
-
-    map_data = st_folium(
-        m,
-        width="100%",
-        height=600,
-        returned_objects=["last_object_clicked"],
-        key=f"map_mun_single_{modo_mapa.lower()}",
-    )
-
-    # CORREGIDO: Pasar data_filtered como data_original
-    handle_map_click_authoritative(
-        map_data, veredas_data, "vereda", filters, data_filtered
-    )
-
-
-def prepare_vereda_data_epidemiological(
-    casos, epizootias, veredas_gdf, municipio_selected, colors
-):
-    """Prepara datos de veredas para modo epidemiológico."""
-
-    def normalize_name(name):
-        return normalize_name_robust(name)
-
-    veredas_gdf = veredas_gdf.copy()
-    municipio_norm = normalize_name(municipio_selected)
-    color_scheme = get_color_scheme_epidemiological(colors)
-
-    contadores_veredas = {}
-
-    if not casos.empty and "vereda" in casos.columns and "municipio" in casos.columns:
-        casos_norm = casos.copy()
-        casos_norm["vereda_norm"] = casos_norm["vereda"].apply(normalize_name)
-        casos_norm["municipio_norm"] = casos_norm["municipio"].apply(normalize_name)
-
-        casos_municipio = casos_norm[casos_norm["municipio_norm"] == municipio_norm]
-
-        for vereda_name in veredas_gdf["vereda_nor"].unique():
-            vereda_norm = normalize_name(vereda_name)
-            casos_ver = casos_municipio[casos_municipio["vereda_norm"] == vereda_norm]
-            fallecidos_ver = (
-                casos_ver[casos_ver["condicion_final"] == "Fallecido"]
-                if "condicion_final" in casos_ver.columns
-                else pd.DataFrame()
-            )
-
-            contadores_veredas[vereda_norm] = {
-                "casos": len(casos_ver),
-                "fallecidos": len(fallecidos_ver),
-            }
-
-    if (
-        not epizootias.empty
-        and "vereda" in epizootias.columns
-        and "municipio" in epizootias.columns
-    ):
-        epi_norm = epizootias.copy()
-        epi_norm["vereda_norm"] = epi_norm["vereda"].apply(normalize_name)
-        epi_norm["municipio_norm"] = epi_norm["municipio"].apply(normalize_name)
-
-        epi_municipio = epi_norm[epi_norm["municipio_norm"] == municipio_norm]
-
-        for vereda_name in veredas_gdf["vereda_nor"].unique():
-            vereda_norm = normalize_name(vereda_name)
-            if vereda_norm not in contadores_veredas:
-                contadores_veredas[vereda_norm] = {"casos": 0, "fallecidos": 0}
-
-            epi_ver = epi_municipio[epi_municipio["vereda_norm"] == vereda_norm]
-            positivas_ver = (
-                epi_ver[epi_ver["descripcion"] == "POSITIVO FA"]
-                if "descripcion" in epi_ver.columns
-                else pd.DataFrame()
-            )
-            en_estudio_ver = (
-                epi_ver[epi_ver["descripcion"] == "EN ESTUDIO"]
-                if "descripcion" in epi_ver.columns
-                else pd.DataFrame()
-            )
-
-            contadores_veredas[vereda_norm].update(
-                {
-                    "epizootias": len(epi_ver),
-                    "positivas": len(positivas_ver),
-                    "en_estudio": len(en_estudio_ver),
-                }
-            )
-
-    veredas_data = veredas_gdf.copy()
-
+def add_veredas_to_map_simplified(folium_map, veredas_data, colors, modo_mapa):
+    """Agrega veredas al mapa SIMPLIFICADO."""
+    vereda_col = get_vereda_column(veredas_data)
+    
     for idx, row in veredas_data.iterrows():
-        vereda_norm = normalize_name(row["vereda_nor"])
-        contadores = contadores_veredas.get(
-            vereda_norm,
-            {
-                "casos": 0,
-                "fallecidos": 0,
-                "epizootias": 0,
-                "positivas": 0,
-                "en_estudio": 0,
-            },
-        )
-
-        color, descripcion = determine_feature_color_epidemiological(
-            contadores["casos"],
-            contadores["epizootias"],
-            contadores["fallecidos"],
-            contadores["positivas"],
-            contadores["en_estudio"],
-            color_scheme,
-        )
-
-        veredas_data.loc[idx, "color"] = color
-        veredas_data.loc[idx, "descripcion_color"] = descripcion
-
-        for key, value in contadores.items():
-            veredas_data.loc[idx, key] = value
-
-    return veredas_data
-
-
-def prepare_vereda_data_coverage(veredas_gdf, municipio_selected, colors):
-    """Prepara datos de veredas para modo cobertura."""
-    veredas_data = veredas_gdf.copy()
-    color_scheme = get_color_scheme_coverage(colors)
-
-    import random
-
-    random.seed(42)
-
-    for idx, row in veredas_data.iterrows():
-        cobertura_base = random.uniform(70, 95)
-
-        color, descripcion = determine_feature_color_coverage(
-            cobertura_base, color_scheme
-        )
-
-        veredas_data.loc[idx, "color"] = color
-        veredas_data.loc[idx, "descripcion_color"] = descripcion
-        veredas_data.loc[idx, "cobertura"] = cobertura_base
-
-    return veredas_data
-
-
-def add_veredas_to_map(folium_map, veredas_data, colors, modo_mapa):
-    """Agrega veredas al mapa."""
-    for idx, row in veredas_data.iterrows():
-        vereda_name = row["vereda_nor"]
+        vereda_name = row.get(vereda_col, "DESCONOCIDA")
         color = row["color"]
 
-        if modo_mapa == "Epidemiológico":
-            tooltip_text = create_vereda_tooltip_epidemiological(
-                vereda_name, row, colors
-            )
-        else:
-            tooltip_text = create_vereda_tooltip_coverage(vereda_name, row, colors)
+        tooltip_text = create_vereda_tooltip_simplified(vereda_name, row, colors, modo_mapa)
 
         try:
             folium.GeoJson(
@@ -2316,114 +1052,76 @@ def add_veredas_to_map(folium_map, veredas_data, colors, modo_mapa):
         except Exception as e:
             logger.warning(f"⚠️ Error agregando vereda {vereda_name}: {str(e)}")
 
-
-def create_vereda_tooltip_epidemiological(name, row, colors):
-    """Tooltip para vereda epidemiológico."""
-    return f"""
-    <div style="font-family: Arial; padding: 8px; max-width: 200px;">
-        <b style="color: {colors['primary']};">🏘️ {name}</b><br>
-        <div style="margin: 6px 0; font-size: 0.9em;">
-            🦠 Casos: {row.get('casos', 0)}<br>
-            🐒 Epizootias: {row.get('epizootias', 0)}<br>
+def create_municipio_tooltip_simplified(name, row, colors, modo_mapa):
+    """Tooltip para municipio SIMPLIFICADO."""
+    if modo_mapa == "Epidemiológico":
+        return f"""
+        <div style="font-family: Arial; padding: 10px; max-width: 250px;">
+            <b style="color: {colors['primary']}; font-size: 1.1em;">🏛️ {name}</b><br>
+            <div style="margin: 8px 0; padding: 6px; background: #f8f9fa; border-radius: 4px;">
+                🦠 Casos: {row.get('casos', 0)}<br>
+                ⚰️ Fallecidos: {row.get('fallecidos', 0)}<br>
+                🐒 Epizootias: {row.get('epizootias', 0)}<br>
+            </div>
+            <div style="color: {colors['info']}; font-size: 0.9em;">
+                {row.get('descripcion_color', 'Sin clasificar')}
+            </div>
+            <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
         </div>
-        <div style="color: {colors['info']}; font-size: 0.8em;">
-            {row.get('descripcion_color', 'Sin datos')}
+        """
+    else:
+        return f"""
+        <div style="font-family: Arial; padding: 10px; max-width: 200px;">
+            <b style="color: {colors['primary']}; font-size: 1.1em;">🏛️ {name}</b><br>
+            <div style="margin: 8px 0; padding: 6px; background: #f0f8ff; border-radius: 4px;">
+                💉 Cobertura: {row.get('cobertura', 0):.1f}%<br>
+                📊 {row.get('descripcion_color', 'Sin datos')}
+            </div>
+            <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
         </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
+        """
 
-
-def create_vereda_tooltip_coverage(name, row, colors):
-    """Tooltip para vereda cobertura."""
-    return f"""
-    <div style="font-family: Arial; padding: 8px; max-width: 180px;">
-        <b style="color: {colors['primary']};">🏘️ {name}</b><br>
-        <div style="margin: 6px 0;">
-            💉 Cobertura: {row.get('cobertura', 0):.1f}%
+def create_vereda_tooltip_simplified(name, row, colors, modo_mapa):
+    """Tooltip para vereda SIMPLIFICADO."""
+    if modo_mapa == "Epidemiológico":
+        return f"""
+        <div style="font-family: Arial; padding: 8px; max-width: 200px;">
+            <b style="color: {colors['primary']};">🏘️ {name}</b><br>
+            <div style="margin: 6px 0; font-size: 0.9em;">
+                🦠 Casos: {row.get('casos', 0)}<br>
+                🐒 Epizootias: {row.get('epizootias', 0)}<br>
+            </div>
+            <div style="color: {colors['info']}; font-size: 0.8em;">
+                {row.get('descripcion_color', 'Sin datos')}
+            </div>
+            <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
         </div>
-        <div style="color: {colors['info']}; font-size: 0.8em;">
-            {row.get('descripcion_color', 'Sin datos')}
+        """
+    else:
+        return f"""
+        <div style="font-family: Arial; padding: 8px; max-width: 180px;">
+            <b style="color: {colors['primary']};">🏘️ {name}</b><br>
+            <div style="margin: 6px 0;">
+                💉 Cobertura: {row.get('cobertura', 0):.1f}%
+            </div>
+            <div style="color: {colors['info']}; font-size: 0.8em;">
+                {row.get('descripcion_color', 'Sin datos')}
+            </div>
+            <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
         </div>
-        <i style="color: {colors['accent']}; font-size: 0.8em;">👆 Clic para filtrar</i>
-    </div>
-    """
-
-
-def create_vereda_specific_map(
-    casos, epizootias, geo_data, filters, colors, data_filtered
-):
-    """Vista específica de vereda."""
-    vereda_selected = filters.get("vereda_display")
-    municipio_selected = filters.get("municipio_display")
-
-    if not vereda_selected or vereda_selected == "Todas":
-        st.error("No se pudo determinar la vereda para vista específica")
-        return
-
-    veredas = geo_data["veredas"].copy()
-
-    vereda_especifica = veredas[
-        (veredas["vereda_nor"] == vereda_selected)
-        & (veredas["municipi_1"] == municipio_selected)
-    ]
-
-    if vereda_especifica.empty:
-        st.warning(
-            f"No se encontró el croquis para {vereda_selected} en {municipio_selected}"
-        )
-        return
-
-    m = create_folium_map(vereda_especifica, zoom_start=12)
-
-    for idx, row in vereda_especifica.iterrows():
-        folium.GeoJson(
-            row["geometry"],
-            style_function=lambda x: {
-                "fillColor": colors["secondary"],
-                "color": colors["primary"],
-                "weight": 3,
-                "fillOpacity": 0.4,
-                "opacity": 1,
-            },
-            tooltip=folium.Tooltip(
-                f"""
-                <div style="font-family: Arial; padding: 10px;">
-                    <b style="color: {colors['primary']};">{vereda_selected}</b><br>
-                    📍 {municipio_selected}<br>
-                    🗺️ Vista de croquis específico
-                </div>
-                """,
-                sticky=True,
-            ),
-        ).add_to(m)
-
-    st_folium(
-        m,
-        width="100%",
-        height=600,
-        returned_objects=[],
-        key=f"map_vereda_especifica_{vereda_selected}",
-    )
-
+        """
 
 def show_fallback_summary(casos, epizootias, level, location=None):
     """Resumen cuando no hay mapas."""
     st.info(f"📊 Vista tabular - {level} (mapas no disponibles)")
 
-
 def show_maps_not_available():
     """Muestra mensaje cuando mapas no están disponibles."""
     st.error("🗺️ Los mapas no están disponibles")
 
-
 def show_geographic_data_error():
     """Muestra error cuando no se pueden cargar datos geográficos."""
     st.error("❌ No se pudieron cargar los datos geográficos")
-
-
-# ===== CSS RESPONSIVE =====
-
 
 def apply_maps_css_optimized(colors):
     """CSS optimizado para layout 50-25-25 y tarjetas mejoradas."""

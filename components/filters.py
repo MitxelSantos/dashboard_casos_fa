@@ -8,9 +8,24 @@ import pandas as pd
 import logging
 from datetime import datetime, timedelta
 
-from utils.name_normalizer import normalize_name
-
 logger = logging.getLogger(__name__)
+
+# ===== FUNCIONES DE COMPARACIÓN SIMPLIFICADAS =====
+
+
+def simple_name_clean(name):
+    """Limpieza MÍNIMA - solo espacios."""
+    if not name:
+        return ""
+    return str(name).strip()
+
+
+def names_match(name1, name2):
+    """Comparación directa - sin normalización compleja."""
+    return simple_name_clean(name1) == simple_name_clean(name2)
+
+
+# ===== CSS PARA FILTROS =====
 
 
 def apply_filters_css(colors):
@@ -91,10 +106,11 @@ def apply_filters_css(colors):
     )
 
 
+# ===== EXTRACCIÓN DE REGIONES SIMPLIFICADA =====
+
+
 def extract_regiones_from_veredas_data_simple(data):
-    """
-    Extrae regiones desde hoja VEREDAS SIMPLIFICADO - sin normalización compleja
-    """
+    """Extrae regiones desde hoja VEREDAS SIMPLIFICADO."""
     regiones = {}
 
     # Intentar obtener desde veredas_completas (hoja VEREDAS)
@@ -128,9 +144,7 @@ def extract_regiones_from_veredas_data_simple(data):
 
 
 def create_regiones_fallback_simple(data):
-    """
-    Crea regiones fallback SIMPLIFICADO - comparación directa
-    """
+    """Crea regiones fallback SIMPLIFICADO."""
     municipios_disponibles = data.get(
         "municipios_authoritativos", data.get("municipios_normalizados", [])
     )
@@ -195,10 +209,11 @@ def create_regiones_fallback_simple(data):
     return regiones_filtradas
 
 
+# ===== FILTROS JERÁRQUICOS SIMPLIFICADOS =====
+
+
 def create_hierarchical_filters_with_multiselect_authoritative(data):
-    """
-    Filtros jerárquicos SIMPLIFICADO - sin normalización compleja
-    """
+    """Filtros jerárquicos SIMPLIFICADO."""
     # Selector de modo de filtrado
     st.sidebar.markdown("### 🎯 Modo de Filtrado")
 
@@ -229,9 +244,7 @@ def create_hierarchical_filters_with_multiselect_authoritative(data):
 
 
 def create_single_filters_simple(data):
-    """
-    Filtros únicos SIMPLIFICADO - comparación directa
-    """
+    """Filtros únicos SIMPLIFICADO."""
     # Usar hoja VEREDAS para opciones de municipios
     if "municipios_authoritativos" in data and data["municipios_authoritativos"]:
         logger.info(
@@ -297,9 +310,7 @@ def create_single_filters_simple(data):
 
 
 def create_multiple_filters_simple(data):
-    """
-    Filtros múltiples SIMPLIFICADO - sin normalización compleja
-    """
+    """Filtros múltiples SIMPLIFICADO."""
     st.sidebar.markdown('<div class="multiselect-section">', unsafe_allow_html=True)
     st.sidebar.markdown("#### 🗂️ Selección Múltiple (Simplificado)")
 
@@ -426,9 +437,7 @@ def create_multiple_filters_simple(data):
 
 
 def get_veredas_for_municipio_simple(data, municipio_selected):
-    """
-    Obtiene veredas para un municipio SIMPLIFICADO - comparación directa
-    """
+    """Obtiene veredas para un municipio SIMPLIFICADO."""
     logger.info(f"🏘️ Buscando veredas para: '{municipio_selected}' (SIMPLIFICADO)")
 
     veredas_por_municipio = data.get("veredas_por_municipio", {})
@@ -447,9 +456,7 @@ def get_veredas_for_municipio_simple(data, municipio_selected):
 
 
 def get_veredas_for_municipios_simple(municipios_selected, data):
-    """
-    Obtiene veredas para múltiples municipios SIMPLIFICADO - comparación directa
-    """
+    """Obtiene veredas para múltiples municipios SIMPLIFICADO."""
     logger.info(
         f"🏘️ Buscando veredas para {len(municipios_selected)} municipios (SIMPLIFICADO)"
     )
@@ -469,6 +476,9 @@ def get_veredas_for_municipios_simple(municipios_selected, data):
         f"📊 Total: {len(todas_las_veredas)} veredas para {len(municipios_selected)} municipios"
     )
     return todas_las_veredas
+
+
+# ===== SELECTOR DE MODO DE MAPA =====
 
 
 def create_map_mode_selector(colors):
@@ -512,12 +522,13 @@ def create_map_mode_selector(colors):
     return modo_mapa
 
 
+# ===== APLICACIÓN DE FILTROS SIMPLIFICADA =====
+
+
 def apply_all_filters_multiple(
     data, filters_location, filters_temporal, filters_advanced
 ):
-    """
-    Aplica filtros SIMPLIFICADO - comparación directa sin normalización
-    """
+    """Aplica filtros SIMPLIFICADO - comparación directa sin normalización."""
     casos_filtrados = data["casos"].copy()
     epizootias_filtradas = data["epizootias"].copy()
 
@@ -635,6 +646,9 @@ def apply_all_filters_multiple(
     }
 
 
+# ===== SISTEMA UNIFICADO DE FILTROS =====
+
+
 def create_unified_filter_system(data):
     """Sistema unificado de filtros SIMPLIFICADO."""
     # Aplicar CSS
@@ -728,8 +742,11 @@ def create_unified_filter_system(data):
     return {"filters": all_filters, "data_filtered": data_filtered}
 
 
+# ===== FILTROS TEMPORALES Y AVANZADOS =====
+
+
 def create_temporal_filters_optimized(data):
-    """Filtros temporales OPTIMIZADOS - fecha actual como máximo."""
+    """Filtros temporales OPTIMIZADOS."""
     st.sidebar.markdown("---")
     fechas_disponibles = get_available_dates(data)
 
@@ -851,7 +868,6 @@ def create_filter_summary_multiple_optimized(
         and filters_temporal.get("fecha_min")
         and filters_temporal.get("fecha_max_datos")
     ):
-
         fecha_inicio, fecha_fin = filters_temporal["fecha_rango"]
         fecha_min_default = filters_temporal["fecha_min"].date()
         fecha_max_default = filters_temporal["fecha_max_datos"].date()
