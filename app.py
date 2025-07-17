@@ -138,9 +138,25 @@ def load_data():
                 logger.info(
                     f"✅ Google Drive exitoso: {len(data_gdrive['casos'])} casos, {len(data_gdrive['epizootias'])} epizootias"
                 )
-                return process_complete_data_structure_authoritative(
-                    data_gdrive["casos"], data_gdrive["epizootias"], data_dir=DATA_DIR
-                )
+
+                # ✅ CORRECCIÓN: NO volver a procesar si ya viene procesado
+                if (
+                    "data_source" in data_gdrive
+                    and data_gdrive["data_source"] != "google_drive_sin_veredas"
+                ):
+                    logger.info(
+                        "✅ Datos ya procesados desde Google Drive (incluyendo veredas)"
+                    )
+                    return data_gdrive
+                else:
+                    logger.info(
+                        "⚠️ Datos básicos desde Google Drive, procesando estructura completa"
+                    )
+                    return process_complete_data_structure_authoritative(
+                        data_gdrive["casos"],
+                        data_gdrive["epizootias"],
+                        data_dir=DATA_DIR,
+                    )
             else:
                 logger.warning("⚠️ Google Drive falló, intentando local")
 
