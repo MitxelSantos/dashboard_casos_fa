@@ -264,7 +264,7 @@ def check_google_drive_availability():
 
 
 def load_data_from_google_drive():
-    """Carga datos optimizada con UI CORREGIDA - mensaje se limpia."""
+    """Carga datos optimizada con UI CORREGIDA + HOJA VEREDAS."""
     if not check_google_drive_availability():
         return None
 
@@ -303,17 +303,46 @@ def load_data_from_google_drive():
             if not epizootias_path:
                 raise Exception("Error descargando epizootias")
 
-            progress_bar.progress(80)
+            progress_bar.progress(70)
             status_text.text("🔧 Procesando datos...")
 
-            # Cargar DataFrames
+            # ===== NUEVA SECCIÓN: LEER HOJA VEREDAS =====
+            # Cargar hoja ACUMU (casos)
             casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
+
+            # ✅ NUEVO: Cargar hoja VEREDAS del mismo archivo
+            veredas_df = None
+            try:
+                veredas_df = pd.read_excel(
+                    casos_path, sheet_name="VEREDAS", engine="openpyxl"
+                )
+                logger.info(
+                    f"✅ Hoja VEREDAS cargada desde Google Drive: {len(veredas_df)} registros"
+                )
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo cargar hoja VEREDAS: {str(e)}")
+
+                # Verificar qué hojas están disponibles
+                try:
+                    excel_file = pd.ExcelFile(casos_path)
+                    logger.info(
+                        f"📋 Hojas disponibles en BD_positivos.xlsx: {excel_file.sheet_names}"
+                    )
+                except:
+                    pass
+
+            # Cargar epizootias
             epizootias_df = pd.read_excel(
                 epizootias_path, sheet_name="Base de Datos", engine="openpyxl"
             )
 
-            # Procesar datos
-            processed_data = process_data_optimized(casos_df, epizootias_df)
+            progress_bar.progress(90)
+            status_text.text("🔧 Procesando estructura completa...")
+
+            # ✅ PROCESAR CON HOJA VEREDAS
+            processed_data = process_data_with_veredas_sheet(
+                casos_df, epizootias_df, veredas_df
+            )
 
             progress_bar.progress(100)
             status_text.text("✅ Completado!")
@@ -346,9 +375,110 @@ def load_data_from_google_drive():
             1. Verifica `private_key` en secrets.toml
             2. Asegúrate de que archivos sean accesibles en Google Drive
             3. Revisa logs de Streamlit Cloud
+            4. Verifica que BD_positivos.xlsx tenga la hoja "VEREDAS"
             """
             )
 
+        return None
+
+
+def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
+    """
+    NUEVA FUNCIÓN: Procesa datos incluyendo hoja VEREDAS desde Google Drive
+    """
+    try:
+        # Importar función existente para no duplicar
+        from utils.data_processor import (
+            excel_date_to_datetime,
+            process_complete_data_structure_authoritative,
+        )
+
+        # Limpiar datos básico
+        for df in [casos_df, epizootias_df]:
+            df.drop(
+                columns=[col for col in df.columns if "Unnamed" in col],
+                inplace=True,
+                errors="ignore",
+            )
+
+        casos_df = casos_df.dropna(how="all")
+        epizootias_df = epizootias_df.dropna(how="all")
+
+        # Mapear columnas críticas
+        casos_map = {
+            "edad_": "edad",
+            "sexo_": "sexo",
+            "vereda_": "vereda",
+            "nmun_proce": "municipio",
+            "Condición Final": "condicion_final",
+            "Inicio de sintomas": "fecha_inicio_sintomas",
+        }
+
+        epizootias_map = {
+            "MUNICIPIO": "municipio",
+            "VEREDA": "vereda",
+            "FECHA RECOLECCIÓN ": "fecha_recoleccion",
+            "PROVENIENTE ": "proveniente",
+            "DESCRIPCIÓN": "descripcion",
+        }
+
+        # Aplicar mapeos solo a columnas existentes
+        casos_df = casos_df.rename(
+            columns={k: v for k, v in casos_map.items() if k in casos_df.columns}
+        )
+        epizootias_df = epizootias_df.rename(
+            columns={
+                k: v for k, v in epizootias_map.items() if k in epizootias_df.columns
+            }
+        )
+
+        # Procesar fechas
+        if "fecha_inicio_sintomas" in casos_df.columns:
+            casos_df["fecha_inicio_sintomas"] = casos_df["fecha_inicio_sintomas"].apply(
+                excel_date_to_datetime
+            )
+
+        if "fecha_recoleccion" in epizootias_df.columns:
+            epizootias_df["fecha_recoleccion"] = epizootias_df[
+                "fecha_recoleccion"
+            ].apply(excel_date_to_datetime)
+
+        # Filtrar epizootias (solo positivas + en estudio)
+        if "descripcion" in epizootias_df.columns:
+            total_original = len(epizootias_df)
+            epizootias_df["descripcion"] = (
+                epizootias_df["descripcion"].str.upper().str.strip()
+            )
+            epizootias_df = epizootias_df[
+                epizootias_df["descripcion"].isin(["POSITIVO FA", "EN ESTUDIO"])
+            ]
+            logger.info(
+                f"🔵 Epizootias filtradas: {len(epizootias_df)} de {total_original}"
+            )
+
+        # ✅ PROCESAR HOJA VEREDAS SI ESTÁ DISPONIBLE
+        if veredas_df is not None and not veredas_df.empty:
+            logger.info("✅ Procesando con hoja VEREDAS desde Google Drive")
+
+            # Procesar hoja VEREDAS usando función existente
+            from utils.data_processor import process_veredas_dataframe_simple
+
+            veredas_processed = process_veredas_dataframe_simple(veredas_df)
+
+            # Usar función completa con hoja VEREDAS
+            return process_complete_data_structure_authoritative(
+                casos_df, epizootias_df, data_dir=None, veredas_data=veredas_processed
+            )
+        else:
+            logger.warning("⚠️ Hoja VEREDAS no disponible, usando procesamiento básico")
+
+            # Usar función completa SIN hoja VEREDAS (fallback)
+            return process_complete_data_structure_authoritative(
+                casos_df, epizootias_df, data_dir=None
+            )
+
+    except Exception as e:
+        logger.error(f"❌ Error procesando datos con hoja VEREDAS: {str(e)}")
         return None
 
 
