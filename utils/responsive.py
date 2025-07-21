@@ -32,7 +32,7 @@ def get_responsive_columns(device_type='responsive'):
 # ===== CSS RESPONSIVE PRINCIPAL =====
 
 def get_responsive_css():
-    """CSS responsive consolidado y optimizado."""
+    """CSS responsive SIN duplicar estilos críticos que se aplican en configure_page()."""
     return """
     <style>
     /* =============== VARIABLES CSS RESPONSIVE =============== */
@@ -62,180 +62,12 @@ def get_responsive_css():
         --font-title: clamp(1.8rem, 6vw, 2.5rem);
     }
     
-    /* =============== CORRECCIÓN SCROLL INFINITO FOLIUM =============== */
-    .main .block-container {
-        max-height: calc(100vh - 120px) !important;
-        overflow-y: auto !important;
-        overflow-x: hidden !important;
-        padding: 1rem !important;
-        max-width: 100% !important;
-    }
-
-    /* Contenedores de mapas - ALTURA FIJA */
-    iframe[title="st_folium.st_folium"] {
-        width: 100% !important;
-        height: 500px !important;
-        max-height: 500px !important;
-        min-height: 400px !important;
-        border-radius: 12px !important;
-        border: 2px solid #e2e8f0 !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
-        overflow: hidden !important;
-    }
-
-    /* Contenedor padre del mapa */
-    [data-testid="stVerticalBlock"] > div:has(iframe[title="st_folium.st_folium"]) {
-        max-height: 520px !important;
-        overflow: hidden !important;
-    }
-
-    /* Corrección para columnas desbalanceadas */
-    .stColumns > div {
-        display: flex !important;
-        flex-direction: column !important;
-        height: auto !important;
-        max-height: none !important;
-    }
-    
-    /* =============== MAPAS RESPONSIVE =============== */
-    .mobile-maps-container,
-    .desktop-maps-container {
-        width: 100% !important;
-        max-width: 100% !important;
-        overflow: visible !important;
-    }
-    
-    /* Mobile: Mapas centrados */
-    .mobile-map-section {
-        width: 100% !important;
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        justify-content: center !important;
-        text-align: center !important;
-        padding: 0 15px !important;
-        margin-bottom: 1.5rem !important;
-    }
-    
-    /* =============== RESPONSIVE BREAKPOINTS =============== */
-    
-    /* MOBILE */
-    @media (max-width: 768px) {
-        .mobile-map-section iframe {
-            width: 100% !important;
-            max-width: min(350px, calc(100vw - 30px)) !important;
-            min-width: 280px !important;
-            height: 350px !important;
-            max-height: 350px !important;
-            margin: 0 auto !important;
-            display: block !important;
-            border-radius: 12px !important;
-            border: 2px solid #e1e5e9 !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
-        }
-        
-        iframe[title="st_folium.st_folium"] {
-            height: 350px !important;
-            max-height: 350px !important;
-            min-height: 300px !important;
-        }
-        
-        [data-testid="stVerticalBlock"] > div:has(iframe[title="st_folium.st_folium"]) {
-            max-height: 370px !important;
-        }
-        
-        /* Evitar espacios en blanco entre mapa y tarjetas */
-        .stColumns {
-            gap: 0.5rem !important;
-        }
-        
-        .stColumns > div {
-            margin-bottom: 1rem !important;
-        }
-        
-        .desktop-maps-container { display: none !important; }
-        .mobile-maps-container { display: block !important; }
-        
-        /* Sidebar móvil */
-        .css-1d391kg {
-            width: 280px !important;
-            max-width: 90vw !important;
-        }
-        
-        .sidebar .stSelectbox > div > div,
-        .sidebar .stMultiSelect > div > div {
-            min-height: 44px !important;
-            font-size: 16px !important;
-        }
-        
-        .sidebar .stButton > button {
-            min-height: 44px !important;
-            padding: 0.75rem 1rem !important;
-        }
-        
-        /* Métricas responsive */
-        .css-1r6slb0 {
-            flex: 1 1 100% !important;
-            margin-bottom: 1rem !important;
-        }
-        
-        /* Pestañas móviles */
-        .stTabs [data-baseweb="tab"] {
-            font-size: 0.75rem !important;
-            padding: 0.5rem 0.75rem !important;
-        }
-    }
-    
-    /* TABLET */
-    @media (min-width: 769px) and (max-width: 1024px) {
-        .desktop-map-section iframe {
-            width: 100% !important;
-            max-width: 500px !important;
-            height: 450px !important;
-            max-height: 450px !important;
-            border-radius: 12px !important;
-        }
-        
-        iframe[title="st_folium.st_folium"] {
-            height: 450px !important;
-            max-height: 450px !important;
-            min-height: 350px !important;
-        }
-        
-        .css-1r6slb0 {
-            flex: 1 1 45% !important;
-            margin-bottom: 1rem !important;
-        }
-    }
-    
-    /* DESKTOP */
-    @media (min-width: 1025px) {
-        .desktop-map-section iframe {
-            width: 100% !important;
-            max-width: 700px !important;
-            height: 500px !important;
-            max-height: 500px !important;
-            border-radius: 12px !important;
-        }
-        
-        iframe[title="st_folium.st_folium"] {
-            height: 500px !important;
-            max-height: 500px !important;
-            min-height: 400px !important;
-        }
-        
-        .mobile-maps-container { display: none !important; }
-        .desktop-maps-container { display: block !important; }
-        
-        .css-1r6slb0 {
-            flex: 1 1 22% !important;
-            margin-bottom: 1rem !important;
-        }
-    }
+    /* =============== NO INCLUIR ESTILOS DE .main .block-container =============== */
+    /* Estos ya se aplicaron en configure_page() para prevenir scroll infinito */
     
     /* =============== COMPONENTES RESPONSIVE =============== */
     
-    /* Métricas */
+    /* Métricas nativas de Streamlit */
     [data-testid="metric-container"] {
         background-color: white !important;
         border-radius: 10px !important;
@@ -258,6 +90,7 @@ def get_responsive_css():
         padding: var(--spacing-xs) var(--spacing-sm) !important;
         border-radius: 6px !important;
         transition: all 0.3s ease !important;
+        font-weight: 600 !important;
     }
     
     /* Pestañas responsive */
@@ -291,7 +124,7 @@ def get_responsive_css():
         max-width: 200px !important;
     }
     
-    /* DataFrames de Streamlit */
+    /* DataFrames de Streamlit - CON LÍMITE DE ALTURA */
     .stDataFrame {
         max-height: 400px !important;
         overflow-y: auto !important;
@@ -302,10 +135,105 @@ def get_responsive_css():
         overflow-y: auto !important;
     }
     
-    /* Plotly charts */
-    .js-plotly-plot {
-        max-height: 500px !important;
-        overflow: hidden !important;
+    /* Selectores responsive */
+    .stSelectbox label,
+    .stMultiselect label {
+        color: var(--primary-color) !important;
+        font-weight: 500 !important;
+        font-size: var(--font-sm) !important;
+    }
+    
+    .stSelectbox > div > div,
+    .stMultiselect > div > div {
+        font-size: var(--font-sm) !important;
+    }
+    
+    /* =============== RESPONSIVE BREAKPOINTS =============== */
+    
+    /* TABLET */
+    @media (min-width: 769px) and (max-width: 1024px) {
+        /* Métricas en tablet */
+        [data-testid="metric-container"] {
+            padding: 1rem !important;
+            min-height: 120px !important;
+        }
+        
+        /* Ajustar espacios */
+        .stColumns {
+            gap: 1rem !important;
+        }
+    }
+    
+    /* MOBILE */
+    @media (max-width: 768px) {
+        /* Métricas móviles */
+        [data-testid="metric-container"] {
+            padding: 0.8rem !important;
+            min-height: 100px !important;
+            margin-bottom: 1rem !important;
+        }
+        
+        /* Sidebar móvil */
+        .css-1d391kg {
+            width: 280px !important;
+            max-width: 90vw !important;
+        }
+        
+        .sidebar .stSelectbox > div > div,
+        .sidebar .stMultiSelect > div > div {
+            min-height: 44px !important;
+            font-size: 16px !important;
+        }
+        
+        .sidebar .stButton > button {
+            min-height: 44px !important;
+            padding: 0.75rem 1rem !important;
+        }
+        
+        /* Columnas en móvil - CONFIGURACIÓN CRÍTICA */
+        .stColumns {
+            gap: 0.5rem !important;
+        }
+        
+        .stColumns > div {
+            margin-bottom: 1rem !important;
+        }
+        
+        /* Pestañas móviles */
+        .stTabs [data-baseweb="tab"] {
+            font-size: 0.75rem !important;
+            padding: 0.5rem 0.75rem !important;
+        }
+        
+        /* Reducir espacios en formularios móviles */
+        .stSelectbox, .stSlider, .stMultiSelect {
+            margin-bottom: 0.8rem !important;
+        }
+    }
+    
+    /* MOBILE EXTRA PEQUEÑO */
+    @media (max-width: 576px) {
+        /* Métricas extra pequeñas */
+        [data-testid="metric-container"] {
+            padding: 0.6rem !important;
+            min-height: 80px !important;
+        }
+        
+        /* Apilar elementos completamente */
+        .stColumns > div {
+            flex: 0 1 100% !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Pestañas compactas */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 0.3rem !important;
+        }
+        
+        .stTabs [data-baseweb="tab"] {
+            padding: 0.3rem 0.5rem !important;
+            font-size: 0.7rem !important;
+        }
     }
     
     /* =============== UTILIDADES =============== */
@@ -341,7 +269,7 @@ def get_responsive_css():
     }
     </style>
     """
-
+    
 def apply_responsive_css():
     """Aplica CSS responsive al dashboard."""
     st.markdown(get_responsive_css(), unsafe_allow_html=True)

@@ -84,6 +84,8 @@ def configure_page():
         layout=DASHBOARD_CONFIG["layout"],
         initial_sidebar_state=DASHBOARD_CONFIG["initial_sidebar_state"],
     )
+    
+    st.markdown(get_critical_css(), unsafe_allow_html=True)
 
     # CSS básico - el resto se maneja en archivos separados
     st.markdown(
@@ -123,6 +125,33 @@ def configure_page():
         unsafe_allow_html=True,
     )
 
+def get_critical_css():
+    """CSS crítico que DEBE aplicarse antes del primer render."""
+    return """
+    <style>
+    /* PREVENIR SCROLL INFINITO DESDE EL INICIO */
+    .main .block-container {
+        max-height: calc(100vh - 80px) !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding: 1rem !important;
+    }
+    
+    /* ALTURA FIJA PARA MAPAS DESDE EL INICIO */
+    iframe[title="st_folium.st_folium"] {
+        height: 450px !important;
+        max-height: 450px !important;
+        min-height: 350px !important;
+    }
+    
+    /* PREVENIR ESPACIOS EN MÓVIL DESDE EL INICIO */
+    @media (max-width: 768px) {
+        .stColumns { gap: 0.5rem !important; }
+        .stColumns > div { margin-bottom: 0.5rem !important; }
+        iframe[title="st_folium.st_folium"] { height: 350px !important; }
+    }
+    </style>
+    """
 
 def load_data():
     """Función unificada de carga de datos CORREGIDA."""
@@ -458,20 +487,19 @@ def handle_gray_area_click(municipio=None, vereda=None, data_original=None):
 
 
 def main():
-    """Función principal del dashboard CORREGIDA."""
-    # Configurar página
+    """Función principal del dashboard CORREGIDA - previene scroll infinito."""
+    # 1. CONFIGURAR PÁGINA PRIMERO (incluye CSS crítico inmediato)
     configure_page()
 
-    # Sidebar básico
+    # 2. Sidebar básico SIN CSS adicional
     try:
-        from components.sidebar import init_responsive_sidebar
-
-        init_responsive_sidebar()
+        from components.sidebar import create_sidebar
+        create_sidebar()
     except ImportError:
         with st.sidebar:
             st.title("Dashboard Tolima")
 
-    # Cargar datos CON ESTRUCTURA COMPLETA
+    # 3. Cargar datos CON ESTRUCTURA COMPLETA
     logger.info("🔄 Iniciando carga de datos integrada")
     data = load_data()
 
@@ -487,13 +515,13 @@ def main():
     )
     logger.info(f"🗂️ Regiones disponibles: {len(data.get('regiones', {}))}")
 
-    # Aplicar filtros SISTEMA ACTUALIZADO CORREGIDO
+    # 4. Aplicar filtros SISTEMA ACTUALIZADO CORREGIDO
     logger.info("🔄 Aplicando sistema de filtros integrado")
     filter_result = create_unified_filter_system(data)
     filters = filter_result["filters"]
     data_filtered = filter_result["data_filtered"]
 
-    # Verificar si es un área sin datos CORREGIDO
+    # 5. Verificar si es un área sin datos CORREGIDO
     municipio_filtrado = filters.get("municipio_display")
     vereda_filtrada = filters.get("vereda_display")
 
@@ -503,7 +531,6 @@ def main():
         and data_filtered["epizootias"].empty
         and (municipio_filtrado != "Todos" or vereda_filtrada != "Todas")
     ):
-
         logger.info("🎯 Detectada área sin datos - aplicando manejo especial")
         data_filtered_with_zeros = handle_gray_area_click(
             municipio=municipio_filtrado if municipio_filtrado != "Todos" else None,
@@ -514,7 +541,7 @@ def main():
         # Integrar información del área sin datos
         data_filtered.update(data_filtered_with_zeros)
 
-    # Verificar filtrado
+    # 6. Verificar filtrado
     casos_reduction = len(data["casos"]) - len(data_filtered["casos"])
     epi_reduction = len(data["epizootias"]) - len(data_filtered["epizootias"])
 
@@ -523,12 +550,12 @@ def main():
             f"📊 Filtrado aplicado: -{casos_reduction} casos, -{epi_reduction} epizootias"
         )
 
-    # Información del modo de mapa
+    # 7. Información del modo de mapa
     modo_mapa = filters.get("modo_mapa", "Epidemiológico")
     if modo_mapa != "Epidemiológico":
         st.info(f"🎨 Modo de mapa: **{modo_mapa}**")
 
-    # Pestañas principales
+    # 8. PESTAÑAS PRINCIPALES
     tab1, tab2, tab3 = st.tabs(
         [
             "🗺️ Mapas Interactivos",
@@ -576,16 +603,45 @@ def main():
             st.info("🔧 Módulo temporal en desarrollo.")
             show_fallback_summary(data_filtered, filters)
 
-    # Footer ACTUALIZADO
-    st.markdown("---")
+    # 9. FOOTER CORREGIDO - FUERA DEL CONTENEDOR PRINCIPAL
+    create_corrected_footer(filters, COLORS)
+
+
+def create_corrected_footer(filters, colors):
+    """Footer corregido que NO se recorta y está bien posicionado."""
+    # Separador visual claro
+    st.markdown(
+        """
+        <div style="
+            margin-top: 3rem; 
+            padding-top: 1rem; 
+            border-top: 2px solid #e2e8f0;
+            clear: both;
+            position: relative;
+            z-index: 1000;
+        ">
+        """, 
+        unsafe_allow_html=True
+    )
+    
     col1, col2 = st.columns([3, 1])
 
     with col1:
         st.markdown(
             f"""
-            <div style="text-align: center; color: #666; font-size: 0.75rem; padding: 0.5rem 0;">
-                Dashboard Fiebre Amarilla v1.0 <br>
-                Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
+            <div style="
+                text-align: center; 
+                color: #666; 
+                font-size: 0.75rem; 
+                padding: 0.5rem 0;
+                line-height: 1.4;
+            ">
+                <div style="margin-bottom: 4px; font-weight: 600;">
+                    Dashboard Fiebre Amarilla v1.0
+                </div>
+                <div style="opacity: 0.9;">
+                    Desarrollado por: Ing. Jose Miguel Santos • Secretaría de Salud del Tolima • © 2025
+                </div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -606,13 +662,23 @@ def main():
 
             st.markdown(
                 f"""
-                <div style="background: {COLORS['info']}; color: white; padding: 0.4rem; border-radius: 6px; text-align: center; font-size: 0.7rem;">
+                <div style="
+                    background: {colors['info']}; 
+                    color: white; 
+                    padding: 0.4rem; 
+                    border-radius: 6px; 
+                    text-align: center; 
+                    font-size: 0.7rem;
+                    font-weight: 600;
+                ">
                     🎯 {badge_text}
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
-
+    
+    # Cerrar el contenedor del footer
+    st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()

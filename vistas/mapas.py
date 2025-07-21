@@ -1,6 +1,5 @@
 """
-Vista de mapas SIMPLIFICADA - Sin normalización compleja
-Soluciona: Error Ibagué, MARIQUITA vs SAN SEBASTIAN, clics departamental→municipal, afectación
+Vista de mapas
 """
 
 import streamlit as st
@@ -56,7 +55,6 @@ VEREDA_MUNICIPIO_MAPPING = {
 
 # ===== FUNCIONES DE MAPEO SIMPLIFICADAS =====
 
-
 def simple_name_match(name1: str, name2: str) -> bool:
     """Comparación simple con mapeo de inconsistencias conocidas."""
     if not name1 or not name2:
@@ -89,7 +87,6 @@ def initialize_bidirectional_mapping():
         f"🔗 Mapeo bidireccional inicializado: {len(MUNICIPIO_MAPPING)} → {len(MUNICIPIO_MAPPING_REVERSE)}"
     )
 
-
 def get_mapped_municipio(municipio_name, direction="shapefile_to_data"):
     """
     Obtiene el nombre mapeado de un municipio en ambas direcciones.
@@ -109,7 +106,6 @@ def get_mapped_municipio(municipio_name, direction="shapefile_to_data"):
         return MUNICIPIO_MAPPING_REVERSE.get(municipio_clean, municipio_clean)
     else:
         return municipio_clean
-
 
 def find_municipio_name_in_shapefile(
     municipio_from_data, municipios_gdf, municipio_col
@@ -3089,12 +3085,12 @@ def show_geographic_data_error():
     """Muestra error cuando no se pueden cargar datos geográficos."""
     st.error("❌ No se pudieron cargar los datos geográficos")
 
-
 def apply_maps_css_optimized(colors):
-    """CSS optimizado para layout 50-25-25 y tarjetas mejoradas."""
+    """CSS optimizado SIN duplicar estilos críticos que causan scroll infinito."""
     st.markdown(
         f"""
         <style>
+        /* =============== INFO Y CONTEXTO =============== */
         .filter-info-compact {{
             background: linear-gradient(135deg, {colors['primary']}, {colors['accent']});
             color: white;
@@ -3107,30 +3103,7 @@ def apply_maps_css_optimized(colors):
             box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }}
         
-        /* =============== CORRECCIÓN MAPA - SIN :has() =============== */
-        iframe[title="st_folium.st_folium"] {{
-            width: 100% !important;
-            height: 500px !important;
-            max-height: 500px !important;
-            min-height: 400px !important;
-            border-radius: 12px !important;
-            border: 2px solid #e2e8f0 !important;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
-            overflow: hidden !important;
-        }}
-        
-        /* Contenedor del mapa - CORREGIDO SIN :has() */
-        .stColumns > div:first-child {{
-            max-height: 520px !important;
-            overflow: hidden !important;
-        }}
-        
-        /* Alternativa para contenedores de mapa */
-        [data-testid="stVerticalBlock"] {{
-            max-height: 520px !important;
-            overflow: hidden !important;
-        }}
-        
+        /* =============== TARJETAS ESTÉTICAS =============== */
         .tarjeta-optimizada {{
             background: linear-gradient(135deg, white 0%, #f8fafc 50%, #f1f5f9 100%);
             border-radius: 16px;
@@ -3159,11 +3132,13 @@ def apply_maps_css_optimized(colors):
             box-shadow: 0 12px 48px rgba(0,0,0,0.18);
         }}
         
+        /* TIPOS DE TARJETAS */
         .cobertura-card {{ border-left: 5px solid {colors['success']}; }}
         .casos-card {{ border-left: 5px solid {colors['danger']}; }}
         .epizootias-card {{ border-left: 5px solid {colors['warning']}; }}
         .afectacion-card {{ border-left: 5px solid {colors['primary']}; }}
         
+        /* =============== CONTENIDO DE TARJETAS =============== */
         .tarjeta-header {{
             background: linear-gradient(135deg, rgba(255,255,255,0.95), rgba(248,250,252,0.95));
             padding: 16px;
@@ -3276,6 +3251,7 @@ def apply_maps_css_optimized(colors):
             color: #475569;
         }}
         
+        /* =============== BARRA DE COBERTURA =============== */
         .cobertura-barra {{
             background: #e5e7eb;
             height: 8px;
@@ -3293,6 +3269,7 @@ def apply_maps_css_optimized(colors):
             box-shadow: 0 1px 3px rgba(0,0,0,0.2);
         }}
         
+        /* =============== AFECTACIÓN =============== */
         .afectacion-items {{
             display: flex;
             flex-direction: column;
@@ -3327,37 +3304,8 @@ def apply_maps_css_optimized(colors):
             flex: 1;
         }}
         
-        /* =============== RESPONSIVE =============== */
-        @media (max-width: 1200px) {{
-            iframe[title="st_folium.st_folium"] {{
-                height: 450px !important;
-                max-height: 450px !important;
-            }}
-            
-            .stColumns > div:first-child {{
-                max-height: 470px !important;
-            }}
-            
-            .tarjeta-valor {{
-                font-size: 1.6rem;
-            }}
-            
-            .metrica-valor {{
-                font-size: 1.1rem;
-            }}
-        }}
-        
+        /* =============== RESPONSIVE MOBILE =============== */
         @media (max-width: 768px) {{
-            iframe[title="st_folium.st_folium"] {{
-                height: 350px !important;
-                max-height: 350px !important;
-                min-height: 300px !important;
-            }}
-            
-            .stColumns > div:first-child {{
-                max-height: 370px !important;
-            }}
-            
             .tarjeta-header {{
                 padding: 12px;
             }}
@@ -3378,33 +3326,6 @@ def apply_maps_css_optimized(colors):
             .metrica-valor {{
                 font-size: 1rem;
             }}
-            
-            /* Corrección para móviles - evitar espacios */
-            .stColumns {{
-                gap: 0.5rem !important;
-            }}
-            
-            .stColumns > div {{
-                margin-bottom: 1rem !important;
-            }}
-        }}
-        
-        /* =============== CORRECCIÓN SCROLL Y ALTURA =============== */
-        .main .block-container {{
-            max-height: calc(100vh - 120px) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-        }}
-        
-        /* Evitar scroll infinito en contenedores */
-        .stVerticalBlock {{
-            max-height: none !important;
-        }}
-        
-        /* Limitar altura de dataframes */
-        .stDataFrame > div {{
-            max-height: 400px !important;
-            overflow-y: auto !important;
         }}
         </style>
         """,
