@@ -8,6 +8,7 @@ from .data_processor import (
     calculate_basic_metrics,
     verify_filtered_data_usage,
     debug_data_flow,
+    handle_empty_area_filter_simple
 )
 
 # ===== RESPONSIVE UTILS =====

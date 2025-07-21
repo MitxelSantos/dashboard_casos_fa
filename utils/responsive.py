@@ -62,10 +62,39 @@ def get_responsive_css():
         --font-title: clamp(1.8rem, 6vw, 2.5rem);
     }
     
-    /* =============== LAYOUT BASE =============== */
-    .block-container {
-        padding: var(--spacing-md) var(--spacing-sm) !important;
+    /* =============== CORRECCIÓN SCROLL INFINITO FOLIUM =============== */
+    .main .block-container {
+        max-height: calc(100vh - 120px) !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        padding: 1rem !important;
         max-width: 100% !important;
+    }
+
+    /* Contenedores de mapas - ALTURA FIJA */
+    iframe[title="st_folium.st_folium"] {
+        width: 100% !important;
+        height: 500px !important;
+        max-height: 500px !important;
+        min-height: 400px !important;
+        border-radius: 12px !important;
+        border: 2px solid #e2e8f0 !important;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
+        overflow: hidden !important;
+    }
+
+    /* Contenedor padre del mapa */
+    [data-testid="stVerticalBlock"] > div:has(iframe[title="st_folium.st_folium"]) {
+        max-height: 520px !important;
+        overflow: hidden !important;
+    }
+
+    /* Corrección para columnas desbalanceadas */
+    .stColumns > div {
+        display: flex !important;
+        flex-direction: column !important;
+        height: auto !important;
+        max-height: none !important;
     }
     
     /* =============== MAPAS RESPONSIVE =============== */
@@ -97,11 +126,31 @@ def get_responsive_css():
             max-width: min(350px, calc(100vw - 30px)) !important;
             min-width: 280px !important;
             height: 350px !important;
+            max-height: 350px !important;
             margin: 0 auto !important;
             display: block !important;
             border-radius: 12px !important;
             border: 2px solid #e1e5e9 !important;
             box-shadow: 0 4px 15px rgba(0,0,0,0.1) !important;
+        }
+        
+        iframe[title="st_folium.st_folium"] {
+            height: 350px !important;
+            max-height: 350px !important;
+            min-height: 300px !important;
+        }
+        
+        [data-testid="stVerticalBlock"] > div:has(iframe[title="st_folium.st_folium"]) {
+            max-height: 370px !important;
+        }
+        
+        /* Evitar espacios en blanco entre mapa y tarjetas */
+        .stColumns {
+            gap: 0.5rem !important;
+        }
+        
+        .stColumns > div {
+            margin-bottom: 1rem !important;
         }
         
         .desktop-maps-container { display: none !important; }
@@ -143,7 +192,14 @@ def get_responsive_css():
             width: 100% !important;
             max-width: 500px !important;
             height: 450px !important;
+            max-height: 450px !important;
             border-radius: 12px !important;
+        }
+        
+        iframe[title="st_folium.st_folium"] {
+            height: 450px !important;
+            max-height: 450px !important;
+            min-height: 350px !important;
         }
         
         .css-1r6slb0 {
@@ -158,7 +214,14 @@ def get_responsive_css():
             width: 100% !important;
             max-width: 700px !important;
             height: 500px !important;
+            max-height: 500px !important;
             border-radius: 12px !important;
+        }
+        
+        iframe[title="st_folium.st_folium"] {
+            height: 500px !important;
+            max-height: 500px !important;
+            min-height: 400px !important;
         }
         
         .mobile-maps-container { display: none !important; }
@@ -226,6 +289,23 @@ def get_responsive_css():
         overflow: hidden !important;
         text-overflow: ellipsis !important;
         max-width: 200px !important;
+    }
+    
+    /* DataFrames de Streamlit */
+    .stDataFrame {
+        max-height: 400px !important;
+        overflow-y: auto !important;
+    }
+    
+    .stDataFrame > div {
+        max-height: 400px !important;
+        overflow-y: auto !important;
+    }
+    
+    /* Plotly charts */
+    .js-plotly-plot {
+        max-height: 500px !important;
+        overflow: hidden !important;
     }
     
     /* =============== UTILIDADES =============== */

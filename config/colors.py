@@ -5,7 +5,7 @@ Colores institucionales del Tolima y paleta de colores del dashboard.
 # Colores principales institucionales del Tolima
 COLORS = {
     "primary": "#7D0F2B",  # Vinotinto institucional
-    "secondary": "#F2A900",  # Amarillo/Dorado institucional
+    "secondary": "#FFDD00",  # Amarillo/Dorado institucional
     "accent": "#5A4214",  # Marrón dorado oscuro
     "background": "#F5F5F5",  # Fondo gris claro
     "success": "#509E2F",  # Verde para estados positivos
@@ -14,6 +14,7 @@ COLORS = {
     "info": "#4682B4",  # Azul para información
     "light": "#F9F6E9",  # Crema claro
     "dark": "#2C2C2C",  # Gris oscuro para texto
+    "sin_datos": "#E5E7EB"
 }
 
 # Paletas de colores para gráficos médicos
