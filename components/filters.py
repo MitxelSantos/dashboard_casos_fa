@@ -232,24 +232,29 @@ def create_hierarchical_filters_with_multiselect_authoritative(data):
 
 
 def create_single_filters_simple(data):
-    """Filtros únicos SIMPLIFICADO."""
+    """Filtros únicos SIMPLIFICADO - CORREGIDO con manejo de reset."""
     # Usar hoja VEREDAS para opciones de municipios
     if "municipios_authoritativos" in data and data["municipios_authoritativos"]:
-        logger.info(
-            "✅ Usando municipios authoritativos de hoja VEREDAS para filtro único"
-        )
+        logger.info("✅ Usando municipios authoritativos de hoja VEREDAS para filtro único")
         municipio_options = ["Todos"] + data["municipios_authoritativos"]
     else:
-        logger.warning(
-            "⚠️ Hoja VEREDAS no disponible para filtro único, usando fallback"
-        )
+        logger.warning("⚠️ Hoja VEREDAS no disponible para filtro único, usando fallback")
         municipio_options = ["Todos"] + data.get("municipios_normalizados", [])
+
+    # CORREGIDO: Obtener valor por defecto con manejo de reset
+    municipio_default = get_default_filter_value("municipio_filter", "selectbox")
+    if municipio_default is None:
+        municipio_default = st.session_state.get("municipio_filter", "Todos")
+    
+    # Validar que el valor por defecto esté en las opciones
+    if municipio_default not in municipio_options:
+        municipio_default = "Todos"
 
     # Filtro de municipio
     municipio_selected = st.sidebar.selectbox(
         "📍 MUNICIPIO:",
         municipio_options,
-        index=get_initial_index(municipio_options, "municipio_filter"),
+        index=municipio_options.index(municipio_default),
         key="municipio_filter_widget",
         help="Seleccione un municipio (fuente: hoja VEREDAS)",
     )
@@ -267,11 +272,20 @@ def create_single_filters_simple(data):
         else:
             logger.warning(f"🔍 No se encontraron veredas para '{municipio_selected}'")
 
+    # CORREGIDO: Obtener valor por defecto para vereda
+    vereda_default = get_default_filter_value("vereda_filter", "selectbox")
+    if vereda_default is None:
+        vereda_default = st.session_state.get("vereda_filter", "Todas")
+    
+    # Validar que el valor por defecto esté en las opciones
+    if vereda_default not in vereda_options:
+        vereda_default = "Todas"
+
     vereda_selected = st.sidebar.selectbox(
         "🏘️ VEREDA:",
         vereda_options,
-        index=get_initial_index(vereda_options, "vereda_filter"),
-        key="vereda_filter_widget",
+        index=vereda_options.index(vereda_default),
+        key="vereda_filter_widget", 
         disabled=vereda_disabled,
         help="Las veredas se actualizan según el municipio (fuente: hoja VEREDAS)",
     )
@@ -296,11 +310,8 @@ def create_single_filters_simple(data):
         ),
     }
 
-
 def create_multiple_filters_simple(data):
-    """Filtros múltiples SIMPLIFICADO."""
-    st.sidebar.markdown('<div class="multiselect-section">', unsafe_allow_html=True)
-    st.sidebar.markdown("#### 🗂️ Selección Múltiple (Simplificado)")
+    """Filtros múltiples."""
 
     if "municipios_authoritativos" in data and data["municipios_authoritativos"]:
         logger.info("✅ Usando municipios authoritativos de hoja VEREDAS")
@@ -313,7 +324,7 @@ def create_multiple_filters_simple(data):
     regiones_tolima = extract_regiones_from_veredas_data_simple(data)
 
     # Mostrar grupos predefinidos de municipios
-    st.sidebar.markdown("**Grupos por Región (Simplificado):**")
+    st.sidebar.markdown("**Grupos por Región:**")
 
     # Crear botones para cada región
     cols = st.sidebar.columns(2)
@@ -338,7 +349,7 @@ def create_multiple_filters_simple(data):
                     if municipio not in current_selection:
                         current_selection.append(municipio)
 
-                # Actualizar session_state ANTES del widget
+                # Actualizar session_state del widget
                 st.session_state.municipios_multiselect = current_selection
                 st.rerun()
 
@@ -468,20 +479,29 @@ def get_veredas_for_municipios_simple(municipios_selected, data):
 
 # ===== SELECTOR DE MODO DE MAPA =====
 
-
 def create_map_mode_selector(colors):
-    """Selector de modo del mapa: epidemiológico vs cobertura."""
+    """Selector de modo del mapa: epidemiológico vs cobertura - CORREGIDO."""
     st.sidebar.markdown("### 🗺️ Modo de Visualización")
+
+    # Obtener valor por defecto con manejo de reset
+    modo_default = get_default_filter_value("modo_mapa", "radio")
+    if modo_default is None:
+        modo_default = st.session_state.get("modo_mapa", "Epidemiológico")
+    
+    modos_disponibles = ["Epidemiológico", "Cobertura de Vacunación"]
+    if modo_default not in modos_disponibles:
+        modo_default = "Epidemiológico"
 
     modo_mapa = st.sidebar.radio(
         "Colorear mapa según:",
-        ["Epidemiológico", "Cobertura de Vacunación"],
-        index=0,
-        key="modo_mapa",
+        modos_disponibles,
+        index=modos_disponibles.index(modo_default),
+        key="modo_mapa_widget",
         help="Epidemiológico: casos y epizootias. Cobertura: porcentaje de vacunación.",
     )
+    st.session_state["modo_mapa"] = modo_mapa
 
-    # Información del modo seleccionado
+    # Información del modo seleccionado (resto del código igual...)
     if modo_mapa == "Epidemiológico":
         st.sidebar.markdown(
             f"""
@@ -509,9 +529,7 @@ def create_map_mode_selector(colors):
 
     return modo_mapa
 
-
-# ===== APLICACIÓN DE FILTROS SIMPLIFICADA =====
-
+# ===== APLICACIÓN DE FILTROS =====
 
 def apply_all_filters_multiple(
     data, filters_location, filters_temporal, filters_advanced
@@ -769,24 +787,52 @@ def create_temporal_filters_optimized(data):
         "fecha_max_datos": fecha_max_datos,
     }
 
-
 def create_advanced_filters_optimized(data):
-    """Filtros avanzados OPTIMIZADOS."""
+    """Filtros avanzados OPTIMIZADOS - CORREGIDO con manejo de reset."""
     with st.sidebar.expander("🔧 Filtros Avanzados", expanded=False):
+        
+        # CORRECCIÓN: Condición Final
         condicion_filter = "Todas"
         if not data["casos"].empty and "condicion_final" in data["casos"].columns:
-            condiciones = ["Todas"] + list(
-                data["casos"]["condicion_final"].dropna().unique()
-            )
+            condiciones = ["Todas"] + list(data["casos"]["condicion_final"].dropna().unique())
+            
+            # Obtener valor por defecto con manejo de reset
+            condicion_default = get_default_filter_value("condicion_filter", "selectbox")
+            if condicion_default is None:
+                condicion_default = st.session_state.get("condicion_filter", "Todas")
+            
+            if condicion_default not in condiciones:
+                condicion_default = "Todas"
+                
             condicion_filter = st.selectbox(
-                "⚰️ Condición Final:", condiciones, key="condicion_filter"
+                "⚰️ Condición Final:", 
+                condiciones, 
+                index=condiciones.index(condicion_default),
+                key="condicion_filter_widget"
             )
+            st.session_state["condicion_filter"] = condicion_filter
 
+        # CORRECCIÓN: Sexo
         sexo_filter = "Todos"
         if not data["casos"].empty and "sexo" in data["casos"].columns:
             sexos = ["Todos"] + list(data["casos"]["sexo"].dropna().unique())
-            sexo_filter = st.selectbox("👤 Sexo:", sexos, key="sexo_filter")
+            
+            sexo_default = get_default_filter_value("sexo_filter", "selectbox")
+            if sexo_default is None:
+                sexo_default = st.session_state.get("sexo_filter", "Todos")
+            
+            if sexo_default not in sexos:
+                sexo_default = "Todos"
+                
+            sexo_filter = st.selectbox(
+                "👤 Sexo:", 
+                sexos, 
+                index=sexos.index(sexo_default),
+                key="sexo_filter_widget"
+            )
+            st.session_state["sexo_filter"] = sexo_filter
 
+        # CORRECCIÓN: Edad (slider no tiene el mismo problema, pero por consistencia)
         edad_rango = None
         edad_es_filtro_real = False
         if not data["casos"].empty and "edad" in data["casos"].columns:
@@ -802,13 +848,21 @@ def create_advanced_filters_optimized(data):
             )
 
             if edad_min < edad_max:
+                # Para sliders, verificamos si hay reset
+                edad_default = get_default_filter_value("edad_filter", "slider")
+                if edad_default is None:
+                    edad_default = st.session_state.get("edad_filter", (edad_min, edad_max))
+                else:
+                    edad_default = (edad_min, edad_max)  # Valor por defecto en reset
+                
                 edad_rango = st.slider(
                     "🎂 Rango de Edad:",
                     min_value=edad_min,
                     max_value=edad_max,
-                    value=(edad_min, edad_max),
-                    key="edad_filter",
+                    value=edad_default,
+                    key="edad_filter_widget",
                 )
+                st.session_state["edad_filter"] = edad_rango
                 edad_es_filtro_real = edad_rango != (edad_min, edad_max)
 
     return {
@@ -817,7 +871,6 @@ def create_advanced_filters_optimized(data):
         "edad_rango": edad_rango,
         "edad_es_filtro_real": edad_es_filtro_real,
     }
-
 
 def create_filter_summary_multiple_optimized(
     filters_location, filters_temporal, filters_advanced
@@ -926,12 +979,11 @@ def show_active_filters(active_filters):
         unsafe_allow_html=True,
     )
 
-
 def reset_all_filters():
-    """Resetea todos los filtros."""
+    """Resetea todos los filtros - CORREGIDO para evitar error de Streamlit."""
     filter_keys = [
         "municipio_filter",
-        "vereda_filter",
+        "vereda_filter", 
         "fecha_filter",
         "condicion_filter",
         "sexo_filter",
@@ -939,28 +991,74 @@ def reset_all_filters():
         "municipios_multiselect",
         "veredas_multiselect",
         "filtro_modo",
+        # Agregar keys de widgets específicos
+        "municipio_filter_widget",
+        "vereda_filter_widget",
+        "municipios_multiselect_widget", 
+        "veredas_multiselect_widget",
+        "condicion_filter_widget",
+        "sexo_filter_widget",
+        "edad_filter_widget",
+        "fecha_filter_widget",
+        "filtro_modo_widget",
     ]
 
     reset_count = 0
+    
+    # MÉTODO CORREGIDO: Eliminar keys en lugar de establecer valores
     for key in filter_keys:
         if key in st.session_state:
-            if (
-                "municipio" in key
-                or "condicion" in key
-                or "sexo" in key
-                or "filtro_modo" in key
-            ):
-                if key == "filtro_modo":
-                    st.session_state[key] = "Único"
-                else:
-                    st.session_state[key] = "Todos"
-            elif "vereda" in key:
-                st.session_state[key] = "Todas"
-            elif "multiselect" in key:
-                st.session_state[key] = []
-            else:
+            try:
                 del st.session_state[key]
-            reset_count += 1
+                reset_count += 1
+                logger.info(f"🗑️ Eliminado: {key}")
+            except Exception as e:
+                logger.warning(f"⚠️ No se pudo eliminar {key}: {str(e)}")
 
+    # Establecer flag de reset para que los widgets se reconstruyan con valores por defecto
+    st.session_state["filters_reset_flag"] = True
+    
     if reset_count > 0:
         st.sidebar.success(f"✅ {reset_count} filtros restablecidos")
+        logger.info(f"✅ Reset completado: {reset_count} filtros eliminados")
+        
+        # Forzar recarga de la página
+        st.rerun()
+    else:
+        st.sidebar.info("ℹ️ No había filtros para restablecer")
+        
+def get_default_filter_value(filter_key, filter_type="selectbox"):
+    """
+    Obtiene valor por defecto para un filtro específico.
+    
+    Args:
+        filter_key: Key del filtro
+        filter_type: Tipo de widget (selectbox, multiselect, etc.)
+    
+    Returns:
+        Valor por defecto apropiado
+    """
+    # Verificar si hay flag de reset activo
+    if st.session_state.get("filters_reset_flag", False):
+        # Limpiar flag después del primer uso
+        if "filters_reset_flag" in st.session_state:
+            del st.session_state["filters_reset_flag"]
+        
+        # Retornar valores por defecto según el tipo de filtro
+        if filter_type == "multiselect":
+            return []
+        elif "municipio" in filter_key:
+            return "Todos"
+        elif "vereda" in filter_key:
+            return "Todas"
+        elif "condicion" in filter_key:
+            return "Todas"
+        elif "sexo" in filter_key:
+            return "Todos"
+        elif "filtro_modo" in filter_key:
+            return "Único"
+        else:
+            return None
+    
+    # Si no hay flag de reset, retornar el valor actual del session_state
+    return st.session_state.get(filter_key)
