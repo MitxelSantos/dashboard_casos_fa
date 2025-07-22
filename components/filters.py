@@ -935,7 +935,6 @@ def create_filter_summary_multiple_optimized(
 
 # ===== FUNCIONES DE APOYO =====
 
-
 def get_initial_index(options, session_key):
     """Obtiene índice inicial para selectbox."""
     if session_key in st.session_state:
@@ -980,7 +979,7 @@ def show_active_filters(active_filters):
     )
 
 def reset_all_filters():
-    """Resetea todos los filtros - CORREGIDO para evitar error de Streamlit."""
+    """Resetea todos los filtros."""
     filter_keys = [
         "municipio_filter",
         "vereda_filter", 
@@ -1005,7 +1004,6 @@ def reset_all_filters():
 
     reset_count = 0
     
-    # MÉTODO CORREGIDO: Eliminar keys en lugar de establecer valores
     for key in filter_keys:
         if key in st.session_state:
             try:
