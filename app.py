@@ -328,8 +328,8 @@ def process_loaded_data_integrated(casos_df, epizootias_df, veredas_df=None):
             excel_date_to_datetime
         )
 
-    if "fecha_recoleccion" in epizootias_df.columns:
-        epizootias_df["fecha_recoleccion"] = epizootias_df["fecha_recoleccion"].apply(
+    if "fecha_notificacion" in epizootias_df.columns:
+        epizootias_df["fecha_notificacion"] = epizootias_df["fecha_notificacion"].apply(
             excel_date_to_datetime
         )
 

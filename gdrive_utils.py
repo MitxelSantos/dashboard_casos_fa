@@ -1,6 +1,5 @@
 """
-Utilidades OPTIMIZADAS para Google Drive - Versión Streamlit Cloud
-CORREGIDO: Mensaje de carga se limpia correctamente
+Utilidades para Google Drive - Versión Streamlit Cloud
 """
 
 import os
@@ -232,7 +231,7 @@ def get_gdrive_manager():
 
 
 def check_google_drive_availability():
-    """Verifica disponibilidad de Google Drive - LÓGICA SIMPLIFICADA."""
+    """Verifica disponibilidad de Google Drive."""
     try:
         if not GOOGLE_AVAILABLE:
             logger.warning("⚠️ Google libraries no disponibles")
@@ -263,7 +262,7 @@ def check_google_drive_availability():
         return False
 
 def load_data_from_google_drive():
-    """Carga datos optimizada con UI CORREGIDA + HOJA VEREDAS."""
+    """Carga datos optimizada."""
     if not check_google_drive_availability():
         return None
 
@@ -359,7 +358,7 @@ def load_data_from_google_drive():
 
 def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
     """
-    NUEVA FUNCIÓN: Procesa datos incluyendo hoja VEREDAS desde Google Drive
+    Procesa datos hoja VEREDAS desde Google Drive
     """
     try:
         # Importar función existente para no duplicar
@@ -398,9 +397,9 @@ def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
                 excel_date_to_datetime
             )
 
-        if "fecha_recoleccion" in epizootias_df.columns:
-            epizootias_df["fecha_recoleccion"] = epizootias_df[
-                "fecha_recoleccion"
+        if "fecha_notificacion" in epizootias_df.columns:
+            epizootias_df["fecha_notificacion"] = epizootias_df[
+                "fecha_notificacion"
             ].apply(excel_date_to_datetime)
 
         # Filtrar epizootias (solo positivas + en estudio)
@@ -442,7 +441,7 @@ def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
         return None
 
 def process_data_optimized(casos_df, epizootias_df):
-    """Procesamiento de datos optimizado CON HOJA VEREDAS."""
+    """Procesamiento de datos optimizado."""
     try:
         # Importar función existente para no duplicar
         from utils.data_processor import excel_date_to_datetime
@@ -471,7 +470,7 @@ def process_data_optimized(casos_df, epizootias_df):
         epizootias_map = {
             "MUNICIPIO": "municipio",
             "VEREDA": "vereda",
-            "FECHA RECOLECCIÓN ": "fecha_recoleccion",
+            "FECHA_NOTIFICACION": "fecha_notificacion",
             "PROVENIENTE ": "proveniente",
             "DESCRIPCIÓN": "descripcion",
         }
@@ -492,9 +491,9 @@ def process_data_optimized(casos_df, epizootias_df):
                 excel_date_to_datetime
             )
 
-        if "fecha_recoleccion" in epizootias_df.columns:
-            epizootias_df["fecha_recoleccion"] = epizootias_df[
-                "fecha_recoleccion"
+        if "fecha_notificacion" in epizootias_df.columns:
+            epizootias_df["fecha_notificacion"] = epizootias_df[
+                "fecha_notificacion"
             ].apply(excel_date_to_datetime)
 
         # Filtrar epizootias (solo positivas + en estudio)

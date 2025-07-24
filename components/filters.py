@@ -610,10 +610,10 @@ def apply_all_filters_multiple(
                 & (casos_filtrados["fecha_inicio_sintomas"] <= fecha_fin)
             ]
 
-        if "fecha_recoleccion" in epizootias_filtradas.columns:
+        if "fecha_notificacion" in epizootias_filtradas.columns:
             epizootias_filtradas = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= fecha_inicio)
-                & (epizootias_filtradas["fecha_recoleccion"] <= fecha_fin)
+                (epizootias_filtradas["fecha_notificacion"] >= fecha_inicio)
+                & (epizootias_filtradas["fecha_notificacion"] <= fecha_fin)
             ]
 
     # Filtros avanzados (sin cambios)
@@ -951,9 +951,9 @@ def get_available_dates(data):
         fechas.extend(data["casos"]["fecha_inicio_sintomas"].dropna().tolist())
     if (
         not data["epizootias"].empty
-        and "fecha_recoleccion" in data["epizootias"].columns
+        and "fecha_notificacion" in data["epizootias"].columns
     ):
-        fechas.extend(data["epizootias"]["fecha_recoleccion"].dropna().tolist())
+        fechas.extend(data["epizootias"]["fecha_notificacion"].dropna().tolist())
     return fechas
 
 

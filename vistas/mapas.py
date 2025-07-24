@@ -806,11 +806,11 @@ def show_vereda_detailed_info(
                 st.markdown("##### 🐒 Epizootias en esta Vereda")
                 epi_display = (
                     epi_vereda[
-                        ["fecha_recoleccion", "descripcion", "proveniente"]
+                        ["fecha_notificacion", "descripcion", "proveniente"]
                     ].copy()
                     if all(
                         col in epi_vereda.columns
-                        for col in ["fecha_recoleccion", "descripcion", "proveniente"]
+                        for col in ["fecha_notificacion", "descripcion", "proveniente"]
                     )
                     else epi_vereda
                 )

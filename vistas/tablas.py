@@ -527,8 +527,8 @@ def get_ultima_actividad_vereda(casos_vereda, epi_vereda):
     if not casos_vereda.empty and "fecha_inicio_sintomas" in casos_vereda.columns:
         fechas.extend(casos_vereda["fecha_inicio_sintomas"].dropna().tolist())
     
-    if not epi_vereda.empty and "fecha_recoleccion" in epi_vereda.columns:
-        fechas.extend(epi_vereda["fecha_recoleccion"].dropna().tolist())
+    if not epi_vereda.empty and "fecha_notificacion" in epi_vereda.columns:
+        fechas.extend(epi_vereda["fecha_notificacion"].dropna().tolist())
     
     if fechas:
         ultima_fecha = max(fechas)
@@ -605,11 +605,11 @@ def create_vereda_temporal_analysis(casos, epizootias, vereda, municipio, colors
                 })
     
     # Agregar epizootias
-    if not epi_vereda.empty and "fecha_recoleccion" in epi_vereda.columns:
+    if not epi_vereda.empty and "fecha_notificacion" in epi_vereda.columns:
         for idx, epi in epi_vereda.iterrows():
-            if pd.notna(epi["fecha_recoleccion"]):
+            if pd.notna(epi["fecha_notificacion"]):
                 eventos_timeline.append({
-                    "fecha": epi["fecha_recoleccion"],
+                    "fecha": epi["fecha_notificacion"],
                     "tipo": "Epizootia",
                     "descripcion": f"Epizootia - {epi.get('descripcion', 'N/A')}",
                     "estado": epi.get("descripcion", "N/A")
@@ -1057,8 +1057,8 @@ def prepare_data_for_display(data, data_type):
         }
     else:  # epizootias
         # Formatear fechas
-        if "fecha_recoleccion" in data_display.columns:
-            data_display["fecha_recoleccion"] = data_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
+        if "fecha_notificacion" in data_display.columns:
+            data_display["fecha_notificacion"] = data_display["fecha_notificacion"].dt.strftime('%d/%m/%Y')
         
         # Simplificar proveniente
         if "proveniente" in data_display.columns:
@@ -1069,7 +1069,7 @@ def prepare_data_for_display(data, data_type):
             )
         
         rename_map = {
-            'municipio': 'Municipio', 'vereda': 'Vereda', 'fecha_recoleccion': 'Fecha Recolección',
+            'municipio': 'Municipio', 'vereda': 'Vereda', 'fecha_notificacion': 'Fecha Notificación',
             'descripcion': 'Resultado', 'proveniente': 'Fuente'
         }
     

@@ -760,7 +760,7 @@ def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
             else pd.DataFrame()
         )
         ultima_epizootia = get_latest_case_info(
-            epizootias_positivas, "fecha_recoleccion", ["vereda", "municipio"]
+            epizootias_positivas, "fecha_notificacion", ["vereda", "municipio"]
         )
         metrics["ultima_epizootia_positiva"] = ultima_epizootia
     else:
@@ -893,8 +893,8 @@ def process_epizootias_dataframe(epizootias_df):
     df_processed = epizootias_df.copy()
 
     # Procesar fechas
-    if "fecha_recoleccion" in df_processed.columns:
-        df_processed["fecha_recoleccion"] = df_processed["fecha_recoleccion"].apply(
+    if "fecha_notificacion" in df_processed.columns:
+        df_processed["fecha_notificacion"] = df_processed["fecha_notificacion"].apply(
             excel_date_to_datetime
         )
 
@@ -909,8 +909,8 @@ def process_epizootias_dataframe(epizootias_df):
         df_processed["proveniente"] = df_processed["proveniente"].str.strip()
 
     # Agregar año de recolección
-    if "fecha_recoleccion" in df_processed.columns:
-        df_processed["año_recoleccion"] = df_processed["fecha_recoleccion"].dt.year
+    if "fecha_notificacion" in df_processed.columns:
+        df_processed["año_notificacion"] = df_processed["fecha_notificacion"].dt.year
 
     # Categorizar resultados
     if "descripcion" in df_processed.columns:
