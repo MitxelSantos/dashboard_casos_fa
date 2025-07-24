@@ -1,5 +1,5 @@
 """
-Vista de análisis epidemiológico con drill-down mejorado.
+Vista de análisis epidemiológico.
 """
 
 import streamlit as st
@@ -14,10 +14,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 def show(data_filtered, filters, colors):
-    """Vista principal de análisis epidemiológico CON DRILL-DOWN."""
-    logger.info("📊 INICIANDO VISTA TABLAS CON DRILL-DOWN")
+    """Vista principal de análisis epidemiológico."""
+    logger.info("📊 INICIANDO VISTA TABLAS")
     
-    # Aplicar CSS estético UNA SOLA VEZ
+    # Aplicar CSS
     apply_tables_css_super_aesthetic(colors)
     
     # Verificar datos filtrados
@@ -44,7 +44,7 @@ def show(data_filtered, filters, colors):
     show_visual_analysis_optimized(casos_filtrados, epizootias_filtradas, colors)
     show_export_section_optimized(casos_filtrados, epizootias_filtradas, filters, colors)
 
-# ===== NUEVA SECCIÓN: DRILL-DOWN POR UBICACIÓN =====
+# ===== DRILL-DOWN POR UBICACIÓN =====
 
 def show_location_summary_with_drilldown(casos, epizootias, filters, colors, data_original):
     """Resumen por ubicación con drill-down inteligente."""
@@ -276,7 +276,7 @@ def show_multiple_selection_summary(casos, epizootias, filters, colors):
 # ===== FUNCIONES DE CREACIÓN DE RESÚMENES =====
 
 def create_municipal_summary_optimized(casos, epizootias, data_original):
-    """Crea resumen municipal con TODOS los municipios del Tolima."""
+    """Crea resumen municipal."""
     summary_data = []
     
     # Lista completa de municipios del Tolima (desde configuración)
@@ -347,7 +347,7 @@ def create_vereda_summary_optimized(casos, epizootias, municipio_actual, data_or
     
     municipio_norm = normalize_name(municipio_actual)
     
-    # Obtener TODAS las veredas del municipio (incluso sin datos)
+    # Obtener las veredas del municipio
     todas_las_veredas = get_all_veredas_for_municipio(municipio_actual, data_original)
     
     for vereda in todas_las_veredas:
@@ -488,7 +488,7 @@ def get_all_tolima_municipios(data_original):
     return todos_municipios
 
 def get_all_veredas_for_municipio(municipio, data_original):
-    """Obtiene TODAS las veredas de un municipio (incluso sin datos)."""
+    """Obtiene las veredas de un municipio (incluso sin datos)."""
     def normalize_name(name):
         return str(name).upper().strip() if pd.notna(name) else ""
     
@@ -510,12 +510,6 @@ def get_all_veredas_for_municipio(municipio, data_original):
                 data_original["epizootias"]["municipio"].apply(normalize_name) == municipio_norm
             ]
             veredas.update(epi_municipio["vereda"].dropna().unique())
-    
-    # TODO: Aquí deberías cargar desde BD_positivos.xlsx hoja "VEREDAS" cuando esté disponible
-    # if "veredas_completas" in data_original:
-    #     veredas_completas = data_original["veredas_completas"]
-    #     veredas_municipio = veredas_completas[veredas_completas["municipi_1"] == municipio]
-    #     veredas.update(veredas_municipio["vereda_nor"].dropna().unique())
     
     veredas_lista = sorted([v for v in veredas if v and str(v).strip()])
     
@@ -821,8 +815,6 @@ def create_summary_export_button(display_df, context, filters):
         use_container_width=True
     )
 
-# ===== FUNCIONES ORIGINALES (mantener las existentes) =====
-
 def show_executive_summary_optimized(casos, epizootias, filters, colors):
     """Resumen ejecutivo con métricas principales."""
     from utils.data_processor import calculate_basic_metrics
@@ -854,11 +846,11 @@ def show_executive_summary_optimized(casos, epizootias, filters, colors):
         unsafe_allow_html=True,
     )
 
-    # Calcular métricas UNA SOLA VEZ
+    # Calcular métricas
     metrics = calculate_basic_metrics(casos, epizootias)
     
     # Mostrar métricas en grid
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         st.metric("🦠 Casos Humanos", metrics["total_casos"])
@@ -867,9 +859,6 @@ def show_executive_summary_optimized(casos, epizootias, filters, colors):
                  delta=f"{metrics['letalidad']:.1f}% letalidad")
     with col3:
         st.metric("🐒 Epizootias", metrics["total_epizootias"])
-    with col4:
-        st.metric("🔴 Positivas", metrics["epizootias_positivas"], 
-                 delta=f"{metrics['positividad']:.1f}% positividad")
 
     # Información de últimos eventos
     create_last_events_info_optimized(metrics, active_filters, colors)

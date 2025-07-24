@@ -1,8 +1,5 @@
 """
-app.py - INTEGRADO CON NUEVAS FUNCIONALIDADES CORREGIDAS
-- Mensaje de carga se limpia correctamente
-- Bucles infinitos evitados en áreas grises
-- Filtros múltiples con regiones desde VEREDAS
+app.py
 """
 
 import os
@@ -15,6 +12,14 @@ import numpy as np
 from pathlib import Path
 
 from gdrive_utils import check_google_drive_availability, load_data_from_google_drive
+
+from utils.data_processor import (
+    excel_date_to_datetime,
+    calculate_basic_metrics,
+    process_complete_data_structure_authoritative,
+    process_veredas_dataframe_simple,
+    handle_empty_area_filter_simple,
+)
 
 # Configurar logging
 logging.basicConfig(
@@ -198,7 +203,6 @@ def load_data():
         st.error(f"❌ Error crítico: {str(e)}")
         return create_empty_data_structure()
 
-
 def load_local_data():
     """Carga datos desde archivos locales CON UI CORREGIDA."""
     # UI de progreso CORREGIDA
@@ -210,39 +214,49 @@ def load_local_data():
             status_text = st.empty()
             status_text.text("🔄 Cargando desde archivos locales...")
 
-            # Rutas de archivos
+            # CAMBIO: Solo un archivo ahora
             casos_filename = "BD_positivos.xlsx"
-            epizootias_filename = "Información_Datos_FA.xlsx"
 
             data_casos_path = DATA_DIR / casos_filename
-            data_epizootias_path = DATA_DIR / epizootias_filename
             root_casos_path = ROOT_DIR / casos_filename
-            root_epizootias_path = ROOT_DIR / epizootias_filename
 
             progress_bar.progress(20)
 
             # Intentar cargar
             casos_df = None
             epizootias_df = None
+            veredas_df = None
 
             # Desde data/
-            if data_casos_path.exists() and data_epizootias_path.exists():
+            if data_casos_path.exists():
                 casos_df = pd.read_excel(
                     data_casos_path, sheet_name="ACUMU", engine="openpyxl"
                 )
                 epizootias_df = pd.read_excel(
-                    data_epizootias_path, sheet_name="Base de Datos", engine="openpyxl"
+                    data_casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl"
                 )
+                try:
+                    veredas_df = pd.read_excel(
+                        data_casos_path, sheet_name="VEREDAS", engine="openpyxl"
+                    )
+                except:
+                    veredas_df = None
                 logger.info("✅ Datos cargados desde carpeta data/")
 
             # Desde raíz
-            elif root_casos_path.exists() and root_epizootias_path.exists():
+            elif root_casos_path.exists():
                 casos_df = pd.read_excel(
                     root_casos_path, sheet_name="ACUMU", engine="openpyxl"
                 )
                 epizootias_df = pd.read_excel(
-                    root_epizootias_path, sheet_name="Base de Datos", engine="openpyxl"
+                    root_casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl"
                 )
+                try:
+                    veredas_df = pd.read_excel(
+                        root_casos_path, sheet_name="VEREDAS", engine="openpyxl"
+                    )
+                except:
+                    veredas_df = None
                 logger.info("✅ Datos cargados desde directorio raíz")
 
             if casos_df is None or epizootias_df is None:
@@ -258,7 +272,7 @@ def load_local_data():
             status_text.text("🔧 Procesando datos con estructura completa...")
 
             # Procesar datos CON ESTRUCTURA COMPLETA
-            processed_data = process_loaded_data_integrated(casos_df, epizootias_df)
+            processed_data = process_loaded_data_integrated(casos_df, epizootias_df, veredas_df)
 
             progress_bar.progress(100)
             status_text.text("✅ Completado!")
@@ -280,9 +294,8 @@ def load_local_data():
         logger.error(f"❌ Error cargando datos locales: {str(e)}")
         show_data_setup_instructions()
         return create_empty_data_structure()
-
-
-def process_loaded_data_integrated(casos_df, epizootias_df):
+    
+def process_loaded_data_integrated(casos_df, epizootias_df, veredas_df=None):
     """Procesa los datos cargados CON INTEGRACIÓN COMPLETA."""
     # Limpiar datos básicos
     for df in [casos_df, epizootias_df]:
@@ -295,33 +308,17 @@ def process_loaded_data_integrated(casos_df, epizootias_df):
     casos_df = casos_df.dropna(how="all")
     epizootias_df = epizootias_df.dropna(how="all")
 
-    # Mapear columnas
-    casos_columns_map = {
-        "edad_": "edad",
-        "sexo_": "sexo",
-        "vereda_": "vereda",
-        "nmun_proce": "municipio",
-        "cod_ase_": "eps",
-        "Condición Final": "condicion_final",
-        "Inicio de sintomas": "fecha_inicio_sintomas",
-    }
-
-    epizootias_columns_map = {
-        "MUNICIPIO": "municipio",
-        "VEREDA": "vereda",
-        "FECHA RECOLECCIÓN ": "fecha_recoleccion",
-        "PROVENIENTE ": "proveniente",
-        "DESCRIPCIÓN": "descripcion",
-    }
+    # CAMBIO: Usar configuración centralizada
+    from config.settings import CASOS_COLUMNS_MAP, EPIZOOTIAS_COLUMNS_MAP
 
     # Aplicar mapeos
     existing_casos_columns = {
-        k: v for k, v in casos_columns_map.items() if k in casos_df.columns
+        k: v for k, v in CASOS_COLUMNS_MAP.items() if k in casos_df.columns
     }
     casos_df = casos_df.rename(columns=existing_casos_columns)
 
     existing_epi_columns = {
-        k: v for k, v in epizootias_columns_map.items() if k in epizootias_df.columns
+        k: v for k, v in EPIZOOTIAS_COLUMNS_MAP.items() if k in epizootias_df.columns
     }
     epizootias_df = epizootias_df.rename(columns=existing_epi_columns)
 
@@ -351,9 +348,8 @@ def process_loaded_data_integrated(casos_df, epizootias_df):
 
     # USAR FUNCIÓN DE ESTRUCTURA COMPLETA
     return process_complete_data_structure_authoritative(
-        casos_df, epizootias_df, data_dir=DATA_DIR
+        casos_df, epizootias_df, data_dir=DATA_DIR, veredas_data=None if veredas_df is None else process_veredas_dataframe_simple(veredas_df)
     )
-
 
 def show_data_setup_instructions():
     """Muestra instrucciones de configuración ACTUALIZADAS."""

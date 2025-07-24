@@ -262,7 +262,6 @@ def check_google_drive_availability():
         logger.error(f"❌ Error verificación: {str(e)}")
         return False
 
-
 def load_data_from_google_drive():
     """Carga datos optimizada con UI CORREGIDA + HOJA VEREDAS."""
     if not check_google_drive_availability():
@@ -284,33 +283,24 @@ def load_data_from_google_drive():
                 raise Exception("Autenticación fallida")
 
             progress_bar.progress(20)
-            status_text.text("📥 Descargando casos...")
+            status_text.text("📥 Descargando archivo único...")
 
+            # CAMBIO: Solo descargar un archivo
             casos_path = manager.download_file(
                 drive_files["casos_excel"], "BD_positivos.xlsx"
             )
 
             if not casos_path:
-                raise Exception("Error descargando casos")
+                raise Exception("Error descargando archivo principal")
 
             progress_bar.progress(50)
-            status_text.text("📥 Descargando epizootias...")
-
-            epizootias_path = manager.download_file(
-                drive_files["epizootias_excel"], "Información_Datos_FA.xlsx"
-            )
-
-            if not epizootias_path:
-                raise Exception("Error descargando epizootias")
-
-            progress_bar.progress(70)
             status_text.text("🔧 Procesando datos...")
 
-            # ===== NUEVA SECCIÓN: LEER HOJA VEREDAS =====
-            # Cargar hoja ACUMU (casos)
+            # CAMBIO: Cargar todas las hojas del mismo archivo
             casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
+            epizootias_df = pd.read_excel(casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl")
 
-            # ✅ NUEVO: Cargar hoja VEREDAS del mismo archivo
+            # Cargar hoja VEREDAS
             veredas_df = None
             try:
                 veredas_df = pd.read_excel(
@@ -321,20 +311,6 @@ def load_data_from_google_drive():
                 )
             except Exception as e:
                 logger.warning(f"⚠️ No se pudo cargar hoja VEREDAS: {str(e)}")
-
-                # Verificar qué hojas están disponibles
-                try:
-                    excel_file = pd.ExcelFile(casos_path)
-                    logger.info(
-                        f"📋 Hojas disponibles en BD_positivos.xlsx: {excel_file.sheet_names}"
-                    )
-                except:
-                    pass
-
-            # Cargar epizootias
-            epizootias_df = pd.read_excel(
-                epizootias_path, sheet_name="Base de Datos", engine="openpyxl"
-            )
 
             progress_bar.progress(90)
             status_text.text("🔧 Procesando estructura completa...")
@@ -373,14 +349,13 @@ def load_data_from_google_drive():
                 """
             **Posibles soluciones:**
             1. Verifica `private_key` en secrets.toml
-            2. Asegúrate de que archivos sean accesibles en Google Drive
+            2. Asegúrate de que archivo sea accesible en Google Drive
             3. Revisa logs de Streamlit Cloud
-            4. Verifica que BD_positivos.xlsx tenga la hoja "VEREDAS"
+            4. Verifica que BD_positivos.xlsx tenga las hojas "ACUMU", "EPIZOOTIAS" y "VEREDAS"
             """
             )
 
         return None
-
 
 def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
     """
@@ -404,31 +379,16 @@ def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
         casos_df = casos_df.dropna(how="all")
         epizootias_df = epizootias_df.dropna(how="all")
 
-        # Mapear columnas críticas
-        casos_map = {
-            "edad_": "edad",
-            "sexo_": "sexo",
-            "vereda_": "vereda",
-            "nmun_proce": "municipio",
-            "Condición Final": "condicion_final",
-            "Inicio de sintomas": "fecha_inicio_sintomas",
-        }
-
-        epizootias_map = {
-            "MUNICIPIO": "municipio",
-            "VEREDA": "vereda",
-            "FECHA RECOLECCIÓN ": "fecha_recoleccion",
-            "PROVENIENTE ": "proveniente",
-            "DESCRIPCIÓN": "descripcion",
-        }
+        # CAMBIO: Usar configuración centralizada
+        from config.settings import CASOS_COLUMNS_MAP, EPIZOOTIAS_COLUMNS_MAP
 
         # Aplicar mapeos solo a columnas existentes
         casos_df = casos_df.rename(
-            columns={k: v for k, v in casos_map.items() if k in casos_df.columns}
+            columns={k: v for k, v in CASOS_COLUMNS_MAP.items() if k in casos_df.columns}
         )
         epizootias_df = epizootias_df.rename(
             columns={
-                k: v for k, v in epizootias_map.items() if k in epizootias_df.columns
+                k: v for k, v in EPIZOOTIAS_COLUMNS_MAP.items() if k in epizootias_df.columns
             }
         )
 
@@ -480,7 +440,6 @@ def process_data_with_veredas_sheet(casos_df, epizootias_df, veredas_df=None):
     except Exception as e:
         logger.error(f"❌ Error procesando datos con hoja VEREDAS: {str(e)}")
         return None
-
 
 def process_data_optimized(casos_df, epizootias_df):
     """Procesamiento de datos optimizado CON HOJA VEREDAS."""
