@@ -305,6 +305,7 @@ def create_municipal_summary_optimized(casos, epizootias, data_original):
         fallecidos = 0
         if not casos_municipio.empty and "condicion_final" in casos_municipio.columns:
             fallecidos = (casos_municipio["condicion_final"] == "Fallecido").sum()
+            vivos = (casos_municipio["condicion_final"] == "Vivo").sum()
         
         letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
         
@@ -674,7 +675,7 @@ def create_vereda_specific_metrics(casos, epizootias, vereda, municipio, colors)
         ]
     
     # Métricas en columnas
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric("🦠 Casos Total", len(casos_vereda))
@@ -689,6 +690,9 @@ def create_vereda_specific_metrics(casos, epizootias, vereda, municipio, colors)
     with col4:
         positivas = len(epi_vereda[epi_vereda["descripcion"] == "POSITIVO FA"]) if not epi_vereda.empty and "descripcion" in epi_vereda.columns else 0
         st.metric("🔴 Positivas", positivas)
+    with col5:
+        en_estudio = len(epi_vereda[epi_vereda["descripcion"] == "EN ESTUDIO"]) if not epi_vereda.empty and "descripcion" in epi_vereda.columns else 0
+        st.metric("🔵 En Estudio", en_estudio)
     
     # Información adicional
     if not casos_vereda.empty or not epi_vereda.empty:
@@ -850,7 +854,7 @@ def show_executive_summary_optimized(casos, epizootias, filters, colors):
     metrics = calculate_basic_metrics(casos, epizootias)
     
     # Mostrar métricas en grid
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4, col5, col6 = st.columns(5)
     
     with col1:
         st.metric("🦠 Casos Humanos", metrics["total_casos"])
@@ -859,6 +863,12 @@ def show_executive_summary_optimized(casos, epizootias, filters, colors):
                  delta=f"{metrics['letalidad']:.1f}% letalidad")
     with col3:
         st.metric("🐒 Epizootias", metrics["total_epizootias"])
+    with col4:
+        st.metric("🔴 Positivas", metrics["epizootias_positivas"], 
+                 delta=f"{metrics['positivas_porcentaje']:.1f}% de epizootias")
+    with col5:
+        st.metric("🔵 En Estudio", metrics["en_estudio"],
+                  delta=f"{metrics['en_estudio_porcentaje']:.1f}% de epizootias")
 
     # Información de últimos eventos
     create_last_events_info_optimized(metrics, active_filters, colors)
