@@ -229,7 +229,6 @@ def get_gdrive_manager():
         _gdrive_manager = GoogleDriveManager()
     return _gdrive_manager
 
-
 def check_google_drive_availability():
     """Verifica disponibilidad de Google Drive."""
     try:
@@ -245,15 +244,15 @@ def check_google_drive_availability():
             logger.warning("⚠️ drive_files no encontrado")
             return False
 
-        # Verificar archivos mínimos ÚNICAMENTE
+        # ✅ CORRECCIÓN: Solo verificar el archivo integrado
         drive_files = st.secrets.drive_files
-        required_files = ["casos_excel", "epizootias_excel"]
+        required_files = ["casos_excel"]  # ← Solo necesitamos el archivo integrado
 
         if not all(f in drive_files for f in required_files):
-            logger.warning("⚠️ Archivos requeridos faltantes en drive_files")
+            logger.warning(f"⚠️ Archivo requerido faltante: {required_files}")
             return False
 
-        # Test de autenticación SIN verificaciones adicionales
+        # Test de autenticación
         manager = get_gdrive_manager()
         return manager.authenticate()
 
@@ -262,14 +261,13 @@ def check_google_drive_availability():
         return False
 
 def load_data_from_google_drive():
-    """Carga datos optimizada."""
+    """Carga datos desde archivo integrado con validación robusta."""
     if not check_google_drive_availability():
         return None
 
     manager = get_gdrive_manager()
     drive_files = st.secrets.drive_files
 
-    # UI de progreso CORREGIDA
     progress_container = st.container()
 
     try:
@@ -282,9 +280,9 @@ def load_data_from_google_drive():
                 raise Exception("Autenticación fallida")
 
             progress_bar.progress(20)
-            status_text.text("📥 Descargando archivo único...")
+            status_text.text("📥 Descargando archivo integrado...")
 
-            # CAMBIO: Solo descargar un archivo
+            # Descargar archivo único
             casos_path = manager.download_file(
                 drive_files["casos_excel"], "BD_positivos.xlsx"
             )
@@ -293,28 +291,55 @@ def load_data_from_google_drive():
                 raise Exception("Error descargando archivo principal")
 
             progress_bar.progress(50)
-            status_text.text("🔧 Procesando datos...")
+            status_text.text("🔍 Verificando estructura del archivo...")
 
-            # CAMBIO: Cargar todas las hojas del mismo archivo
-            casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
-            epizootias_df = pd.read_excel(casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl")
+            # ✅ CORRECCIÓN: Verificar hojas disponibles antes de cargar
+            try:
+                excel_file = pd.ExcelFile(casos_path)
+                hojas_disponibles = excel_file.sheet_names
+                logger.info(f"📋 Hojas encontradas: {hojas_disponibles}")
+                
+                # Verificar hojas requeridas
+                hojas_requeridas = ["ACUMU", "EPIZOOTIAS"]
+                hojas_faltantes = [h for h in hojas_requeridas if h not in hojas_disponibles]
+                
+                if hojas_faltantes:
+                    raise Exception(f"Hojas faltantes: {hojas_faltantes}. Disponibles: {hojas_disponibles}")
+                
+            except Exception as e:
+                raise Exception(f"Error verificando estructura: {str(e)}")
 
-            # Cargar hoja VEREDAS
+            progress_bar.progress(70)
+            status_text.text("📊 Cargando datos...")
+
+            # Cargar hojas con manejo de errores robusto
+            try:
+                casos_df = pd.read_excel(casos_path, sheet_name="ACUMU", engine="openpyxl")
+                logger.info(f"✅ Casos cargados: {len(casos_df)} registros")
+            except Exception as e:
+                raise Exception(f"Error cargando hoja ACUMU: {str(e)}")
+
+            try:
+                epizootias_df = pd.read_excel(casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl")
+                logger.info(f"✅ Epizootias cargadas: {len(epizootias_df)} registros")
+            except Exception as e:
+                raise Exception(f"Error cargando hoja EPIZOOTIAS: {str(e)}")
+
+            # Cargar hoja VEREDAS (opcional)
             veredas_df = None
             try:
-                veredas_df = pd.read_excel(
-                    casos_path, sheet_name="VEREDAS", engine="openpyxl"
-                )
-                logger.info(
-                    f"✅ Hoja VEREDAS cargada desde Google Drive: {len(veredas_df)} registros"
-                )
+                if "VEREDAS" in hojas_disponibles:
+                    veredas_df = pd.read_excel(casos_path, sheet_name="VEREDAS", engine="openpyxl")
+                    logger.info(f"✅ Veredas cargadas: {len(veredas_df)} registros")
+                else:
+                    logger.warning("⚠️ Hoja VEREDAS no encontrada - usando fallback")
             except Exception as e:
-                logger.warning(f"⚠️ No se pudo cargar hoja VEREDAS: {str(e)}")
+                logger.warning(f"⚠️ Error cargando hoja VEREDAS: {str(e)} - usando fallback")
 
             progress_bar.progress(90)
             status_text.text("🔧 Procesando estructura completa...")
 
-            # ✅ PROCESAR CON HOJA VEREDAS
+            # Procesar con hoja VEREDAS
             processed_data = process_data_with_veredas_sheet(
                 casos_df, epizootias_df, veredas_df
             )
@@ -322,37 +347,45 @@ def load_data_from_google_drive():
             progress_bar.progress(100)
             status_text.text("✅ Completado!")
 
-            # CORREGIDO: Limpiar UI de progreso después de delay
+            # Limpiar UI de progreso
             time.sleep(1)
             progress_bar.empty()
             status_text.empty()
-
-            # CORREGIDO: Limpiar el contenedor completo
             progress_container.empty()
 
             if processed_data:
+                logger.info("✅ Datos cargados exitosamente desde Google Drive")
                 return processed_data
             else:
                 raise Exception("Error procesando datos")
 
     except Exception as e:
-        # CORREGIDO: Limpiar UI en caso de error también
+        # Limpiar UI en caso de error
         if "progress_container" in locals():
             progress_container.empty()
 
         logger.error(f"❌ Error carga: {str(e)}")
-        st.error(f"❌ Error: {str(e)}")
+        st.error(f"❌ Error cargando desde Google Drive: {str(e)}")
 
-        with st.expander("🔧 Soluciones", expanded=False):
-            st.markdown(
-                """
+        with st.expander("🔧 Soluciones Específicas", expanded=True):
+            st.markdown(f"""
+            **Error detectado:** {str(e)}
+            
             **Posibles soluciones:**
-            1. Verifica `private_key` en secrets.toml
-            2. Asegúrate de que archivo sea accesible en Google Drive
-            3. Revisa logs de Streamlit Cloud
-            4. Verifica que BD_positivos.xlsx tenga las hojas "ACUMU", "EPIZOOTIAS" y "VEREDAS"
-            """
-            )
+            1. **Si error de hojas**: Verificar que el archivo Excel tenga las hojas:
+               - `ACUMU` (datos de casos)
+               - `EPIZOOTIAS` (datos de epizootias)  
+               - `VEREDAS` (opcional pero recomendado)
+            
+            2. **Si error de permisos**: Verificar que el ID en secrets.toml sea correcto
+            
+            3. **Si error de estructura**: El archivo debe mantener la estructura de columnas esperada
+            
+            4. **Verificar en Google Drive:**
+               - Archivo ID: `{drive_files.get('casos_excel', 'NO_CONFIGURADO')}`
+               - Verificar que el archivo existe y es accesible
+               - Confirmar que tiene las hojas correctas
+            """)
 
         return None
 

@@ -202,19 +202,56 @@ def load_data():
         logger.error(f"💥 Error crítico cargando datos: {str(e)}")
         st.error(f"❌ Error crítico: {str(e)}")
         return create_empty_data_structure()
+    
+def show_data_setup_instructions_integrated():
+    """Instrucciones actualizadas para archivo integrado."""
+    st.error("❌ No se pudo cargar el archivo integrado")
+
+    with st.expander("📋 Instrucciones de configuración - ARCHIVO INTEGRADO", expanded=True):
+        st.markdown("""
+        ### 🌐 Para Streamlit Cloud (Recomendado):
+        1. **Actualiza el archivo en Google Drive:**
+           - Sube el archivo `BD_positivos.xlsx` integrado
+           - Verifica que tenga las hojas: `ACUMU`, `EPIZOOTIAS`, `VEREDAS`
+           - Actualiza el ID en `.streamlit/secrets.toml`
+        
+        ### 📁 Para desarrollo local:
+        **Coloca el archivo integrado en:**
+        - `📁 data/BD_positivos.xlsx` (**archivo integrado**)
+        - **O en el directorio raíz:** `📄 BD_positivos.xlsx`
+        
+        ### 📊 Estructura REQUERIDA de BD_positivos.xlsx:
+        ```
+        📄 BD_positivos.xlsx
+        ├── 📋 Hoja "ACUMU" (casos confirmados)
+        ├── 📋 Hoja "EPIZOOTIAS" (datos de epizootias)
+        └── 📋 Hoja "VEREDAS" (lista completa - OPCIONAL pero recomendado)
+        ```
+        
+        ### ⚠️ CRÍTICO - Nombres de hojas EXACTOS:
+        - ✅ `ACUMU` (no "Acumu" ni "acumu")
+        - ✅ `EPIZOOTIAS` (no "Epizootias" ni "epizootias")
+        - ✅ `VEREDAS` (no "Veredas" ni "veredas")
+        
+        ### 🔧 Si ya tienes archivos separados:
+        1. Abre un Excel nuevo
+        2. Copia la hoja de casos como "ACUMU"
+        3. Copia la hoja de epizootias como "EPIZOOTIAS"
+        4. Si tienes datos de veredas, agrégalos como "VEREDAS"
+        5. Guarda como `BD_positivos.xlsx`
+        """)
 
 def load_local_data():
-    """Carga datos desde archivos locales CON UI CORREGIDA."""
-    # UI de progreso CORREGIDA
+    """Carga datos desde archivos locales - ACTUALIZADO PARA ARCHIVO INTEGRADO."""
     progress_container = st.container()
 
     try:
         with progress_container:
             progress_bar = st.progress(0)
             status_text = st.empty()
-            status_text.text("🔄 Cargando desde archivos locales...")
+            status_text.text("🔄 Cargando desde archivo integrado local...")
 
-            # CAMBIO: Solo un archivo ahora
+            # ✅ ARCHIVO INTEGRADO ÚNICO
             casos_filename = "BD_positivos.xlsx"
 
             data_casos_path = DATA_DIR / casos_filename
@@ -222,53 +259,106 @@ def load_local_data():
 
             progress_bar.progress(20)
 
-            # Intentar cargar
+            # Intentar cargar archivo integrado
             casos_df = None
             epizootias_df = None
             veredas_df = None
+            archivo_encontrado = None
 
-            # Desde data/
+            # Buscar en data/ primero
             if data_casos_path.exists():
-                casos_df = pd.read_excel(
-                    data_casos_path, sheet_name="ACUMU", engine="openpyxl"
-                )
-                epizootias_df = pd.read_excel(
-                    data_casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl"
-                )
-                try:
-                    veredas_df = pd.read_excel(
-                        data_casos_path, sheet_name="VEREDAS", engine="openpyxl"
-                    )
-                except:
-                    veredas_df = None
-                logger.info("✅ Datos cargados desde carpeta data/")
-
-            # Desde raíz
+                archivo_encontrado = data_casos_path
+                logger.info("✅ Archivo encontrado en carpeta data/")
+            # Luego en raíz
             elif root_casos_path.exists():
-                casos_df = pd.read_excel(
-                    root_casos_path, sheet_name="ACUMU", engine="openpyxl"
-                )
-                epizootias_df = pd.read_excel(
-                    root_casos_path, sheet_name="EPIZOOTIAS", engine="openpyxl"
-                )
-                try:
-                    veredas_df = pd.read_excel(
-                        root_casos_path, sheet_name="VEREDAS", engine="openpyxl"
-                    )
-                except:
-                    veredas_df = None
-                logger.info("✅ Datos cargados desde directorio raíz")
+                archivo_encontrado = root_casos_path
+                logger.info("✅ Archivo encontrado en directorio raíz")
 
-            if casos_df is None or epizootias_df is None:
-                # CORREGIDO: Limpiar UI antes de mostrar error
+            if not archivo_encontrado:
                 progress_bar.empty()
                 status_text.empty()
                 progress_container.empty()
-
                 show_data_setup_instructions()
                 return create_empty_data_structure()
 
-            progress_bar.progress(50)
+            progress_bar.progress(40)
+            status_text.text("🔍 Verificando estructura del archivo...")
+
+            # ✅ VERIFICAR HOJAS DISPONIBLES
+            try:
+                excel_file = pd.ExcelFile(archivo_encontrado)
+                hojas_disponibles = excel_file.sheet_names
+                logger.info(f"📋 Hojas encontradas: {hojas_disponibles}")
+
+                # Verificar hojas requeridas
+                hojas_requeridas = ["ACUMU", "EPIZOOTIAS"]
+                hojas_faltantes = [h for h in hojas_requeridas if h not in hojas_disponibles]
+
+                if hojas_faltantes:
+                    progress_bar.empty()
+                    status_text.empty()
+                    progress_container.empty()
+                    
+                    st.error(f"❌ Hojas faltantes en {casos_filename}: {hojas_faltantes}")
+                    st.info(f"📋 Hojas disponibles: {hojas_disponibles}")
+                    st.info(f"📋 Hojas requeridas: {hojas_requeridas}")
+                    
+                    show_data_setup_instructions_integrated()
+                    return create_empty_data_structure()
+
+            except Exception as e:
+                progress_bar.empty()
+                status_text.empty()
+                progress_container.empty()
+                
+                st.error(f"❌ Error verificando archivo: {str(e)}")
+                show_data_setup_instructions_integrated()
+                return create_empty_data_structure()
+
+            progress_bar.progress(60)
+            status_text.text("📊 Cargando datos...")
+
+            # ✅ CARGAR HOJAS CON MANEJO DE ERRORES
+            try:
+                casos_df = pd.read_excel(
+                    archivo_encontrado, sheet_name="ACUMU", engine="openpyxl"
+                )
+                logger.info(f"✅ Casos cargados: {len(casos_df)} registros")
+            except Exception as e:
+                progress_bar.empty()
+                status_text.empty()
+                progress_container.empty()
+                
+                st.error(f"❌ Error cargando hoja ACUMU: {str(e)}")
+                return create_empty_data_structure()
+
+            try:
+                epizootias_df = pd.read_excel(
+                    archivo_encontrado, sheet_name="EPIZOOTIAS", engine="openpyxl"
+                )
+                logger.info(f"✅ Epizootias cargadas: {len(epizootias_df)} registros")
+            except Exception as e:
+                progress_bar.empty()
+                status_text.empty()
+                progress_container.empty()
+                
+                st.error(f"❌ Error cargando hoja EPIZOOTIAS: {str(e)}")
+                return create_empty_data_structure()
+
+            # Cargar hoja VEREDAS (opcional)
+            try:
+                if "VEREDAS" in hojas_disponibles:
+                    veredas_df = pd.read_excel(
+                        archivo_encontrado, sheet_name="VEREDAS", engine="openpyxl"
+                    )
+                    logger.info(f"✅ Veredas cargadas: {len(veredas_df)} registros")
+                else:
+                    logger.warning("⚠️ Hoja VEREDAS no encontrada - usando fallback")
+            except Exception as e:
+                logger.warning(f"⚠️ Error cargando hoja VEREDAS: {str(e)} - usando fallback")
+                veredas_df = None
+
+            progress_bar.progress(80)
             status_text.text("🔧 Procesando datos con estructura completa...")
 
             # Procesar datos CON ESTRUCTURA COMPLETA
@@ -277,22 +367,22 @@ def load_local_data():
             progress_bar.progress(100)
             status_text.text("✅ Completado!")
 
-            # CORREGIDO: Limpiar UI de progreso
+            # Limpiar UI de progreso
             time.sleep(1)
             progress_bar.empty()
             status_text.empty()
             progress_container.empty()
 
-            st.success("✅ Datos cargados con estructura completa")
+            st.success("✅ Datos cargados desde archivo integrado")
             return processed_data
 
     except Exception as e:
-        # CORREGIDO: Limpiar UI en caso de error
+        # Limpiar UI en caso de error
         if "progress_container" in locals():
             progress_container.empty()
 
         logger.error(f"❌ Error cargando datos locales: {str(e)}")
-        show_data_setup_instructions()
+        show_data_setup_instructions_integrated()
         return create_empty_data_structure()
     
 def process_loaded_data_integrated(casos_df, epizootias_df, veredas_df=None):
