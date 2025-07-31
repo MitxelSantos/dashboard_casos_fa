@@ -276,7 +276,7 @@ def show(data_filtered, filters, colors):
         st.markdown(
             f"""
             <div class="filter-info-compact">
-                🎯 Vista: <strong>{modo_mapa}</strong> | Filtros: <strong>{' • '.join(active_filters[:2])}</strong>
+                🎯 Vista: <strong>{modo_mapa}</strong> | Ubicación: <strong>{' • '.join(active_filters[:2])}</strong>
             </div>
             """,
             unsafe_allow_html=True,
@@ -298,17 +298,15 @@ def create_optimized_layout_50_25_25(
         create_map_system_simplified(
             casos, epizootias, geo_data, filters, colors, data_filtered
         )
+        create_urban_data_card_simplified(filters, colors, data_filtered)
 
     with col_tarjetas1:
         create_cobertura_card_simplified(filters, colors, data_filtered)
-        create_casos_card_optimized(casos, filters, colors)
-
+        create_afectacion_card_simplified(casos, epizootias, filters, colors, data_filtered)
+        
     with col_tarjetas2:
-        create_urban_data_card_simplified(filters, colors, data_filtered)
+        create_casos_card_optimized(casos, filters, colors)
         create_epizootias_card_optimized(epizootias, filters, colors)
-        create_afectacion_card_simplified(
-                casos, epizootias, filters, colors, data_filtered
-            )            
 
 def create_map_system_simplified(
     casos, epizootias, geo_data, filters, colors, data_filtered
@@ -4006,10 +4004,6 @@ def create_urban_data_card_simplified(filters, colors, data_filtered):
                             <div class="metrica-valor">{cobertura_urbana:.1f}%</div>
                             <div class="metrica-etiqueta">Cobertura</div>
                         </div>
-                    </div>
-                    <div class="tarjeta-footer">
-                        ℹ️ No visible en mapa de veredas - Solo en total municipal
-                    </div>
                 </div>
             </div>
             """,
