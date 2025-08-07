@@ -15,65 +15,146 @@ logger = logging.getLogger(__name__)
 
 # ===== FUNCIONES CORE DE FECHAS (mantener las existentes) =====
 
-
 def excel_date_to_datetime(excel_date):
-    """Convierte fecha de Excel a datetime con manejo robusto."""
+    """
+    Convierte fecha de Excel a datetime - VERSIÓN SIMPLIFICADA.
+    Formato esperado: DD/MM/YYYY (ej: 22/07/2025)
+    """
     try:
+        # Si ya es datetime, devolver tal como está
         if isinstance(excel_date, (pd.Timestamp, datetime)):
             return excel_date
 
+        # Si es nulo o vacío, devolver None
         if pd.isna(excel_date) or excel_date == "":
             return None
 
+        # Si es string, procesar
         if isinstance(excel_date, str):
             excel_date = excel_date.strip()
+            
+            # Verificar si es string vacío o nulo
             if not excel_date or excel_date.lower() in ["nan", "none", "null"]:
                 return None
 
-            formatos_fecha = [
-                "%d/%m/%Y",
-                "%d/%m/%y",
-                "%d-%m-%Y",
-                "%d-%m-%y",
-                "%Y-%m-%d",
-                "%d.%m.%Y",
-                "%d.%m.%y",
-            ]
+            # ✅ FORMATO PRINCIPAL: DD/MM/YYYY
+            # Ejemplos: "22/07/2025", "05/04/2025", "31/12/2024"
+            try:
+                fecha_convertida = datetime.strptime(excel_date, "%d/%m/%Y")
+                logger.debug(f"✅ Fecha convertida DD/MM/YYYY: '{excel_date}' → {fecha_convertida}")
+                return fecha_convertida
+            except ValueError:
+                pass
 
-            for formato in formatos_fecha:
+            # ✅ FORMATO ALTERNATIVO: D/M/YYYY (sin ceros iniciales)
+            # Ejemplos: "5/4/2025", "22/7/2025"
+            try:
+                fecha_convertida = datetime.strptime(excel_date, "%d/%m/%Y")
+                logger.debug(f"✅ Fecha convertida D/M/YYYY: '{excel_date}' → {fecha_convertida}")
+                return fecha_convertida
+            except ValueError:
+                pass
+
+            # ✅ FALLBACK SOLO PARA MIGRACIÓN: Formato anterior
+            # Esto es temporal mientras migras todos los datos
+            formatos_legacy = [
+                "%Y-%m-%d",      # ISO format
+                "%d-%m-%Y",      # DD-MM-YYYY
+                "%d.%m.%Y",      # DD.MM.YYYY
+            ]
+            
+            for formato in formatos_legacy:
                 try:
                     fecha_convertida = datetime.strptime(excel_date, formato)
-                    if fecha_convertida.year < 50:
-                        fecha_convertida = fecha_convertida.replace(
-                            year=fecha_convertida.year + 2000
-                        )
-                    elif fecha_convertida.year < 100:
-                        fecha_convertida = fecha_convertida.replace(
-                            year=fecha_convertida.year + 1900
-                        )
+                    logger.warning(f"⚠️ Fecha en formato legacy: '{excel_date}' → {fecha_convertida} (considera cambiar a DD/MM/YYYY)")
                     return fecha_convertida
                 except ValueError:
                     continue
 
-            try:
-                return pd.to_datetime(excel_date, dayfirst=True, errors="coerce")
-            except:
-                return None
+            # Si no se pudo procesar con ningún formato
+            logger.error(f"❌ Formato de fecha no reconocido: '{excel_date}'. Formato esperado: DD/MM/YYYY")
+            return None
 
+        # Si es número (formato Excel serial)
         if isinstance(excel_date, (int, float)):
             if pd.isna(excel_date) or excel_date < 0 or excel_date > 100000:
                 return None
             try:
-                return pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
+                fecha_convertida = pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
+                logger.debug(f"✅ Fecha numérica de Excel: {excel_date} → {fecha_convertida}")
+                return fecha_convertida
             except:
+                logger.error(f"❌ Error procesando fecha numérica: {excel_date}")
                 return None
 
+        # Tipo no soportado
+        logger.error(f"❌ Tipo de fecha no soportado: {type(excel_date)} - valor: {excel_date}")
         return None
 
     except Exception as e:
-        logger.warning(f"Error procesando fecha: {excel_date} - {str(e)}")
+        logger.error(f"❌ Error inesperado procesando fecha: {excel_date} - {str(e)}")
         return None
+    
+def validate_date_format(date_string):
+    """
+    Valida si una fecha está en el formato correcto DD/MM/YYYY.
+    Útil para verificar datos antes de procesar.
+    """
+    if not isinstance(date_string, str):
+        return False, f"No es string: {type(date_string)}"
+    
+    try:
+        datetime.strptime(date_string.strip(), "%d/%m/%Y")
+        return True, "Formato correcto DD/MM/YYYY"
+    except ValueError:
+        return False, f"Formato incorrecto. Esperado: DD/MM/YYYY, recibido: '{date_string}'"
 
+
+# ✅ FUNCIÓN PARA DETECTAR PROBLEMAS EN EL DATASET
+def audit_date_formats(casos_df):
+    """
+    Audita formatos de fecha en el dataset para identificar inconsistencias.
+    """
+    if casos_df.empty or "fecha_inicio_sintomas" not in casos_df.columns:
+        logger.warning("❌ No hay columna fecha_inicio_sintomas para auditar")
+        return
+    
+    logger.info("🔍 Auditando formatos de fecha...")
+    
+    fechas_problematicas = []
+    fechas_correctas = 0
+    fechas_nulas = 0
+    
+    for index, fecha in casos_df["fecha_inicio_sintomas"].items():
+        if pd.isna(fecha) or fecha == "":
+            fechas_nulas += 1
+        elif isinstance(fecha, str):
+            is_valid, mensaje = validate_date_format(fecha)
+            if is_valid:
+                fechas_correctas += 1
+            else:
+                fechas_problematicas.append({
+                    "fila": index + 2,  # +2 porque Excel empieza en 1 y tiene header
+                    "fecha": fecha,
+                    "problema": mensaje
+                })
+        else:
+            fechas_correctas += 1  # Ya procesadas (datetime)
+    
+    logger.info(f"📊 Auditoría completada:")
+    logger.info(f"   ✅ Fechas correctas: {fechas_correctas}")
+    logger.info(f"   ⚠️ Fechas nulas: {fechas_nulas}")
+    logger.info(f"   ❌ Fechas problemáticas: {len(fechas_problematicas)}")
+    
+    if fechas_problematicas:
+        logger.warning("🚨 Fechas que necesitan corrección:")
+        for problema in fechas_problematicas[:5]:  # Mostrar solo las primeras 5
+            logger.warning(f"   Fila {problema['fila']}: '{problema['fecha']}' - {problema['problema']}")
+        
+        if len(fechas_problematicas) > 5:
+            logger.warning(f"   ... y {len(fechas_problematicas) - 5} más")
+    
+    return fechas_problematicas
 
 def format_date_display(date_value):
     """Formatea una fecha para mostrar."""
