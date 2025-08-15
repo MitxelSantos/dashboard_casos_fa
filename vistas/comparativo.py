@@ -12,7 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def show(data_filtered, filters, colors):
-    """Vista principal de seguimiento temporal OPTIMIZADA."""
+    """Vista principal de seguimiento temporal."""
     logger.info("📈 Iniciando vista temporal optimizada")
     
     casos_filtrados = data_filtered["casos"]
@@ -56,7 +56,7 @@ def create_temporal_analysis(casos_filtrados, epizootias_filtradas):
     
     # Obtener fechas
     fechas_casos = casos_filtrados["fecha_inicio_sintomas"].dropna().tolist() if "fecha_inicio_sintomas" in casos_filtrados.columns else []
-    fechas_epi = epizootias_filtradas["fecha_recoleccion"].dropna().tolist() if "fecha_recoleccion" in epizootias_filtradas.columns else []
+    fechas_epi = epizootias_filtradas["fecha_notificacion"].dropna().tolist() if "fecha_notificacion" in epizootias_filtradas.columns else []
     
     todas_fechas = fechas_casos + fechas_epi
     if not todas_fechas:
@@ -88,10 +88,10 @@ def create_temporal_analysis(casos_filtrados, epizootias_filtradas):
         epizootias_periodo = 0
         positivas_periodo = 0
         en_estudio_periodo = 0
-        if not epizootias_filtradas.empty and "fecha_recoleccion" in epizootias_filtradas.columns:
+        if not epizootias_filtradas.empty and "fecha_notificacion" in epizootias_filtradas.columns:
             epi_mes = epizootias_filtradas[
-                (epizootias_filtradas["fecha_recoleccion"] >= periodo) &
-                (epizootias_filtradas["fecha_recoleccion"] <= fin_periodo)
+                (epizootias_filtradas["fecha_notificacion"] >= periodo) &
+                (epizootias_filtradas["fecha_notificacion"] <= fin_periodo)
             ]
             epizootias_periodo = len(epi_mes)
             if "descripcion" in epi_mes.columns:

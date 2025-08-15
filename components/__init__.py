@@ -3,7 +3,7 @@ Componentes reutilizables
 """
 
 # ===== SIDEBAR (OPTIMIZADO) =====
-from .sidebar import create_sidebar, init_responsive_sidebar, add_copyright
+from .sidebar import create_sidebar, add_copyright
 
 # ===== FILTERS (OPTIMIZADO) =====
 from .filters import (

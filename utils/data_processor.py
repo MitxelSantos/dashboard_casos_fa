@@ -15,65 +15,146 @@ logger = logging.getLogger(__name__)
 
 # ===== FUNCIONES CORE DE FECHAS (mantener las existentes) =====
 
-
 def excel_date_to_datetime(excel_date):
-    """Convierte fecha de Excel a datetime con manejo robusto."""
+    """
+    Convierte fecha de Excel a datetime - VERSIÓN SIMPLIFICADA.
+    Formato esperado: DD/MM/YYYY (ej: 22/07/2025)
+    """
     try:
+        # Si ya es datetime, devolver tal como está
         if isinstance(excel_date, (pd.Timestamp, datetime)):
             return excel_date
 
+        # Si es nulo o vacío, devolver None
         if pd.isna(excel_date) or excel_date == "":
             return None
 
+        # Si es string, procesar
         if isinstance(excel_date, str):
             excel_date = excel_date.strip()
+            
+            # Verificar si es string vacío o nulo
             if not excel_date or excel_date.lower() in ["nan", "none", "null"]:
                 return None
 
-            formatos_fecha = [
-                "%d/%m/%Y",
-                "%d/%m/%y",
-                "%d-%m-%Y",
-                "%d-%m-%y",
-                "%Y-%m-%d",
-                "%d.%m.%Y",
-                "%d.%m.%y",
-            ]
+            # ✅ FORMATO PRINCIPAL: DD/MM/YYYY
+            # Ejemplos: "22/07/2025", "05/04/2025", "31/12/2024"
+            try:
+                fecha_convertida = datetime.strptime(excel_date, "%d/%m/%Y")
+                logger.debug(f"✅ Fecha convertida DD/MM/YYYY: '{excel_date}' → {fecha_convertida}")
+                return fecha_convertida
+            except ValueError:
+                pass
 
-            for formato in formatos_fecha:
+            # ✅ FORMATO ALTERNATIVO: D/M/YYYY (sin ceros iniciales)
+            # Ejemplos: "5/4/2025", "22/7/2025"
+            try:
+                fecha_convertida = datetime.strptime(excel_date, "%d/%m/%Y")
+                logger.debug(f"✅ Fecha convertida D/M/YYYY: '{excel_date}' → {fecha_convertida}")
+                return fecha_convertida
+            except ValueError:
+                pass
+
+            # ✅ FALLBACK SOLO PARA MIGRACIÓN: Formato anterior
+            # Esto es temporal mientras migras todos los datos
+            formatos_legacy = [
+                "%Y-%m-%d",      # ISO format
+                "%d-%m-%Y",      # DD-MM-YYYY
+                "%d.%m.%Y",      # DD.MM.YYYY
+            ]
+            
+            for formato in formatos_legacy:
                 try:
                     fecha_convertida = datetime.strptime(excel_date, formato)
-                    if fecha_convertida.year < 50:
-                        fecha_convertida = fecha_convertida.replace(
-                            year=fecha_convertida.year + 2000
-                        )
-                    elif fecha_convertida.year < 100:
-                        fecha_convertida = fecha_convertida.replace(
-                            year=fecha_convertida.year + 1900
-                        )
+                    logger.warning(f"⚠️ Fecha en formato legacy: '{excel_date}' → {fecha_convertida} (considera cambiar a DD/MM/YYYY)")
                     return fecha_convertida
                 except ValueError:
                     continue
 
-            try:
-                return pd.to_datetime(excel_date, dayfirst=True, errors="coerce")
-            except:
-                return None
+            # Si no se pudo procesar con ningún formato
+            logger.error(f"❌ Formato de fecha no reconocido: '{excel_date}'. Formato esperado: DD/MM/YYYY")
+            return None
 
+        # Si es número (formato Excel serial)
         if isinstance(excel_date, (int, float)):
             if pd.isna(excel_date) or excel_date < 0 or excel_date > 100000:
                 return None
             try:
-                return pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
+                fecha_convertida = pd.to_datetime(excel_date, origin="1899-12-30", unit="D")
+                logger.debug(f"✅ Fecha numérica de Excel: {excel_date} → {fecha_convertida}")
+                return fecha_convertida
             except:
+                logger.error(f"❌ Error procesando fecha numérica: {excel_date}")
                 return None
 
+        # Tipo no soportado
+        logger.error(f"❌ Tipo de fecha no soportado: {type(excel_date)} - valor: {excel_date}")
         return None
 
     except Exception as e:
-        logger.warning(f"Error procesando fecha: {excel_date} - {str(e)}")
+        logger.error(f"❌ Error inesperado procesando fecha: {excel_date} - {str(e)}")
         return None
+    
+def validate_date_format(date_string):
+    """
+    Valida si una fecha está en el formato correcto DD/MM/YYYY.
+    Útil para verificar datos antes de procesar.
+    """
+    if not isinstance(date_string, str):
+        return False, f"No es string: {type(date_string)}"
+    
+    try:
+        datetime.strptime(date_string.strip(), "%d/%m/%Y")
+        return True, "Formato correcto DD/MM/YYYY"
+    except ValueError:
+        return False, f"Formato incorrecto. Esperado: DD/MM/YYYY, recibido: '{date_string}'"
 
+
+# ✅ FUNCIÓN PARA DETECTAR PROBLEMAS EN EL DATASET
+def audit_date_formats(casos_df):
+    """
+    Audita formatos de fecha en el dataset para identificar inconsistencias.
+    """
+    if casos_df.empty or "fecha_inicio_sintomas" not in casos_df.columns:
+        logger.warning("❌ No hay columna fecha_inicio_sintomas para auditar")
+        return
+    
+    logger.info("🔍 Auditando formatos de fecha...")
+    
+    fechas_problematicas = []
+    fechas_correctas = 0
+    fechas_nulas = 0
+    
+    for index, fecha in casos_df["fecha_inicio_sintomas"].items():
+        if pd.isna(fecha) or fecha == "":
+            fechas_nulas += 1
+        elif isinstance(fecha, str):
+            is_valid, mensaje = validate_date_format(fecha)
+            if is_valid:
+                fechas_correctas += 1
+            else:
+                fechas_problematicas.append({
+                    "fila": index + 2,  # +2 porque Excel empieza en 1 y tiene header
+                    "fecha": fecha,
+                    "problema": mensaje
+                })
+        else:
+            fechas_correctas += 1  # Ya procesadas (datetime)
+    
+    logger.info(f"📊 Auditoría completada:")
+    logger.info(f"   ✅ Fechas correctas: {fechas_correctas}")
+    logger.info(f"   ⚠️ Fechas nulas: {fechas_nulas}")
+    logger.info(f"   ❌ Fechas problemáticas: {len(fechas_problematicas)}")
+    
+    if fechas_problematicas:
+        logger.warning("🚨 Fechas que necesitan corrección:")
+        for problema in fechas_problematicas[:5]:  # Mostrar solo las primeras 5
+            logger.warning(f"   Fila {problema['fila']}: '{problema['fecha']}' - {problema['problema']}")
+        
+        if len(fechas_problematicas) > 5:
+            logger.warning(f"   ... y {len(fechas_problematicas) - 5} más")
+    
+    return fechas_problematicas
 
 def format_date_display(date_value):
     """Formatea una fecha para mostrar."""
@@ -114,7 +195,6 @@ def format_time_elapsed(days):
     """Formatea tiempo transcurrido en formato legible."""
     if days is None or days < 0:
         return "Fecha inválida"
-
     if days == 0:
         return "Hoy"
     elif days == 1:
@@ -123,24 +203,29 @@ def format_time_elapsed(days):
         return f"{days} días"
     elif days < 30:
         semanas = days // 7
+        if dias := days % 7:
+            return f"{semanas} semana{'s' if semanas > 1 else ''} y {dias} día{'' if dias == 1 else 's'}"
         return f"{semanas} semana{'s' if semanas > 1 else ''}"
     elif days < 365:
         meses = days // 30
+        if semanas := (days % 30) // 7:
+            return f"{meses} mes{'es' if meses > 1 else ''} y {semanas} semana{'' if semanas == 1 else 's'}"
         return f"{meses} mes{'es' if meses > 1 else ''}"
     else:
         años = days // 365
+        if meses := (days % 365) // 30:
+            return f"{años} año{'s' if años > 1 else ''} y {meses} mes{'' if meses == 1 else 'es'}"
         return f"{años} año{'s' if años > 1 else ''}"
 
 
-# ===== CARGA DE LISTA COMPLETA - SIMPLIFICADO =====
+# ===== CARGA DE LISTA COMPLETA =====
 
 
 def load_complete_veredas_list_authoritative(data_dir=None):
     """
     Carga la lista completa de veredas desde BD_positivos.xlsx hoja "VEREDAS"
-    SIMPLIFICADO - sin normalización compleja
     """
-    logger.info("🗂️ Cargando hoja VEREDAS - SIMPLIFICADO")
+    logger.info("🗂️ Cargando hoja VEREDAS")
 
     # Rutas posibles para el archivo
     possible_paths = []
@@ -191,9 +276,9 @@ def load_complete_veredas_list_authoritative(data_dir=None):
 
 def process_veredas_dataframe_simple(veredas_df):
     """
-    Procesa el DataFrame de veredas SIMPLIFICADO - sin normalización compleja
+    Procesa el DataFrame de veredas
     """
-    logger.info(f"🔧 Procesando hoja VEREDAS SIMPLIFICADO: {len(veredas_df)} registros")
+    logger.info(f"🔧 Procesando hoja VEREDAS: {len(veredas_df)} registros")
 
     # Limpiar datos básicos
     veredas_df = veredas_df.dropna(how="all")
@@ -247,7 +332,7 @@ def process_veredas_dataframe_simple(veredas_df):
         regiones = get_regiones_from_dataframe_simple(veredas_df)
 
     logger.info(
-        f"✅ HOJA VEREDAS procesada SIMPLIFICADO: {len(municipios_authoritativos)} municipios, {len(veredas_df)} veredas"
+        f"✅ HOJA VEREDAS procesada: {len(municipios_authoritativos)} municipios, {len(veredas_df)} veredas"
     )
 
     return {
@@ -262,7 +347,7 @@ def process_veredas_dataframe_simple(veredas_df):
 
 
 def get_regiones_from_dataframe_simple(veredas_df):
-    """Extrae información de regiones del DataFrame SIMPLIFICADO."""
+    """Extrae información de regiones del DataFrame."""
     if "region" not in veredas_df.columns:
         return {}
 
@@ -355,8 +440,7 @@ def process_complete_data_structure_authoritative(
     casos_df, epizootias_df, shapefile_data=None, data_dir=None, veredas_data=None
 ):
     """
-    Función principal que procesa datos SIMPLIFICADO - sin normalización compleja
-    MODIFICADA: Ahora acepta veredas_data desde Google Drive como parámetro
+    Función principal que procesa datos.
     """
     logger.info("🚀 Procesando estructura SIMPLIFICADO")
 
@@ -510,7 +594,7 @@ def validate_data_simple(casos_df, epizootias_df, municipios_authoritativos):
 
 
 def get_unique_locations_simple(casos_df, epizootias_df):
-    """Obtiene ubicaciones únicas SIMPLIFICADO - comparación directa."""
+    """Obtiene ubicaciones únicas."""
     locations = {"municipios": set(), "veredas_por_municipio": {}}
 
     # Obtener municipios únicos
@@ -551,9 +635,9 @@ def handle_empty_area_filter_simple(
     municipio=None, vereda=None, casos_df=None, epizootias_df=None
 ):
     """
-    Maneja el filtrado de áreas sin datos SIMPLIFICADO - comparación directa
+    Maneja el filtrado de áreas sin datos.
     """
-    logger.info(f"🎯 Manejando filtro área sin datos SIMPLE: {municipio}, {vereda}")
+    logger.info(f"🎯 Manejando filtro área sin datos: {municipio}, {vereda}")
 
     # Inicializar DataFrames vacíos si no se proporcionan
     if casos_df is None:
@@ -631,7 +715,7 @@ def handle_empty_area_filter_simple(
 
 def validate_location_exists_simple(municipio, vereda, complete_data):
     """
-    Valida que una ubicación existe SIMPLIFICADO - comparación directa
+    Valida que una ubicación existe.
     """
     # Validar municipio
     municipio_exists = False
@@ -690,11 +774,11 @@ def create_zero_metrics_for_area(municipio, vereda):
     }
 
 
-# ===== FUNCIONES DE CÁLCULO MEJORADAS =====
+# ===== FUNCIONES DE CÁLCULO =====
 
 
 def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
-    """Calcula métricas básicas con manejo mejorado de datos vacíos."""
+    """Calcula métricas básicas con manejo de datos vacíos."""
     logger.info(
         f"Calculando métricas: {len(casos_df)} casos, {len(epizootias_df)} epizootias"
     )
@@ -721,10 +805,14 @@ def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
         metrics["letalidad"] = (
             (fallecidos / len(casos_df) * 100) if len(casos_df) > 0 else 0
         )
+        metrics["supervivencia"] = (
+            (vivos / len(casos_df) * 100) if len(casos_df) > 0 else 0
+        )
     else:
         metrics["fallecidos"] = 0
         metrics["vivos"] = 0
         metrics["letalidad"] = 0
+        metrics["supervivencia"] = 0
 
     # Información del último caso
     if not casos_df.empty:
@@ -747,10 +835,14 @@ def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
         metrics["positividad"] = (
             (positivos / len(epizootias_df) * 100) if len(epizootias_df) > 0 else 0
         )
+        metrics["en_estudio"] = (
+            (en_estudio / len(epizootias_df) * 100) if len(epizootias_df) > 0 else 0
+        )
     else:
         metrics["epizootias_positivas"] = 0
         metrics["epizootias_en_estudio"] = 0
         metrics["positividad"] = 0
+        metrics["en_estudio"] = 0
 
     # Información de la última epizootia positiva
     if not epizootias_df.empty:
@@ -760,7 +852,7 @@ def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
             else pd.DataFrame()
         )
         ultima_epizootia = get_latest_case_info(
-            epizootias_positivas, "fecha_recoleccion", ["vereda", "municipio"]
+            epizootias_positivas, "fecha_notificacion", ["vereda", "municipio"]
         )
         metrics["ultima_epizootia_positiva"] = ultima_epizootia
     else:
@@ -782,9 +874,8 @@ def calculate_basic_metrics(casos_df, epizootias_df, handle_empty=True):
 
     return metrics
 
-
 def get_latest_case_info(df, date_column, location_columns=None):
-    """Obtiene información del caso más reciente con manejo mejorado."""
+    """Obtiene información del caso más reciente."""
     if df.empty or date_column not in df.columns:
         return {
             "existe": False,
@@ -831,7 +922,7 @@ def get_latest_case_info(df, date_column, location_columns=None):
     }
 
 
-# ===== FUNCIONES DE PROCESAMIENTO (mantener las existentes) =====
+# ===== FUNCIONES DE PROCESAMIENTO =====
 
 
 def create_age_groups(ages):
@@ -893,8 +984,8 @@ def process_epizootias_dataframe(epizootias_df):
     df_processed = epizootias_df.copy()
 
     # Procesar fechas
-    if "fecha_recoleccion" in df_processed.columns:
-        df_processed["fecha_recoleccion"] = df_processed["fecha_recoleccion"].apply(
+    if "fecha_notificacion" in df_processed.columns:
+        df_processed["fecha_notificacion"] = df_processed["fecha_notificacion"].apply(
             excel_date_to_datetime
         )
 
@@ -909,8 +1000,8 @@ def process_epizootias_dataframe(epizootias_df):
         df_processed["proveniente"] = df_processed["proveniente"].str.strip()
 
     # Agregar año de recolección
-    if "fecha_recoleccion" in df_processed.columns:
-        df_processed["año_recoleccion"] = df_processed["fecha_recoleccion"].dt.year
+    if "fecha_notificacion" in df_processed.columns:
+        df_processed["año_notificacion"] = df_processed["fecha_notificacion"].dt.year
 
     # Categorizar resultados
     if "descripcion" in df_processed.columns:
@@ -951,11 +1042,11 @@ def prepare_dataframe_for_display(df, date_columns=None):
     return df_display
 
 
-# ===== FUNCIONES DE DEBUGGING SIMPLIFICADAS =====
+# ===== FUNCIONES DE DEBUGGING =====
 
 
 def debug_data_flow(data_original, data_filtered, filters, stage="unknown"):
-    """Debug simplificado del flujo de datos."""
+    """Debug del flujo de datos."""
     if isinstance(data_original, dict) and isinstance(data_filtered, dict):
         casos_orig = len(data_original.get("casos", []))
         epi_orig = len(data_original.get("epizootias", []))

@@ -1,71 +1,85 @@
 """
-Componente de barra lateral.
+components/sidebar.py - CORRECCIÓN PARA LOGO
 """
 
 import streamlit as st
+import logging
 from pathlib import Path
 
-# Definir rutas
-ROOT_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = ROOT_DIR / "data"
-ASSETS_DIR = ROOT_DIR / "assets"
-IMAGES_DIR = ASSETS_DIR / "images"
+logger = logging.getLogger(__name__)
 
 def create_sidebar():
-    """Crea la barra lateral completa."""
+    """Crea la barra lateral."""
     with st.sidebar:
         display_logo()
         st.markdown("---")
 
 def display_logo():
-    """Muestra logo con fallback automático."""
-    # Rutas posibles para el logo
+    """Muestra logo con fallback CORREGIDO."""
+    # ✅ CORRECCIÓN: Usar ConsolidatedDataLoader en lugar de autenticación separada
+    if load_logo_with_consolidated_loader():
+        return
+    
+    # 2. Buscar logo local como backup
     logo_paths = [
-        DATA_DIR / "Gobernacion.png",
-        DATA_DIR / "gobernacion.png", 
-        DATA_DIR / "logo.png",
-        IMAGES_DIR / "Gobernacion.png",
+        Path("data") / "Gobernacion.png",
+        Path("data") / "gobernacion.png", 
+        Path("data") / "logo.png",
     ]
     
-    # Buscar logo local
     for logo_path in logo_paths:
         if logo_path.exists():
             try:
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
                     st.image(logo_path, use_container_width=True)
+                logger.info(f"✅ Logo cargado desde archivo local: {logo_path}")
                 return
-            except Exception:
+            except Exception as e:
+                logger.warning(f"⚠️ Error cargando logo local {logo_path}: {str(e)}")
                 continue
     
-    # Intentar Google Drive si está disponible
-    if try_google_drive_logo():
-        return
-    
-    # Fallback: placeholder
+    # 3. Fallback: placeholder
+    logger.warning("⚠️ Logo no encontrado, usando placeholder")
     create_logo_placeholder()
 
-def try_google_drive_logo():
-    """Intenta cargar logo desde Google Drive."""
+def load_logo_with_consolidated_loader():
+    """
+    ✅ NUEVA FUNCIÓN: Usa ConsolidatedDataLoader que ya funciona
+    """
     try:
-        from gdrive_utils import check_google_drive_availability, get_file_from_drive
+        logger.info("🖼️ Cargando logo con ConsolidatedDataLoader...")
         
-        if (check_google_drive_availability() and 
-            hasattr(st.secrets, "drive_files") and 
-            "logo_gobernacion" in st.secrets.drive_files):
+        # 1. Verificar que el sistema esté disponible
+        from data_loader import get_data_loader, check_data_availability
+        
+        if not check_data_availability():
+            logger.warning("❌ ConsolidatedDataLoader no disponible")
+            return False
+        
+        # 2. Usar el loader que ya está autenticado
+        loader = get_data_loader()
+        logo_path = loader.load_logo_image()  # ← Usa método del loader
+        
+        # 3. Mostrar imagen si se descargó
+        if logo_path and Path(logo_path).exists():
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(logo_path, use_container_width=True)
+            logger.info("✅ Logo cargado exitosamente con ConsolidatedDataLoader")
+            return True
+        else:
+            logger.warning("❌ ConsolidatedDataLoader no pudo descargar logo")
+            return False
             
-            logo_id = st.secrets.drive_files["logo_gobernacion"]
-            logo_path = get_file_from_drive(logo_id, "Gobernacion.png")
-            
-            if logo_path and Path(logo_path).exists():
-                col1, col2, col3 = st.columns([1, 2, 1])
-                with col2:
-                    st.image(logo_path, use_container_width=True)
-                return True
-    except Exception:
-        pass
-    
-    return False
+    except ImportError as e:
+        logger.warning(f"⚠️ ConsolidatedDataLoader no disponible: {str(e)}")
+        return False
+    except Exception as e:
+        logger.error(f"❌ Error cargando logo con ConsolidatedDataLoader: {str(e)}")
+        return False
+
+# ✅ ELIMINAR load_logo_direct_pattern() - ya no se necesita
 
 def create_logo_placeholder():
     """Crea placeholder visual cuando no hay logo."""
@@ -114,43 +128,3 @@ def add_copyright():
         """,
         unsafe_allow_html=True,
     )
-
-def init_responsive_sidebar():
-    """Inicializa sidebar con CSS responsive."""
-    # CSS minimalista para sidebar
-    st.markdown(
-        """
-        <style>
-        .css-1d391kg {
-            min-width: 280px;
-            background-color: #fafafa;
-        }
-        
-        .sidebar .stButton > button {
-            width: 100%;
-            font-size: clamp(0.8rem, 2vw, 0.9rem);
-            background-color: #7D0F2B;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 0.5rem 1rem;
-            font-weight: 600;
-        }
-        
-        .sidebar .stButton > button:hover {
-            background-color: #5A4214;
-            transition: all 0.3s ease;
-        }
-        
-        @media (max-width: 768px) {
-            .css-1d391kg {
-                min-width: 250px;
-            }
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    
-    # Crear sidebar
-    create_sidebar()

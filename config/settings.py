@@ -1,5 +1,5 @@
 """
-Configuraciones esenciales del dashboard de Fiebre Amarilla.
+Configuraciones esenciales del dashboard.
 """
 
 from pathlib import Path
@@ -20,9 +20,10 @@ DASHBOARD_CONFIG = {
 # ===== ARCHIVOS DE DATOS =====
 DATA_FILES = {
     "casos_confirmados": "BD_positivos.xlsx",
-    "epizootias": "Información_Datos_FA.xlsx",
+    "epizootias": "BD_positivos.xlsx",  
     "casos_sheet": "ACUMU",
-    "epizootias_sheet": "Base de Datos",
+    "epizootias_sheet": "EPIZOOTIAS",  
+    "veredas_sheet": "VEREDAS",
 }
 
 # ===== MAPEOS CRÍTICOS =====
@@ -39,9 +40,9 @@ CASOS_COLUMNS_MAP = {
 # Mapeo de columnas para epizootias
 EPIZOOTIAS_COLUMNS_MAP = {
     "MUNICIPIO": "municipio",
-    "VEREDA": "vereda",
-    "FECHA RECOLECCIÓN ": "fecha_recoleccion",
-    "PROVENIENTE ": "proveniente",
+    "VEREDA": "vereda", 
+    "FECHA_NOTIFICACION": "fecha_notificacion",
+    "INFORMANTE": "proveniente",
     "DESCRIPCIÓN": "descripcion",
 }
 

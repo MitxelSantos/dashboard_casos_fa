@@ -62,8 +62,7 @@ MUNICIPIOS_TOLIMA = [
 
 def normalize_name(name: str) -> str:
     """
-    Normalización MÍNIMA - solo limpiar espacios.
-    Los nombres ya están estandarizados por fix.py
+    Limpiar espacios.
     """
     if not name:
         return ""
@@ -80,7 +79,6 @@ def validate_municipio_name(name: str) -> bool:
 def get_canonical_municipio_name(name: str) -> Optional[str]:
     """
     Obtiene el nombre canónico de un municipio.
-    Comparación directa - los nombres ya están estandarizados.
     """
     normalized = normalize_name(name)
     return normalized if normalized in MUNICIPIOS_TOLIMA else None
@@ -88,7 +86,7 @@ def get_canonical_municipio_name(name: str) -> Optional[str]:
 
 def find_exact_match(target_name: str, candidates: List[str]) -> Optional[str]:
     """
-    Búsqueda EXACTA - ya no necesita fuzzy matching.
+    Búsqueda EXACTA
     """
     if not target_name or not candidates:
         return None
@@ -103,7 +101,7 @@ def find_exact_match(target_name: str, candidates: List[str]) -> Optional[str]:
 
 
 def debug_name_matching(name1: str, name2: str) -> dict:
-    """Debug simplificado - solo comparación exacta."""
+    """Debug."""
     return {
         "input_name1": name1,
         "input_name2": name2,
@@ -111,21 +109,6 @@ def debug_name_matching(name1: str, name2: str) -> dict:
         "normalized_name2": normalize_name(name2),
         "match_exact": normalize_name(name1) == normalize_name(name2),
     }
-
-
-# ===== FUNCIONES DE COMPATIBILIDAD =====
-# (mantener para no romper imports existentes)
-
-normalize_name_robust = normalize_name
-normalize_name_with_accents = normalize_name
-normalize_name_for_display = normalize_name
-match_name_fuzzy = find_exact_match
-
-
-def find_equivalent_names(name: str) -> set:
-    """Compatibilidad - solo retorna el nombre normalizado."""
-    return {normalize_name(name)}
-
 
 def create_cross_reference_map(
     shapefile_names: List[str], veredas_names: List[str]

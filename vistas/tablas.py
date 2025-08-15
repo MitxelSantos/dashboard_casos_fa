@@ -1,5 +1,5 @@
 """
-Vista de análisis epidemiológico con drill-down mejorado.
+Vista de análisis epidemiológico.
 """
 
 import streamlit as st
@@ -11,13 +11,15 @@ from datetime import datetime
 import io
 import logging
 
+from utils.data_processor import calculate_basic_metrics
+
 logger = logging.getLogger(__name__)
 
 def show(data_filtered, filters, colors):
-    """Vista principal de análisis epidemiológico CON DRILL-DOWN."""
-    logger.info("📊 INICIANDO VISTA TABLAS CON DRILL-DOWN")
+    """Vista principal de análisis epidemiológico."""
+    logger.info("📊 INICIANDO VISTA TABLAS")
     
-    # Aplicar CSS estético UNA SOLA VEZ
+    # Aplicar CSS
     apply_tables_css_super_aesthetic(colors)
     
     # Verificar datos filtrados
@@ -39,12 +41,12 @@ def show(data_filtered, filters, colors):
 
     # **SECCIONES PRINCIPALES**
     show_executive_summary_optimized(casos_filtrados, epizootias_filtradas, filters, colors)
+    show_location_summary_with_drilldown(casos_filtrados, epizootias_filtradas, filters, colors, data_filtered)
     show_detailed_tables_optimized(casos_filtrados, epizootias_filtradas, colors)
-    show_location_summary_with_drilldown(casos_filtrados, epizootias_filtradas, filters, colors, data_filtered)  # NUEVA FUNCIÓN
     show_visual_analysis_optimized(casos_filtrados, epizootias_filtradas, colors)
     show_export_section_optimized(casos_filtrados, epizootias_filtradas, filters, colors)
 
-# ===== NUEVA SECCIÓN: DRILL-DOWN POR UBICACIÓN =====
+# ===== DRILL-DOWN POR UBICACIÓN =====
 
 def show_location_summary_with_drilldown(casos, epizootias, filters, colors, data_original):
     """Resumen por ubicación con drill-down inteligente."""
@@ -276,7 +278,7 @@ def show_multiple_selection_summary(casos, epizootias, filters, colors):
 # ===== FUNCIONES DE CREACIÓN DE RESÚMENES =====
 
 def create_municipal_summary_optimized(casos, epizootias, data_original):
-    """Crea resumen municipal con TODOS los municipios del Tolima."""
+    """Crea resumen municipal."""
     summary_data = []
     
     # Lista completa de municipios del Tolima (desde configuración)
@@ -305,6 +307,7 @@ def create_municipal_summary_optimized(casos, epizootias, data_original):
         fallecidos = 0
         if not casos_municipio.empty and "condicion_final" in casos_municipio.columns:
             fallecidos = (casos_municipio["condicion_final"] == "Fallecido").sum()
+            vivos = (casos_municipio["condicion_final"] == "Vivo").sum()
         
         letalidad = (fallecidos / total_casos * 100) if total_casos > 0 else 0
         
@@ -347,7 +350,7 @@ def create_vereda_summary_optimized(casos, epizootias, municipio_actual, data_or
     
     municipio_norm = normalize_name(municipio_actual)
     
-    # Obtener TODAS las veredas del municipio (incluso sin datos)
+    # Obtener las veredas del municipio
     todas_las_veredas = get_all_veredas_for_municipio(municipio_actual, data_original)
     
     for vereda in todas_las_veredas:
@@ -488,7 +491,7 @@ def get_all_tolima_municipios(data_original):
     return todos_municipios
 
 def get_all_veredas_for_municipio(municipio, data_original):
-    """Obtiene TODAS las veredas de un municipio (incluso sin datos)."""
+    """Obtiene las veredas de un municipio (incluso sin datos)."""
     def normalize_name(name):
         return str(name).upper().strip() if pd.notna(name) else ""
     
@@ -511,12 +514,6 @@ def get_all_veredas_for_municipio(municipio, data_original):
             ]
             veredas.update(epi_municipio["vereda"].dropna().unique())
     
-    # TODO: Aquí deberías cargar desde BD_positivos.xlsx hoja "VEREDAS" cuando esté disponible
-    # if "veredas_completas" in data_original:
-    #     veredas_completas = data_original["veredas_completas"]
-    #     veredas_municipio = veredas_completas[veredas_completas["municipi_1"] == municipio]
-    #     veredas.update(veredas_municipio["vereda_nor"].dropna().unique())
-    
     veredas_lista = sorted([v for v in veredas if v and str(v).strip()])
     
     # Si no hay veredas, agregar placeholder
@@ -533,8 +530,8 @@ def get_ultima_actividad_vereda(casos_vereda, epi_vereda):
     if not casos_vereda.empty and "fecha_inicio_sintomas" in casos_vereda.columns:
         fechas.extend(casos_vereda["fecha_inicio_sintomas"].dropna().tolist())
     
-    if not epi_vereda.empty and "fecha_recoleccion" in epi_vereda.columns:
-        fechas.extend(epi_vereda["fecha_recoleccion"].dropna().tolist())
+    if not epi_vereda.empty and "fecha_notificacion" in epi_vereda.columns:
+        fechas.extend(epi_vereda["fecha_notificacion"].dropna().tolist())
     
     if fechas:
         ultima_fecha = max(fechas)
@@ -611,11 +608,11 @@ def create_vereda_temporal_analysis(casos, epizootias, vereda, municipio, colors
                 })
     
     # Agregar epizootias
-    if not epi_vereda.empty and "fecha_recoleccion" in epi_vereda.columns:
+    if not epi_vereda.empty and "fecha_notificacion" in epi_vereda.columns:
         for idx, epi in epi_vereda.iterrows():
-            if pd.notna(epi["fecha_recoleccion"]):
+            if pd.notna(epi["fecha_notificacion"]):
                 eventos_timeline.append({
-                    "fecha": epi["fecha_recoleccion"],
+                    "fecha": epi["fecha_notificacion"],
                     "tipo": "Epizootia",
                     "descripcion": f"Epizootia - {epi.get('descripcion', 'N/A')}",
                     "estado": epi.get("descripcion", "N/A")
@@ -680,7 +677,7 @@ def create_vereda_specific_metrics(casos, epizootias, vereda, municipio, colors)
         ]
     
     # Métricas en columnas
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         st.metric("🦠 Casos Total", len(casos_vereda))
@@ -695,6 +692,9 @@ def create_vereda_specific_metrics(casos, epizootias, vereda, municipio, colors)
     with col4:
         positivas = len(epi_vereda[epi_vereda["descripcion"] == "POSITIVO FA"]) if not epi_vereda.empty and "descripcion" in epi_vereda.columns else 0
         st.metric("🔴 Positivas", positivas)
+    with col5:
+        en_estudio = len(epi_vereda[epi_vereda["descripcion"] == "EN ESTUDIO"]) if not epi_vereda.empty and "descripcion" in epi_vereda.columns else 0
+        st.metric("🔵 En Estudio", en_estudio)
     
     # Información adicional
     if not casos_vereda.empty or not epi_vereda.empty:
@@ -821,11 +821,8 @@ def create_summary_export_button(display_df, context, filters):
         use_container_width=True
     )
 
-# ===== FUNCIONES ORIGINALES (mantener las existentes) =====
-
 def show_executive_summary_optimized(casos, epizootias, filters, colors):
     """Resumen ejecutivo con métricas principales."""
-    from utils.data_processor import calculate_basic_metrics
     
     st.markdown(
         """
@@ -854,22 +851,26 @@ def show_executive_summary_optimized(casos, epizootias, filters, colors):
         unsafe_allow_html=True,
     )
 
-    # Calcular métricas UNA SOLA VEZ
+    # Calcular métricas
     metrics = calculate_basic_metrics(casos, epizootias)
     
     # Mostrar métricas en grid
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
     
     with col1:
         st.metric("🦠 Casos Humanos", metrics["total_casos"])
     with col2:
         st.metric("⚰️ Fallecidos", metrics["fallecidos"], 
-                 delta=f"{metrics['letalidad']:.1f}% letalidad")
+                delta=f"{metrics['letalidad']:.1f}% letalidad",delta_color="inverse")
     with col3:
-        st.metric("🐒 Epizootias", metrics["total_epizootias"])
+        st.metric("❤️ Vivos", metrics['vivos'],
+                delta=f"{metrics['supervivencia']:.1f}% supervivencia")
     with col4:
-        st.metric("🔴 Positivas", metrics["epizootias_positivas"], 
-                 delta=f"{metrics['positividad']:.1f}% positividad")
+        st.metric("🐒 Epizootias", metrics["total_epizootias"])
+    with col5:
+        st.metric("🔴 Positivas", metrics["epizootias_positivas"],)
+    with col6:
+        st.metric("🔵 En Estudio", metrics["epizootias_en_estudio"])
 
     # Información de últimos eventos
     create_last_events_info_optimized(metrics, active_filters, colors)
@@ -877,7 +878,7 @@ def show_executive_summary_optimized(casos, epizootias, filters, colors):
     st.markdown("</div>", unsafe_allow_html=True)
 
 def create_last_events_info_optimized(metrics, active_filters, colors):
-    """Información de últimos eventos optimizada."""
+    """Información de últimos eventos."""
     col1, col2 = st.columns(2)
     
     filter_suffix = " (en área filtrada)" if active_filters else ""
@@ -1068,8 +1069,8 @@ def prepare_data_for_display(data, data_type):
         }
     else:  # epizootias
         # Formatear fechas
-        if "fecha_recoleccion" in data_display.columns:
-            data_display["fecha_recoleccion"] = data_display["fecha_recoleccion"].dt.strftime('%d/%m/%Y')
+        if "fecha_notificacion" in data_display.columns:
+            data_display["fecha_notificacion"] = data_display["fecha_notificacion"].dt.strftime('%d/%m/%Y')
         
         # Simplificar proveniente
         if "proveniente" in data_display.columns:
@@ -1080,7 +1081,7 @@ def prepare_data_for_display(data, data_type):
             )
         
         rename_map = {
-            'municipio': 'Municipio', 'vereda': 'Vereda', 'fecha_recoleccion': 'Fecha Recolección',
+            'municipio': 'Municipio', 'vereda': 'Vereda', 'fecha_notificacion': 'Fecha Notificación',
             'descripcion': 'Resultado', 'proveniente': 'Fuente'
         }
     
@@ -1305,7 +1306,7 @@ def create_metadata_optimized(casos, epizootias, filters):
     
     return pd.DataFrame(metadata_rows)
 
-# ===== CSS SÚPER ESTÉTICO (mantener el existente) =====
+# ===== CSS =====
 
 def apply_tables_css_super_aesthetic(colors):
     """CSS súper estético para tablas aplicado UNA SOLA VEZ."""
