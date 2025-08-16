@@ -21,13 +21,12 @@ htmlcov/
 *.xlsx
 !sample_data.xlsx
 !datasets/sample/
-data/FIBRE*
 *.parquet
 *.feather
 *.sqlite
 *.db
-.data
 data/processed
+data/shapefiles
 
 # Secretos y configuración
 .streamlit/secrets.toml
