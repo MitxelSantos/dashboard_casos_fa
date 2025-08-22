@@ -508,7 +508,7 @@ def guardar_resultado_csv(conteo_poblacional):
     
     # Generar nombre de archivo con timestamp
     timestamp = datetime.now().strftime('%Y%m%d')
-    archivo_csv = f'data\\processed\\conteo_poblacional_tolima_{timestamp}.csv'
+    archivo_csv = f'data\\processed\\poblacion_tolima_{timestamp}.csv'
     
     try:
         conteo_poblacional.to_csv(archivo_csv, index=False, encoding='utf-8-sig')

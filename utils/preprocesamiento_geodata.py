@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script para generar archivo unificado de unidades territoriales del Tolima
-Incluye 3 niveles: departamento, municipios y veredas + información de regiones
+Incluye 4 niveles: departamento, municipios, veredas y cabeceras municipales
 Autor: Tu proyecto epidemiológico
 """
 
@@ -11,7 +11,7 @@ from pathlib import Path
 import warnings
 warnings.filterwarnings('ignore')
 
-# Mapeo municipio -> región (usando nombres exactos del shapefile IGAC)
+# Mapeo municipio -> región (usando nombres exactos del shapefile de municipios)
 MUNICIPIO_REGION = {
     'Ibagué': 'CENTRO',
     'Villarrica': 'ORIENTE',
@@ -62,167 +62,155 @@ MUNICIPIO_REGION = {
     'Armero': 'NORTE'
 }
 
-def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacional, ruta_salida="tolima_completo_con_regiones"):
+def to_title_case(text):
+    """Convierte texto a Title Case respetando preposiciones"""
+    if not text:
+        return text
+    
+    # Palabras que deben permanecer en minúsculas (preposiciones, artículos)
+    lowercase_words = {'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'u'}
+    
+    words = str(text).split()
+    result = []
+    
+    for i, word in enumerate(words):
+        # Primera palabra siempre en Title Case
+        if i == 0:
+            result.append(word.capitalize())
+        # Preposiciones en minúsculas (excepto si es la primera palabra)
+        elif word.lower() in lowercase_words:
+            result.append(word.lower())
+        # Resto en Title Case
+        else:
+            result.append(word.capitalize())
+    
+    return ' '.join(result)
+
+def crear_mapeo_municipio_codigo(municipios_gdf):
+    """Crear mapeo de código municipio -> nombre para asignar regiones a cabeceras"""
+    mapeo = {}
+    for _, row in municipios_gdf.iterrows():
+        codigo = row['MpCodigo']
+        nombre = row['MpNombre']
+        mapeo[codigo] = nombre
+    return mapeo
+
+def crear_unidades_tolima_urbano_rural(ruta_municipios, ruta_veredas, ruta_cabeceras, ruta_salida="tolima_cabeceras_veredas"):
     """
     Crea archivo unificado de unidades territoriales del Tolima
-    con 3 niveles: departamento, municipios y veredas + información de regiones
+    con 4 niveles: departamento, municipios, veredas y cabeceras municipales
     
     Args:
-        ruta_veredas_nacional: Ruta al shapefile CRVeredas_2020.shp
-        ruta_municipios_nacional: Ruta al shapefile de municipios IGAC
+        ruta_municipios: Ruta al shapefile Municipios.shp
+        ruta_veredas: Ruta al shapefile Veredas.shp  
+        ruta_cabeceras: Ruta al shapefile Cabeceras_Municipales.shp
         ruta_salida: Nombre base para archivos de salida
     """
     
-    print("🗺️  Cargando shapefiles nacionales...")
-    
-    # Cargar veredas
-    print("   📁 Cargando veredas...")
-    veredas_nacional = gpd.read_file(ruta_veredas_nacional)
-    print(f"      Total veredas nacionales: {len(veredas_nacional):,}")
+    print("🗺️  Cargando shapefiles...")
     
     # Cargar municipios
     print("   📁 Cargando municipios...")
-    municipios_nacional = gpd.read_file(ruta_municipios_nacional)
-    print(f"      Total municipios nacionales: {len(municipios_nacional):,}")
-    
-    # Filtrar solo Tolima
-    print("🎯 Filtrando datos del Tolima...")
-    
-    # Veredas del Tolima
-    tolima_veredas = veredas_nacional[
-        veredas_nacional['COD_DPTO'] == '73'
-    ].copy()
-    print(f"   📊 Veredas del Tolima: {len(tolima_veredas):,}")
-    
-    # Municipios del Tolima
+    municipios_nacional = gpd.read_file(ruta_municipios)
     tolima_municipios = municipios_nacional[
         municipios_nacional['MpCodigo'].str.startswith('73')
     ].copy()
-    print(f"   📊 Municipios del Tolima: {len(tolima_municipios):,}")
+    print(f"      Municipios del Tolima: {len(tolima_municipios)}")
+    
+    # Cargar veredas
+    print("   📁 Cargando veredas...")
+    veredas_nacional = gpd.read_file(ruta_veredas)
+    tolima_veredas = veredas_nacional[
+        veredas_nacional['COD_DPTO'] == '73'
+    ].copy()
+    print(f"      Veredas del Tolima: {len(tolima_veredas)}")
+    
+    # Cargar cabeceras (solo COD_CLAS = 1)
+    print("   📁 Cargando cabeceras municipales...")
+    cabeceras_nacional = gpd.read_file(ruta_cabeceras)
+    tolima_cabeceras = cabeceras_nacional[
+        (cabeceras_nacional['COD_DPTO'] == '73') &
+        (cabeceras_nacional['COD_CLAS'] == '1')
+    ].copy()
+    print(f"      Cabeceras municipales del Tolima: {len(tolima_cabeceras)}")
     
     # Verificar sistemas de coordenadas y unificar
     print("🔄 Unificando sistemas de coordenadas...")
-    
-    if tolima_veredas.crs != 'EPSG:4326':
-        print(f"   🔄 Convirtiendo veredas de {tolima_veredas.crs} a EPSG:4326...")
-        tolima_veredas = tolima_veredas.to_crs('EPSG:4326')
     
     if tolima_municipios.crs != 'EPSG:4326':
         print(f"   🔄 Convirtiendo municipios de {tolima_municipios.crs} a EPSG:4326...")
         tolima_municipios = tolima_municipios.to_crs('EPSG:4326')
     
+    if tolima_veredas.crs != 'EPSG:4326':
+        print(f"   🔄 Convirtiendo veredas de {tolima_veredas.crs} a EPSG:4326...")
+        tolima_veredas = tolima_veredas.to_crs('EPSG:4326')
+        
+    if tolima_cabeceras.crs != 'EPSG:4326':
+        print(f"   🔄 Convirtiendo cabeceras de {tolima_cabeceras.crs} a EPSG:4326...")
+        tolima_cabeceras = tolima_cabeceras.to_crs('EPSG:4326')
+    
+    # Crear mapeo código -> nombre de municipio para cabeceras
+    mapeo_codigo_municipio = crear_mapeo_municipio_codigo(tolima_municipios)
+    
     # Asignar regiones
     print("🏷️  Asignando regiones...")
     
-    # Mapeo de nombres que difieren entre shapefiles
-    MAPEO_NOMBRES_VEREDAS = {
-        'SAN SEBASTIÁN DE MARIQUITA': 'Mariquita',
-        # Agregar otros si se encuentran
-    }
-    
-    # Función para convertir texto a Title Case apropiado
-    def to_title_case(text):
-        """Convierte texto a Title Case respetando preposiciones"""
-        if not text:
-            return text
-        
-        # Palabras que deben permanecer en minúsculas (preposiciones, artículos)
-        lowercase_words = {'de', 'del', 'la', 'las', 'el', 'los', 'y', 'e', 'o', 'u'}
-        
-        words = str(text).split()
-        result = []
-        
-        for i, word in enumerate(words):
-            # Primera palabra siempre en Title Case
-            if i == 0:
-                result.append(word.capitalize())
-            # Preposiciones en minúsculas (excepto si es la primera palabra)
-            elif word.lower() in lowercase_words:
-                result.append(word.lower())
-            # Resto en Title Case
-            else:
-                result.append(word.capitalize())
-        
-        return ' '.join(result)
-    
-    # Función para estandarizar nombres de municipios a Title Case
-    def estandarizar_nombre_municipio(nombre_vereda):
-        """Convierte nombre de municipio de vereda a formato Title Case estándar"""
-        if not nombre_vereda:
-            return nombre_vereda
-            
-        # Aplicar mapeo de nombres diferentes
-        nombre_normalizado = MAPEO_NOMBRES_VEREDAS.get(nombre_vereda, nombre_vereda)
-        
-        # Buscar el nombre en Title Case correspondiente en el diccionario
-        for nombre_title, region in MUNICIPIO_REGION.items():
-            if nombre_title.upper() == nombre_normalizado.upper():
-                return nombre_title
-        
-        # Si no se encuentra, devolver el original
-        return nombre_vereda
-    
-    # Asignar regiones a municipios (usar nombres directos del shapefile)
+    # Asignar regiones a municipios
     tolima_municipios['region'] = tolima_municipios['MpNombre'].map(MUNICIPIO_REGION)
     
-    # Para veredas: primero mapear nombres diferentes, luego buscar región
-    tolima_veredas['municipio_normalizado'] = tolima_veredas['NOMB_MPIO'].apply(
-        lambda x: MAPEO_NOMBRES_VEREDAS.get(x, x)
-    )
-    
+    # Para veredas: resolver inconsistencia de nombres (mayúsculas vs title case)
     # Crear diccionario de región basado en nombres normalizados
     municipio_region_normalizado = {}
     for nombre_title, region in MUNICIPIO_REGION.items():
         municipio_region_normalizado[nombre_title.upper()] = region
     
-    # Asignar regiones a veredas
-    tolima_veredas['region'] = tolima_veredas['municipio_normalizado'].apply(
-        lambda x: municipio_region_normalizado.get(x.upper())
-    )
+    # Mapeo especial para nombres que difieren
+    MAPEO_NOMBRES_VEREDAS = {
+        'SAN SEBASTIÁN DE MARIQUITA': 'MARIQUITA'
+    }
     
-    # Estandarizar nombres de municipios en veredas a Title Case
-    tolima_veredas['municipio_estandarizado'] = tolima_veredas['municipio_normalizado'].apply(
-        lambda x: next((nombre for nombre in MUNICIPIO_REGION.keys() if nombre.upper() == x.upper()), x)
-    )
+    # Asignar regiones a veredas
+    def asignar_region_vereda(nombre_municipio):
+        # Aplicar mapeo de nombres especiales
+        nombre_normalizado = MAPEO_NOMBRES_VEREDAS.get(nombre_municipio, nombre_municipio)
+        return municipio_region_normalizado.get(nombre_normalizado.upper())
+    
+    tolima_veredas['region'] = tolima_veredas['NOMB_MPIO'].apply(asignar_region_vereda)
+    
+    # Estandarizar nombres de municipios en veredas
+    def estandarizar_nombre_municipio_vereda(nombre_municipio):
+        nombre_normalizado = MAPEO_NOMBRES_VEREDAS.get(nombre_municipio, nombre_municipio)
+        # Buscar correspondencia en el diccionario de regiones
+        for nombre_title in MUNICIPIO_REGION.keys():
+            if nombre_title.upper() == nombre_normalizado.upper():
+                return nombre_title
+        return nombre_municipio
+    
+    tolima_veredas['municipio_estandarizado'] = tolima_veredas['NOMB_MPIO'].apply(estandarizar_nombre_municipio_vereda)
     
     # Estandarizar nombres de veredas a Title Case
     tolima_veredas['vereda_estandarizada'] = tolima_veredas['NOMBRE_VER'].apply(to_title_case)
     
+    # Asignar regiones y municipios a cabeceras
+    tolima_cabeceras['municipio_nombre'] = tolima_cabeceras['COD_MPIO'].map(mapeo_codigo_municipio)
+    tolima_cabeceras['region'] = tolima_cabeceras['municipio_nombre'].map(MUNICIPIO_REGION)
+    tolima_cabeceras['cabecera_estandarizada'] = tolima_cabeceras['NOM_CPOB'].apply(to_title_case)
+    
     # Verificar asignación de regiones
     municipios_sin_region = tolima_municipios[tolima_municipios['region'].isna()]
     veredas_sin_region = tolima_veredas[tolima_veredas['region'].isna()]
+    cabeceras_sin_region = tolima_cabeceras[tolima_cabeceras['region'].isna()]
+    
+    print(f"   ✅ Municipios con región: {len(tolima_municipios) - len(municipios_sin_region)}/{len(tolima_municipios)}")
+    print(f"   ✅ Veredas con región: {len(tolima_veredas) - len(veredas_sin_region)}/{len(tolima_veredas)}")
+    print(f"   ✅ Cabeceras con región: {len(tolima_cabeceras) - len(cabeceras_sin_region)}/{len(tolima_cabeceras)}")
     
     if len(municipios_sin_region) > 0:
-        print(f"   ⚠️  {len(municipios_sin_region)} municipios sin región:")
-        for _, mun in municipios_sin_region.iterrows():
-            print(f"      - {mun['MpNombre']} (código: {mun['MpCodigo']})")
-    else:
-        print("   ✅ Todos los municipios tienen región asignada")
-    
+        print(f"   ⚠️  Municipios sin región: {list(municipios_sin_region['MpNombre'])}")
     if len(veredas_sin_region) > 0:
-        print(f"   ⚠️  {len(veredas_sin_region)} veredas sin región")
-        municipios_faltantes = veredas_sin_region['NOMB_MPIO'].unique()
-        print(f"      Municipios faltantes en veredas: {municipios_faltantes}")
-    else:
-        print("   ✅ Todas las veredas tienen región asignada")
-    
-    # Verificar estandarización de nombres
-    print("\n📝 Verificando estandarización de nombres...")
-    nombres_unicos_municipios = set(tolima_municipios['MpNombre'].unique())
-    nombres_unicos_veredas = set(tolima_veredas['municipio_estandarizado'].unique())
-    
-    diferencias = nombres_unicos_veredas - nombres_unicos_municipios
-    if diferencias:
-        print(f"   ⚠️  Nombres en veredas no encontrados en municipios: {diferencias}")
-    else:
-        print("   ✅ Todos los nombres de municipios están estandarizados correctamente")
-    
-    # Verificar estandarización de nombres de veredas
-    print("   📝 Nombres de veredas estandarizados a Title Case:")
-    muestra_veredas = tolima_veredas[['NOMBRE_VER', 'vereda_estandarizada']].head(5)
-    for _, row in muestra_veredas.iterrows():
-        print(f"      '{row['NOMBRE_VER']}' → '{row['vereda_estandarizada']}'")
-    print("   ✅ Nombres de veredas estandarizados correctamente")
+        print(f"   ⚠️  Veredas sin región: {len(veredas_sin_region)} (municipios: {list(veredas_sin_region['NOMB_MPIO'].unique())})")
+    if len(cabeceras_sin_region) > 0:
+        print(f"   ⚠️  Cabeceras sin región: {len(cabeceras_sin_region)}")
     
     # Crear estructura unificada
     print("🔧 Creando estructuras unificadas...")
@@ -232,41 +220,31 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
     departamento_geom = tolima_municipios.dissolve().geometry.iloc[0]
     area_total_km2 = tolima_veredas['AREA_HA'].sum() / 100  # Convertir ha a km²
     
-    # Calcular perímetro departamental en km (aproximado)
-    departamento_bounds = tolima_municipios.total_bounds
-    perimetro_aprox = 2 * ((departamento_bounds[2] - departamento_bounds[0]) + 
-                          (departamento_bounds[3] - departamento_bounds[1])) * 111  # Conversión grados a km
+    # Calcular perímetro departamental aproximado
+    departamento_temp = tolima_municipios.dissolve().to_crs('EPSG:3857')
+    perimetro_total_km = departamento_temp.geometry.length.iloc[0] / 1000
     
     departamento = gpd.GeoDataFrame({
         'tipo': ['departamento'],
         'codigo_divipola': ['73'],
         'codigo_dpto': ['73'],
         'codigo_municipio': [None],
-        'nombre': ['Tolima'],
+        'nombre': ['TOLIMA'],
         'municipio': [None],
-        'region': ['TODAS'],  # Nivel departamental incluye todas las regiones
+        'region': ['TODAS'],
         'area_oficial_km2': [area_total_km2],
-        'area_geometrica_km2': [area_total_km2],  # Similar para departamento
-        'perimetro_km': [perimetro_aprox],
+        'area_geometrica_km2': [area_total_km2],
+        'perimetro_km': [perimetro_total_km],
         'geometry': [departamento_geom]
     }, crs='EPSG:4326')
     
     # 2. NIVEL MUNICIPAL
     print("   🏘️  Generando nivel municipal...")
     
-    # Convertir SHAPE_Area de m² a km² (si está en metros cuadrados)
-    # Si está en grados cuadrados, calcular área real
-    if tolima_municipios.crs == 'EPSG:4326':
-        # Para coordenadas geográficas, calcular área real
-        municipios_temp = tolima_municipios.to_crs('EPSG:3857')  # Proyección para cálculo preciso
-        area_geometrica_m2 = municipios_temp.geometry.area
-        perimetro_m = municipios_temp.geometry.length
-        area_geometrica_km2 = area_geometrica_m2 / 1_000_000
-        perimetro_km = perimetro_m / 1_000
-    else:
-        # Si ya está proyectado, usar directamente
-        area_geometrica_km2 = tolima_municipios['SHAPE_Area'] / 1_000_000
-        perimetro_km = tolima_municipios['SHAPE_Leng'] / 1_000
+    # Calcular áreas geométricas reales
+    municipios_temp = tolima_municipios.to_crs('EPSG:3857')
+    area_geometrica_municipios_km2 = municipios_temp.geometry.area / 1_000_000
+    perimetro_municipios_km = municipios_temp.geometry.length / 1_000
     
     municipios = gpd.GeoDataFrame({
         'tipo': 'municipio',
@@ -276,38 +254,54 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
         'nombre': tolima_municipios['MpNombre'],
         'municipio': tolima_municipios['MpNombre'],
         'region': tolima_municipios['region'],
-        'area_oficial_km2': tolima_municipios['MpArea'],  # Área oficial en km²
-        'area_geometrica_km2': area_geometrica_km2,      # Área calculada del polígono
-        'perimetro_km': perimetro_km,                    # Perímetro en km
+        'area_oficial_km2': tolima_municipios['MpArea'],
+        'area_geometrica_km2': area_geometrica_municipios_km2,
+        'perimetro_km': perimetro_municipios_km,
         'geometry': tolima_municipios['geometry']
     }, crs='EPSG:4326')
     
-    # 3. NIVEL VEREDAL
-    print("   🌾 Generando nivel veredal...")
+    # 3. NIVEL VEREDAL (RURAL)
+    print("   🌾 Generando nivel veredal (rural)...")
     
-    # Convertir áreas de veredas (similar proceso)
-    if tolima_veredas.crs == 'EPSG:4326':
-        veredas_temp = tolima_veredas.to_crs('EPSG:3857')
-        area_geometrica_veredas_m2 = veredas_temp.geometry.area
-        perimetro_veredas_m = veredas_temp.geometry.length
-        area_geometrica_veredas_km2 = area_geometrica_veredas_m2 / 1_000_000
-        perimetro_veredas_km = perimetro_veredas_m / 1_000
-    else:
-        area_geometrica_veredas_km2 = tolima_veredas['SHAPE_Area'] / 1_000_000
-        perimetro_veredas_km = tolima_veredas['SHAPE_Leng'] / 1_000
+    # Calcular áreas geométricas de veredas
+    veredas_temp = tolima_veredas.to_crs('EPSG:3857')
+    area_geometrica_veredas_km2 = veredas_temp.geometry.area / 1_000_000
+    perimetro_veredas_km = veredas_temp.geometry.length / 1_000
     
     veredas = gpd.GeoDataFrame({
         'tipo': 'vereda',
         'codigo_divipola': tolima_veredas['CODIGO_VER'],
         'codigo_dpto': tolima_veredas['COD_DPTO'],
         'codigo_municipio': tolima_veredas['DPTOMPIO'],
-        'nombre': tolima_veredas['vereda_estandarizada'],  # Usar nombre estandarizado
-        'municipio': tolima_veredas['municipio_estandarizado'],  # Usar nombre estandarizado
+        'nombre': tolima_veredas['vereda_estandarizada'],
+        'municipio': tolima_veredas['municipio_estandarizado'],
         'region': tolima_veredas['region'],
-        'area_oficial_km2': tolima_veredas['AREA_HA'] / 100,    # Convertir ha a km²
-        'area_geometrica_km2': area_geometrica_veredas_km2,     # Área calculada del polígono
-        'perimetro_km': perimetro_veredas_km,                   # Perímetro en km
+        'area_oficial_km2': tolima_veredas['AREA_HA'] / 100,
+        'area_geometrica_km2': area_geometrica_veredas_km2,
+        'perimetro_km': perimetro_veredas_km,
         'geometry': tolima_veredas['geometry']
+    }, crs='EPSG:4326')
+    
+    # 4. NIVEL CABECERAS (URBANO)
+    print("   🏛️  Generando nivel cabeceras (urbano)...")
+    
+    # Calcular áreas geométricas de cabeceras
+    cabeceras_temp = tolima_cabeceras.to_crs('EPSG:3857')
+    area_geometrica_cabeceras_km2 = cabeceras_temp.geometry.area / 1_000_000
+    perimetro_cabeceras_km = cabeceras_temp.geometry.length / 1_000
+    
+    cabeceras = gpd.GeoDataFrame({
+        'tipo': 'cabecera',
+        'codigo_divipola': tolima_cabeceras['COD_DANE'],
+        'codigo_dpto': tolima_cabeceras['COD_DPTO'],
+        'codigo_municipio': tolima_cabeceras['COD_MPIO'],
+        'nombre': tolima_cabeceras['cabecera_estandarizada'],
+        'municipio': tolima_cabeceras['municipio_nombre'],
+        'region': tolima_cabeceras['region'],
+        'area_oficial_km2': tolima_cabeceras['CPOB_AREA'],
+        'area_geometrica_km2': area_geometrica_cabeceras_km2,
+        'perimetro_km': perimetro_cabeceras_km,
+        'geometry': tolima_cabeceras['geometry']
     }, crs='EPSG:4326')
     
     # Unificar todos los niveles
@@ -316,7 +310,8 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
     unidades_unificadas = pd.concat([
         departamento,
         municipios.reset_index(drop=True),
-        veredas.reset_index(drop=True)
+        veredas.reset_index(drop=True),
+        cabeceras.reset_index(drop=True)
     ], ignore_index=True)
     
     # Convertir a GeoDataFrame
@@ -324,12 +319,10 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
     
     # Limpiar datos
     print("🧹 Limpiando datos...")
-    
-    # Resetear índice y limpiar
     unidades_unificadas = unidades_unificadas.reset_index(drop=True)
     
-    # Ordenar por tipo y código para mejor organización
-    orden_tipos = {'departamento': 1, 'municipio': 2, 'vereda': 3}
+    # Ordenar por tipo y código
+    orden_tipos = {'departamento': 1, 'municipio': 2, 'vereda': 3, 'cabecera': 4}
     unidades_unificadas['orden'] = unidades_unificadas['tipo'].map(orden_tipos)
     unidades_unificadas = unidades_unificadas.sort_values(['orden', 'codigo_divipola']).drop('orden', axis=1)
     unidades_unificadas = unidades_unificadas.reset_index(drop=True)
@@ -345,22 +338,30 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
     print(f"   • Área total: {area_total:,.2f} km²")
     print(f"   • Sistema coordenadas: {unidades_unificadas.crs}")
     
-    # Estadísticas geométricas
-    print(f"   • Información geométrica conservada: perímetros, áreas oficiales y calculadas")
-    print(f"   • Índices calculables on-demand: compacidad, complejidad, ratios geométricos")
+    # Estadísticas urbano/rural
+    print(f"\n🏙️  Estadísticas urbano/rural:")
+    rural_count = len(unidades_unificadas[unidades_unificadas['tipo'] == 'vereda'])
+    urbano_count = len(unidades_unificadas[unidades_unificadas['tipo'] == 'cabecera'])
+    print(f"   • Rural (veredas): {rural_count:,}")
+    print(f"   • Urbano (cabeceras): {urbano_count:,}")
+    
+    area_rural = unidades_unificadas[unidades_unificadas['tipo'] == 'vereda']['area_oficial_km2'].sum()
+    area_urbana = unidades_unificadas[unidades_unificadas['tipo'] == 'cabecera']['area_oficial_km2'].sum()
+    print(f"   • Área rural: {area_rural:,.2f} km² ({area_rural/area_total*100:.1f}%)")
+    print(f"   • Área urbana: {area_urbana:,.2f} km² ({area_urbana/area_total*100:.1f}%)")
     
     # Estadísticas por región
-    print("\n📍 Estadísticas por región:")
-    regiones_stats = unidades_unificadas[unidades_unificadas['tipo'] != 'departamento']['region'].value_counts()
+    print(f"\n📍 Estadísticas por región:")
+    regiones_stats = unidades_unificadas[unidades_unificadas['tipo'].isin(['vereda', 'cabecera'])]['region'].value_counts()
     for region, count in regiones_stats.items():
         if region != 'TODAS':
-            municipios_region = len(unidades_unificadas[(unidades_unificadas['tipo'] == 'municipio') & (unidades_unificadas['region'] == region)])
             veredas_region = len(unidades_unificadas[(unidades_unificadas['tipo'] == 'vereda') & (unidades_unificadas['region'] == region)])
-            area_region = unidades_unificadas[(unidades_unificadas['tipo'] == 'vereda') & (unidades_unificadas['region'] == region)]['area_oficial_km2'].sum()
-            print(f"   • {region}: {municipios_region} municipios, {veredas_region} veredas ({area_region:,.2f} km²)")
+            cabeceras_region = len(unidades_unificadas[(unidades_unificadas['tipo'] == 'cabecera') & (unidades_unificadas['region'] == region)])
+            area_region = unidades_unificadas[unidades_unificadas['region'] == region]['area_oficial_km2'].sum()
+            print(f"   • {region}: {veredas_region} veredas + {cabeceras_region} cabeceras ({area_region:,.2f} km²)")
     
     # Verificar calidad de datos
-    print("\n🔍 Verificando calidad de datos...")
+    print(f"\n🔍 Verificando calidad de datos...")
     nulos = unidades_unificadas.isnull().sum()
     if nulos.sum() > 0:
         print("   ⚠️  Valores nulos encontrados:")
@@ -384,7 +385,6 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
     
     # 3. Shapefile (compatible con todo)
     ruta_shapefile = f"{ruta_salida}.shp"
-    # Truncar nombres de columnas para shapefile (límite 10 caracteres)
     columnas_shp = unidades_unificadas.copy()
     columnas_shp = columnas_shp.rename(columns={
         'codigo_divipola': 'cod_divipo',
@@ -411,236 +411,130 @@ def crear_unidades_tolima_completo(ruta_veredas_nacional, ruta_municipios_nacion
     
     # Mostrar muestra de datos por tipo
     print("\n📋 Muestra de datos por tipo:")
-    for tipo in ['departamento', 'municipio', 'vereda']:
+    for tipo in ['departamento', 'municipio', 'vereda', 'cabecera']:
         muestra = unidades_unificadas[unidades_unificadas['tipo'] == tipo].head(3)
         print(f"\n{tipo.upper()}:")
         if len(muestra) > 0:
             columnas_muestra = ['tipo', 'codigo_divipola', 'nombre', 'municipio', 'region', 
-                              'area_oficial_km2', 'area_geometrica_km2', 'perimetro_km']
+                              'area_oficial_km2']
             print(muestra[columnas_muestra].to_string(index=False))
     
     return unidades_unificadas
 
-def mostrar_resumen_completo(gdf):
-    """Muestra resumen estadístico completo del GeoDataFrame incluyendo regiones y geometría"""
-    print("\n📊 RESUMEN FINAL COMPLETO CON REGIONES Y GEOMETRÍA")
-    print("=" * 70)
+def mostrar_resumen_urbano_rural(gdf):
+    """Muestra resumen estadístico específico para análisis urbano/rural"""
+    print("\n📊 RESUMEN URBANO/RURAL COMPLETO")
+    print("=" * 60)
     
     # Estadísticas por tipo
     print("📈 Estadísticas por tipo:")
-    for tipo in ['departamento', 'municipio', 'vereda']:
+    for tipo in ['departamento', 'municipio', 'vereda', 'cabecera']:
         subset = gdf[gdf['tipo'] == tipo]
         if len(subset) > 0:
             area_total = subset['area_oficial_km2'].sum()
             print(f"   {tipo.capitalize()}:")
             print(f"      • Cantidad: {len(subset):,}")
             print(f"      • Área total: {area_total:,.2f} km²")
-            if tipo != 'departamento':
+            if tipo not in ['departamento']:
                 print(f"      • Área promedio: {subset['area_oficial_km2'].mean():.2f} km²")
     
-    # Análisis por región
-    print("\n🗺️  Análisis por región:")
+    # Análisis urbano vs rural
+    print("\n🏙️  Análisis urbano vs rural:")
+    veredas = gdf[gdf['tipo'] == 'vereda']
+    cabeceras = gdf[gdf['tipo'] == 'cabecera']
+    
+    if len(veredas) > 0 and len(cabeceras) > 0:
+        area_rural = veredas['area_oficial_km2'].sum()
+        area_urbana = cabeceras['area_oficial_km2'].sum()
+        total_area = area_rural + area_urbana
+        
+        print(f"   📊 Distribución territorial:")
+        print(f"      • Rural: {area_rural:,.2f} km² ({area_rural/total_area*100:.1f}%)")
+        print(f"      • Urbano: {area_urbana:,.2f} km² ({area_urbana/total_area*100:.1f}%)")
+        
+        print(f"   📊 Distribución de unidades:")
+        print(f"      • Veredas (rural): {len(veredas):,}")
+        print(f"      • Cabeceras (urbano): {len(cabeceras):,}")
+    
+    # Análisis por región con urbano/rural
+    print("\n🗺️  Análisis por región (urbano/rural):")
     regiones = ['CENTRO', 'NEVADOS', 'SUR', 'SUR ORIENTE', 'NORTE', 'ORIENTE']
     
     for region in regiones:
-        municipios_region = gdf[(gdf['tipo'] == 'municipio') & (gdf['region'] == region)]
         veredas_region = gdf[(gdf['tipo'] == 'vereda') & (gdf['region'] == region)]
+        cabeceras_region = gdf[(gdf['tipo'] == 'cabecera') & (gdf['region'] == region)]
         
-        area_total = veredas_region['area_oficial_km2'].sum()
-        print(f"\n   📍 {region}:")
-        print(f"      • Municipios: {len(municipios_region)}")
-        print(f"      • Veredas: {len(veredas_region)}")
-        print(f"      • Área total: {area_total:,.2f} km²")
-        
-        # Top 3 municipios por número de veredas en esta región
-        if len(veredas_region) > 0:
-            veredas_por_municipio = veredas_region['municipio'].value_counts().head(3)
-            print(f"      • Top municipios:")
-            for municipio, count in veredas_por_municipio.items():
-                print(f"        - {municipio}: {count} veredas")
-    
-    # Información sobre datos geométricos disponibles
-    print("\n📐 Datos geométricos conservados:")
-    veredas_subset = gdf[gdf['tipo'] == 'vereda']
-    if len(veredas_subset) > 0:
-        print(f"   📏 Rangos de medidas:")
-        print(f"      • Área más grande: {veredas_subset['area_oficial_km2'].max():.2f} km² ({veredas_subset.loc[veredas_subset['area_oficial_km2'].idxmax(), 'nombre']})")
-        print(f"      • Área más pequeña: {veredas_subset['area_oficial_km2'].min():.2f} km² ({veredas_subset.loc[veredas_subset['area_oficial_km2'].idxmin(), 'nombre']})")
-        print(f"      • Perímetro más largo: {veredas_subset['perimetro_km'].max():.2f} km ({veredas_subset.loc[veredas_subset['perimetro_km'].idxmax(), 'nombre']})")
-        print(f"      • Área promedio: {veredas_subset['area_oficial_km2'].mean():.2f} km²")
-        print(f"      • Perímetro promedio: {veredas_subset['perimetro_km'].mean():.2f} km")
-        
-        print("\n   🧮 Índices calculables on-demand:")
-        print("      • Compacidad: 4π * área / perímetro²")
-        print("      • Complejidad: perímetro / √área") 
-        print("      • Relación área oficial/geométrica")
-        print("      • Densidad casos por área real vs oficial")
+        if len(veredas_region) > 0 or len(cabeceras_region) > 0:
+            area_rural_region = veredas_region['area_oficial_km2'].sum()
+            area_urbana_region = cabeceras_region['area_oficial_km2'].sum()
+            
+            print(f"\n   📍 {region}:")
+            print(f"      • Rural: {len(veredas_region)} veredas ({area_rural_region:,.2f} km²)")
+            print(f"      • Urbano: {len(cabeceras_region)} cabeceras ({area_urbana_region:,.2f} km²)")
 
-
-def validar_estructura_sql_regiones(gdf):
-    """Valida que la estructura con regiones sea compatible con PostgreSQL"""
-    print("\n🔧 VALIDACIÓN PARA POSTGRESQL (CON REGIONES)")
+def validar_estructura_sql_urbano_rural(gdf):
+    """Valida estructura con separación urbano/rural para PostgreSQL"""
+    print("\n🔧 VALIDACIÓN PARA POSTGRESQL (URBANO/RURAL)")
     print("=" * 50)
     
-    # Verificar tipos de datos
-    print("📋 Tipos de datos:")
-    for col in gdf.columns:
-        if col != 'geometry':
-            dtype = gdf[col].dtype
-            print(f"   {col}: {dtype}")
+    # Verificar tipos
+    tipos_esperados = {'departamento', 'municipio', 'vereda', 'cabecera'}
+    tipos_encontrados = set(gdf['tipo'].unique())
     
-    # Verificar unicidad de códigos por tipo
-    print("\n🔑 Verificación de claves únicas:")
-    duplicados = gdf.groupby(['tipo', 'codigo_divipola']).size()
-    duplicados = duplicados[duplicados > 1]
-    
-    if len(duplicados) == 0:
-        print("   ✅ Sin duplicados en (tipo + codigo_divipola)")
+    if tipos_esperados == tipos_encontrados:
+        print("   ✅ Todos los tipos esperados están presentes")
     else:
-        print("   ⚠️  Duplicados encontrados:")
-        print(duplicados)
+        print(f"   ⚠️  Diferencias en tipos:")
+        print(f"      Esperados: {tipos_esperados}")
+        print(f"      Encontrados: {tipos_encontrados}")
     
-    # Verificar integridad de regiones
-    print("\n🗺️  Verificación de regiones:")
-    regiones_esperadas = {'CENTRO', 'NEVADOS', 'SUR', 'SUR ORIENTE', 'NORTE', 'ORIENTE', 'TODAS'}
-    regiones_encontradas = set(gdf['region'].dropna().unique())
-    
-    if regiones_esperadas == regiones_encontradas:
-        print("   ✅ Todas las regiones esperadas están presentes")
-    else:
-        print("   ⚠️  Diferencias en regiones:")
-        print(f"      Esperadas: {regiones_esperadas}")
-        print(f"      Encontradas: {regiones_encontradas}")
-    
-    # Sugerir DDL para PostgreSQL
-    print("\n💾 DDL sugerido para PostgreSQL (con regiones y datos geométricos):")
-    print("""
-    CREATE TABLE unidades_territoriales_tolima (
-        id SERIAL PRIMARY KEY,
-        tipo VARCHAR(20) CHECK (tipo IN ('departamento', 'municipio', 'vereda')),
-        codigo_divipola VARCHAR(15) NOT NULL,
-        codigo_dpto VARCHAR(2) NOT NULL,
-        codigo_municipio VARCHAR(5),
-        nombre VARCHAR(200) NOT NULL,
-        municipio VARCHAR(100),
-        region VARCHAR(20) CHECK (region IN ('CENTRO', 'NEVADOS', 'SUR', 'SUR ORIENTE', 'NORTE', 'ORIENTE', 'TODAS')),
-        
-        -- Información de áreas y geometría (datos base)
-        area_oficial_km2 DECIMAL(12,6),           -- Área catastral/legal
-        area_geometrica_km2 DECIMAL(12,6),        -- Área calculada del polígono
-        perimetro_km DECIMAL(12,6),               -- Perímetro en kilómetros
-        
-        geometry GEOMETRY(POLYGON, 4326),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        
-        CONSTRAINT uk_tipo_codigo UNIQUE (tipo, codigo_divipola)
-    );
-    
-    -- Índices recomendados
-    CREATE INDEX idx_unidades_tipo ON unidades_territoriales_tolima(tipo);
-    CREATE INDEX idx_unidades_region ON unidades_territoriales_tolima(region);
-    CREATE INDEX idx_unidades_municipio ON unidades_territoriales_tolima(codigo_municipio);
-    CREATE INDEX idx_unidades_spatial ON unidades_territoriales_tolima USING GIST(geometry);
-    CREATE INDEX idx_unidades_area ON unidades_territoriales_tolima(area_oficial_km2);
-    
-    -- Vistas con índices calculados on-demand (cuando sea necesario)
-    CREATE VIEW v_unidades_por_region AS
-    SELECT region, tipo, COUNT(*) as cantidad, 
-           SUM(area_oficial_km2) as area_total_km2,
-           AVG(area_oficial_km2) as area_promedio_km2
-    FROM unidades_territoriales_tolima 
-    WHERE region != 'TODAS'
-    GROUP BY region, tipo
-    ORDER BY region, tipo;
-    
-    -- Vista con índices geométricos (solo cuando sea necesario para análisis)
-    CREATE VIEW v_veredas_analisis_geometrico AS
-    SELECT nombre, municipio, region, 
-           area_oficial_km2, area_geometrica_km2, perimetro_km,
-           -- Índices calculados on-demand
-           (4 * PI() * area_geometrica_km2) / POWER(perimetro_km, 2) as indice_compacidad,
-           perimetro_km / SQRT(area_geometrica_km2) as relacion_perimetro_area,
-           ABS(area_oficial_km2 - area_geometrica_km2) / area_oficial_km2 * 100 as diferencia_areas_pct,
-           CASE 
-               WHEN (4 * PI() * area_geometrica_km2) / POWER(perimetro_km, 2) > 0.7 THEN 'COMPACTA'
-               WHEN (4 * PI() * area_geometrica_km2) / POWER(perimetro_km, 2) > 0.4 THEN 'MEDIA'
-               ELSE 'ALARGADA'
-           END as tipo_forma
-    FROM unidades_territoriales_tolima 
-    WHERE tipo = 'vereda' AND area_geometrica_km2 > 0 AND perimetro_km > 0;
-    
-    -- Importar datos:
-    -- opción 1: ogr2ogr -f PostgreSQL PG:"host=localhost dbname=tu_db" tolima_completo_con_regiones.gpkg
-    -- opción 2: shp2pgsql -I -s 4326 tolima_completo_con_regiones.shp unidades_territoriales_tolima | psql -d tu_db
-    -- opción 3: Python con geopandas: gdf.to_postgis('unidades_territoriales_tolima', engine)
-    """)
-
 if __name__ == "__main__":
     # Configuración - RUTAS AJUSTADAS
-    RUTA_VEREDAS = "data\\shapefiles\\CRVeredas_2020.shp"
-    RUTA_MUNICIPIOS = "data\\shapefiles\\Municipio, Distrito y Area no municipalizada.shp"
-    RUTA_SALIDA = "data\\processed\\tolima_completo_con_regiones"
+    RUTA_MUNICIPIOS = "data\\shapefiles\\Municipios.shp"
+    RUTA_VEREDAS = "data\\shapefiles\\Veredas.shp"
+    RUTA_CABECERAS = "data\\shapefiles\\Cabeceras_Municipales.shp"
+    RUTA_SALIDA = "data\\processed\\tolima_cabeceras_veredas"
     
     try:
         # Verificar archivos
-        for archivo in [RUTA_VEREDAS, RUTA_MUNICIPIOS]:
+        for archivo in [RUTA_MUNICIPIOS, RUTA_VEREDAS, RUTA_CABECERAS]:
             if not Path(archivo).exists():
                 raise FileNotFoundError(f"No se encontró: {archivo}")
         
-        # Crear archivo unificado completo con regiones
-        print("🚀 Iniciando proceso de unificación completa con regiones...")
+        # Crear archivo unificado urbano/rural
+        print("🚀 Iniciando proceso de unificación urbano/rural...")
         print(f"📍 Regiones configuradas: {len(set(MUNICIPIO_REGION.values()))} regiones")
         print(f"🏘️  Municipios configurados: {len(MUNICIPIO_REGION)} municipios")
         
-        unidades = crear_unidades_tolima_completo(RUTA_VEREDAS, RUTA_MUNICIPIOS, RUTA_SALIDA)
+        unidades = crear_unidades_tolima_urbano_rural(RUTA_MUNICIPIOS, RUTA_VEREDAS, RUTA_CABECERAS, RUTA_SALIDA)
         
         # Mostrar resúmenes
-        mostrar_resumen_completo(unidades)
-        validar_estructura_sql_regiones(unidades)
+        mostrar_resumen_urbano_rural(unidades)
+        validar_estructura_sql_urbano_rural(unidades)
         
         print("\n🎉 ¡Proceso completado exitosamente!")
         print(f"📁 Archivos generados con prefijo: {RUTA_SALIDA}")
         print("\n📋 Archivos listos para:")
-        print("   🌐 Mapas web con filtros por región: .geojson")
+        print("   🌐 Mapas web con filtros urbano/rural: .geojson")
         print("   📦 Uso moderno y eficiente: .gpkg (GeoPackage)")
         print("   🗺️  Compatibilidad GIS tradicional: .shp") 
-        print("   🐘 PostgreSQL con regiones: .parquet o .geojson")
-        print("   🔄 Intercambio de datos: .gpkg (estándar OGC)")
+        print("   🐘 PostgreSQL con urbano/rural: .parquet o .geojson")
         
-        print("\n⭐ RECOMENDACIÓN: Usar .gpkg para la mayoría de usos")
-        print("   • Un solo archivo (vs múltiples .shp/.dbf/.shx)")
-        print("   • Mejor manejo de caracteres Unicode")
-        print("   • Más eficiente que shapefile")
-        print("   • Compatible con QGIS, ArcGIS, PostGIS")
-        
-        print("\n🎓 DISEÑO: Datos básicos conservados, índices calculados on-demand")
-        print("   • Principio YAGNI: Solo almacenar lo que necesitas ahora")
-        print("   • Base de datos más limpia y manejable")
-        print("   • Cálculos epidemiológicos cuando sea necesario (SQL views)")
-        print("   • Flexibilidad para diferentes fórmulas futuras")
         print("\n🗂️  Funcionalidades incluidas:")
-        print("   📍 3 niveles territoriales (departamento, municipio, vereda)")
+        print("   📍 4 niveles territoriales (departamento, municipio, vereda, cabecera)")
+        print("   🏙️  Distinción urbano/rural perfecta (sin solapamientos)")
         print("   🏷️  6 regiones del Tolima (CENTRO, NEVADOS, SUR, etc.)")
         print("   🔗 Códigos DIVIPOLA estándar")
-        print("   📝 Nombres estandarizados a Title Case (municipios y veredas)")
-        print("   📐 Datos geométricos básicos conservados (áreas, perímetros)")
-        print("   🧮 Índices calculables on-demand según necesidades futuras")
-        print("   🎯 Estructura optimizada para filtros web y análisis epidemiológico")
-        print("\n📊 Ejemplo de consultas SQL facilitadas:")
-        print("   SELECT * FROM unidades WHERE municipio = 'Ibagué';  -- Consistente en todos los niveles")
-        print("   SELECT * FROM unidades WHERE nombre = 'Alto de Gualanday';  -- Veredas legibles")
-        print("   SELECT region, COUNT(*) FROM unidades WHERE tipo = 'vereda' GROUP BY region;")
-        print("\n🔬 Análisis epidemiológico habilitado (on-demand):")
-        print("   • Densidad de casos por área real vs oficial")
-        print("   • Cálculo de compacidad: 4π * área / perímetro²")
-        print("   • Análisis de complejidad: perímetro / √área")
-        print("   • Planificación basada en forma territorial (usar vistas SQL)")
-        
+        print("   📝 Nombres estandarizados a Title Case")
+        print("   📐 Datos geométricos básicos conservados")
+        print("   🎯 Estructura optimizada para análisis epidemiológico urbano/rural")
+    
     except FileNotFoundError as e:
         print(f"❌ Error: {e}")
         print("💡 Verifica las rutas de los shapefiles:")
-        print(f"   • Veredas: {RUTA_VEREDAS}")
         print(f"   • Municipios: {RUTA_MUNICIPIOS}")
+        print(f"   • Veredas: {RUTA_VEREDAS}")
+        print(f"   • Cabeceras: {RUTA_CABECERAS}")
     
     except Exception as e:
         print(f"❌ Error inesperado: {e}")

@@ -404,12 +404,12 @@ def limpiar_paiweb_fiebre_amarilla(archivo_excel, hoja="Vacunas"):
     return df_final
 
 
-def guardar_resultado_csv(df_limpio, nombre_base="paiweb_fiebre_amarilla_limpio"):
+def guardar_resultado_csv(df_limpio, nombre_base="paiweb_tolima_fa"):
     """
     Guarda el resultado final en CSV para PostgreSQL
     """
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    archivo_csv = f"{nombre_base}_{timestamp}.csv"
+    timestamp = datetime.now().strftime("%Y%m%d")
+    archivo_csv = f"data\\processed\\{nombre_base}_{timestamp}.csv"
 
     try:
         df_limpio.to_csv(archivo_csv, index=False, encoding="utf-8-sig")
@@ -486,7 +486,7 @@ if __name__ == "__main__":
     import os
 
     # Archivo Excel por defecto
-    archivo_default = "E:\\Proyectos\\dashboard_casos_fa\\data\\Paiweb.xlsx"
+    archivo_default = "data\\paiweb.xlsx"
 
     # Verificar si el archivo existe
     if not os.path.exists(archivo_default):
