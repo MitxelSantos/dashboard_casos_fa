@@ -169,25 +169,6 @@ def find_municipio_name_in_shapefile(
         return None
 
 
-def find_municipio_in_data(shapefile_municipio: str, available_municipios: list) -> str:
-    """Encuentra municipio en datos usando mapeo simple."""
-    if not shapefile_municipio or not available_municipios:
-        return None
-
-    shapefile_clean = str(shapefile_municipio).strip()
-
-    # Buscar coincidencia exacta primero
-    for municipio in available_municipios:
-        if simple_name_match(shapefile_clean, municipio):
-            return municipio
-
-    # Buscar usando mapeo
-    mapped_municipio = get_mapped_municipio(shapefile_clean)
-    for municipio in available_municipios:
-        if simple_name_match(mapped_municipio, municipio):
-            return municipio
-
-    return None
 
 # ===== CONFIGURACIÓN DE COLORES =====
 
@@ -1206,38 +1187,7 @@ def show_veredas_mapping_info(veredas_seleccionadas, veredas_gdf):
             f"{f' y {len(veredas_disponibles)-15} más...' if len(veredas_disponibles) > 15 else ''}"
         )
 
-def verify_cobertura_dependencies():
-    """
-    ✅ NUEVA FUNCIÓN: Verifica que todas las dependencias de cobertura estén disponibles
-    """
-    try:
-        from utils.cobertura_processor import (
-            get_cobertura_for_vereda,
-            get_cobertura_for_municipio,
-            load_and_process_cobertura_data
-        )
-        return True
-    except ImportError as e:
-        logger.error(f"❌ Dependencias de cobertura faltantes: {str(e)}")
-        return False
 
-def safe_mode_multiple_fallback(veredas_filtradas, colors):
-    """
-    ✅ NUEVA FUNCIÓN: Fallback seguro cuando hay errores en modo múltiple
-    """
-    logger.info("🛡️ Usando fallback seguro para modo múltiple")
-    
-    veredas_data = veredas_filtradas.copy()
-    color_scheme = get_color_scheme_coverage(colors)
-    
-    # Inicializar todas las columnas necesarias
-    required_columns = ["color", "descripcion_color", "cobertura", "poblacion", "vacunados"]
-    for col in required_columns:
-        veredas_data[col] = color_scheme.get("sin_datos", "#E5E7EB") if col == "color" else (
-            "Modo seguro - sin datos" if col == "descripcion_color" else 0
-        )
-    
-    return veredas_data
 
 def create_multiple_veredas_map(casos, epizootias, geo_data, municipios_seleccionados, veredas_seleccionadas, filters, colors, modo_mapa):
     """
@@ -1672,38 +1622,6 @@ def create_municipal_navigation_buttons(municipio_actual):
         if st.button("🔄 Actualizar", key="refresh_municipal_view"):
             st.rerun()
 
-def create_navigation_context_indicator(filters, colors):
-    """Indicador visual del nivel de navegación actual."""
-    municipio = filters.get("municipio_display", "Todos")
-    vereda = filters.get("vereda_display", "Todas")
-    
-    if vereda != "Todas":
-        nivel = f"📍 {vereda} ({municipio})"
-        breadcrumb = f"Tolima → {municipio} → {vereda}"
-    elif municipio != "Todos":
-        nivel = f"🏘️ {municipio}"
-        breadcrumb = f"Tolima → {municipio}"
-    else:
-        nivel = "🏛️ Tolima"
-        breadcrumb = "Tolima"
-    
-    st.markdown(
-        f"""
-        <div style="
-            background: linear-gradient(135deg, {colors['primary']}, {colors['accent']});
-            color: white;
-            padding: 8px 16px;
-            border-radius: 20px;
-            text-align: center;
-            margin: 10px 0;
-            font-size: 0.9rem;
-            font-weight: 600;
-        ">
-            📍 {breadcrumb}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
 def show_veredas_table_fallback(veredas_data, municipio_selected, colors):
     """Muestra tabla de veredas como fallback cuando el mapa falla."""
@@ -1778,54 +1696,6 @@ def debug_data_types_and_content(casos, epizootias, municipio_selected):
     logger.info("🔍 === FIN DEBUG ===")
 
 
-def safe_data_preparation_with_debug(
-    casos, epizootias, veredas_municipio, municipio_selected, colors, modo_mapa
-):
-    """Preparación de datos con debug y manejo de errores."""
-    try:
-        logger.info(f"🛠️ Preparación segura de datos para {municipio_selected}")
-
-        # Debug de tipos de datos
-        debug_data_types_and_content(casos, epizootias, municipio_selected)
-
-        # Verificar y limpiar datos de entrada
-        if casos is None:
-            casos = pd.DataFrame()
-        if epizootias is None:
-            epizootias = pd.DataFrame()
-        if not isinstance(casos, pd.DataFrame):
-            casos = pd.DataFrame()
-        if not isinstance(epizootias, pd.DataFrame):
-            epizootias = pd.DataFrame()
-
-        logger.info(
-            f"📊 Datos limpiados - Casos: {len(casos)}, Epizootias: {len(epizootias)}"
-        )
-
-        # Preparar datos según modo
-        if modo_mapa == "Epidemiológico":
-            return prepare_vereda_data_epidemiological_simplified(
-                casos, epizootias, veredas_municipio, municipio_selected, colors
-            )
-        else:
-            return prepare_vereda_data_coverage_simplified(
-                veredas_municipio, municipio_selected, colors
-            )
-
-    except Exception as e:
-        logger.error(f"❌ Error en preparación segura: {str(e)}")
-
-        # Retornar datos básicos con colores por defecto
-        veredas_basic = veredas_municipio.copy()
-        color_scheme = get_color_scheme_epidemiological(colors)
-
-        for idx, row in veredas_basic.iterrows():
-            veredas_basic.loc[idx, "color"] = color_scheme.get("sin_datos", "#E5E7EB")
-            veredas_basic.loc[idx, "descripcion_color"] = "Error en procesamiento"
-            veredas_basic.loc[idx, "casos"] = 0
-            veredas_basic.loc[idx, "epizootias"] = 0
-
-        return veredas_basic
 
 # ===== PREPARACIÓN DE DATOS SIMPLIFICADA =====
 
@@ -2226,29 +2096,6 @@ def validate_and_fix_filters_for_maps(filters):
         logger.error(f"❌ Error validando filtros: {str(e)}")
         return filters
 
-def debug_map_flow_multiple(filters):
-    """Debug específico para flujo de mapas múltiple."""
-    logger.info("🔍 === DEBUG FLUJO MAPAS MÚLTIPLE ===")
-    
-    modo = filters.get("modo", "unknown")
-    municipio_display = filters.get("municipio_display", "unknown")
-    municipios_sel = filters.get("municipios_seleccionados", [])
-    veredas_sel = filters.get("veredas_seleccionadas", [])
-    
-    logger.info(f"Modo: {modo}")
-    logger.info(f"Municipio Display: '{municipio_display}'")
-    logger.info(f"Municipios Seleccionados: {municipios_sel}")
-    logger.info(f"Veredas Seleccionadas: {veredas_sel}")
-    
-    if modo == "multiple":
-        level = "multiple"
-    elif municipio_display and municipio_display != "Todos":
-        level = "municipio"
-    else:
-        level = "departamento"
-    
-    logger.info(f"Nivel que se determinaría: {level}")
-    logger.info("🔍 === FIN DEBUG ===")
 
 def debug_municipios_en_shapefile(veredas_gdf, municipio_col, municipio_buscado):
     """Debug para mostrar municipios disponibles en shapefile."""
@@ -2523,77 +2370,6 @@ def prepare_vereda_data_epidemiological_simplified(
     )
     return veredas_data
 
-def debug_cobertura_data_quality(cobertura_data):
-    """
-    Debug para entender por qué la cobertura parece alta.
-    """
-    if not cobertura_data or "municipios" not in cobertura_data:
-        print("❌ No hay datos de cobertura")
-        return
-    
-    print("🔍 === ANÁLISIS DE CALIDAD DE DATOS DE COBERTURA ===")
-    
-    municipios_con_datos = 0
-    municipios_sin_datos = 0
-    municipios_inconsistentes = 0
-    total_poblacion = 0
-    total_vacunados = 0
-    coberturas = []
-    
-    for municipio_name, municipio_data in cobertura_data["municipios"].items():
-        poblacion = municipio_data.get("total_poblacion", 0)
-        vacunados = municipio_data.get("total_vacunados", 0)
-        cobertura = municipio_data.get("cobertura_general", 0.0)
-        
-        if poblacion <= 0 and vacunados > 0:
-            print(f"⚠️  INCONSISTENTE: {municipio_name} - Población: {poblacion}, Vacunados: {vacunados}")
-            municipios_inconsistentes += 1
-            continue
-        
-        if poblacion <= 0:
-            print(f"📭 SIN DATOS: {municipio_name}")
-            municipios_sin_datos += 1
-            continue
-        
-        municipios_con_datos += 1
-        total_poblacion += poblacion
-        total_vacunados += vacunados
-        coberturas.append(cobertura)
-        
-        if cobertura > 100:
-            print(f"📈 ALTA: {municipio_name} - {cobertura:.1f}% ({vacunados:,}/{poblacion:,})")
-        elif cobertura == 0:
-            print(f"📉 CERO: {municipio_name} - {cobertura:.1f}% ({vacunados:,}/{poblacion:,})")
-    
-    # Estadísticas
-    cobertura_promedio_valida = (total_vacunados / total_poblacion * 100) if total_poblacion > 0 else 0
-    cobertura_mediana = sorted(coberturas)[len(coberturas)//2] if coberturas else 0
-    
-    print(f"\n📊 RESUMEN:")
-    print(f"  - Municipios con datos válidos: {municipios_con_datos}")
-    print(f"  - Municipios sin datos: {municipios_sin_datos}")
-    print(f"  - Municipios inconsistentes: {municipios_inconsistentes}")
-    print(f"  - Cobertura promedio (datos válidos): {cobertura_promedio_valida:.1f}%")
-    print(f"  - Cobertura mediana: {cobertura_mediana:.1f}%")
-    print(f"  - Total población válida: {total_poblacion:,}")
-    print(f"  - Total vacunados válidos: {total_vacunados:,}")
-    
-    # Top 10 más altos y más bajos
-    coberturas_municipios = [(municipio_data.get("cobertura_general", 0), name) 
-                           for name, municipio_data in cobertura_data["municipios"].items()
-                           if municipio_data.get("total_poblacion", 0) > 0]
-    
-    coberturas_municipios.sort(reverse=True)
-    
-    print(f"\n🔝 TOP 10 COBERTURAS MÁS ALTAS:")
-    for cobertura, municipio in coberturas_municipios[:10]:
-        print(f"  - {municipio}: {cobertura:.1f}%")
-    
-    print(f"\n🔻 TOP 10 COBERTURAS MÁS BAJAS:")
-    for cobertura, municipio in coberturas_municipios[-10:]:
-        print(f"  - {municipio}: {cobertura:.1f}%")
-    
-    print("🔍 === FIN ANÁLISIS ===")
 
 def prepare_municipal_data_coverage_simplified(municipios, filters, colors):
     """
@@ -3324,34 +3100,6 @@ def get_total_veredas_multiples_municipios(municipios_seleccionados, data_origin
 
 # ===== FUNCIÓN DE VALIDACIÓN Y DEBUG =====
 
-def debug_afectacion_multiple(casos, epizootias, filters, data_original):
-    """Función de debug para verificar cálculos de afectación múltiple."""
-    logger.info("🔍 === DEBUG AFECTACIÓN MÚLTIPLE ===")
-    
-    municipios_sel = filters.get("municipios_seleccionados", [])
-    veredas_sel = filters.get("veredas_seleccionadas", [])
-    
-    logger.info(f"Municipios seleccionados: {municipios_sel}")
-    logger.info(f"Veredas seleccionadas: {veredas_sel}")
-    logger.info(f"Casos shape: {casos.shape if not casos.empty else 'Vacío'}")
-    logger.info(f"Epizootias shape: {epizootias.shape if not epizootias.empty else 'Vacío'}")
-    
-    if municipios_sel:
-        total_veredas = get_total_veredas_multiples_municipios(municipios_sel, data_original)
-        logger.info(f"Total veredas calculado: {total_veredas}")
-        
-        # Verificar datos por municipio
-        for municipio in municipios_sel:
-            casos_mun = casos[casos["municipio"] == municipio] if not casos.empty and "municipio" in casos.columns else pd.DataFrame()
-            epi_mun = epizootias[epizootias["municipio"] == municipio] if not epizootias.empty and "municipio" in epizootias.columns else pd.DataFrame()
-            
-            veredas_casos = set(casos_mun["vereda"].dropna()) if not casos_mun.empty and "vereda" in casos_mun.columns else set()
-            veredas_epi = set(epi_mun["vereda"].dropna()) if not epi_mun.empty and "vereda" in epi_mun.columns else set()
-            
-            logger.info(f"  {municipio}: {len(casos_mun)} casos, {len(epi_mun)} epizootias")
-            logger.info(f"  {municipio}: {len(veredas_casos)} veredas con casos, {len(veredas_epi)} veredas con epizootias")
-    
-    logger.info("🔍 === FIN DEBUG ===")
 
 def calculate_afectacion_veredas_especificas(casos, epizootias, veredas_seleccionadas, municipios_seleccionados):
     """Calcula afectación para veredas específicamente seleccionadas."""
@@ -4217,72 +3965,7 @@ def determine_map_level(filters):
         logger.info("🗺️ Nivel detectado: DEPARTAMENTO")
         return "departamento"
 
-def validate_multiple_selection_state(filters):
-    """Valida el estado de la selección múltiple."""
-    if filters.get("modo") != "multiple":
-        return True
-    
-    municipios_sel = filters.get("municipios_seleccionados", [])
-    veredas_sel = filters.get("veredas_seleccionadas", [])
-    
-    logger.info(f"🔍 Validando selección múltiple: {len(municipios_sel)} municipios, {len(veredas_sel)} veredas")
-    
-    # Casos válidos:
-    # 1. Al menos un municipio seleccionado
-    # 2. Al menos una vereda seleccionada
-    # 3. Ambos
-    
-    is_valid = len(municipios_sel) > 0 or len(veredas_sel) > 0
-    
-    if not is_valid:
-        logger.warning("⚠️ Selección múltiple sin elementos seleccionados")
-    
-    return is_valid
 
-def show_multiple_selection_status(filters, colors):
-    """Muestra el estado actual de la selección múltiple en el sidebar."""
-    if filters.get("modo") != "multiple":
-        return
-    
-    municipios_sel = filters.get("municipios_seleccionados", [])
-    veredas_sel = filters.get("veredas_seleccionadas", [])
-    
-    if not municipios_sel and not veredas_sel:
-        # Estado inicial - instrucciones
-        st.sidebar.markdown(
-            f"""
-            <div style="
-                background: {colors['light']};
-                padding: 12px;
-                border-radius: 8px;
-                border-left: 4px solid {colors['info']};
-                margin: 10px 0;
-            ">
-                <strong>🗂️ Modo Múltiple Activo</strong><br>
-                <small>Seleccione municipios y/o veredas usando los controles de arriba.</small>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-    else:
-        # Estado con selecciones - resumen
-        total_elementos = len(municipios_sel) + len(veredas_sel)
-        st.sidebar.markdown(
-            f"""
-            <div style="
-                background: {colors['success']};
-                color: white;
-                padding: 12px;
-                border-radius: 8px;
-                margin: 10px 0;
-                text-align: center;
-            ">
-                <strong>✅ {total_elementos} Elementos Seleccionados</strong><br>
-                <small>{len(municipios_sel)} municipios • {len(veredas_sel)} veredas</small>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 def get_filter_context_compact(filters):
     """Contexto de filtrado compacto."""
